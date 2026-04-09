@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OSINT EYE output
+*.json
+*.md
+*.html
+!README.md
+output/
+reports/
+screenshots/
+attack_surface_*.html
+
+# Cache
+.osint_eye/
+*.db
+!tests/
+
+# Secrets
+.env
+.env.local
+*.key
+*.pem
+secrets/
+
+# Docker
+.dockerignore
+
+# CI
+.github/
