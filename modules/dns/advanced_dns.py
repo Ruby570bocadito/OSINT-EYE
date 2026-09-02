@@ -559,7 +559,15 @@ class SecurityHeadersAuditor:
         try:
             import requests
 
-            resp = requests.get(url, timeout=self.timeout, verify=False)
+            try:
+                resp = requests.get(url, timeout=self.timeout, verify=True)
+            except requests.exceptions.SSLError as e:
+                # Never bypass TLS verification: an invalid certificate is
+                # itself a security finding, not a reason to downgrade.
+                result["error"] = f"TLS certificate verification failed: {e}"
+                result["score"] = 0
+                result["grade"] = "F"
+                return result
             headers = dict(resp.headers)
 
             for header, info in self.required_headers.items():
@@ -882,7 +890,7 @@ class ScreenshotCapture:
         try:
             import requests
 
-            resp = requests.get(url, timeout=self.timeout, verify=False)
+            resp = requests.get(url, timeout=self.timeout)
             with open(output_path.replace(".png", ".html"), "w") as f:
                 f.write(resp.text)
             return True
