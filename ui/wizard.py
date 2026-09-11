@@ -97,7 +97,10 @@ class InteractiveWizard:
             args_list.append("--rich")
 
         # 5. Output base name
-        default_out = "osint_eye_" + targets[0].replace(".", "_").replace(":", "_")
+        default_out = (
+            "osint_eye_"
+            + targets[0].replace("/", "_").replace(".", "_").replace(":", "_")
+        )
         output = Prompt.ask(
             "[bold cyan]◆ Output base filename[/bold cyan]", default=default_out
         )
@@ -123,7 +126,11 @@ class InteractiveWizard:
         summary.append("✔ ", style="bold green")
         summary.append("Configuration ready — launching OSINT EYE", style="bold white")
         console.print(summary)
-        console.print(f"  [dim]args: {' '.join(args_list)}[/dim]")
+        # Targets come from user input: escape() keeps a value like
+        # "x[/bold]y.com" from aborting the launch with Rich MarkupError.
+        from rich.markup import escape as _escape
+
+        console.print(f"  [dim]args: {_escape(' '.join(args_list))}[/dim]")
         console.print()
         return args_list
 

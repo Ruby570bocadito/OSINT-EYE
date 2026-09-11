@@ -406,9 +406,12 @@ class CDNDetector:
             "CloudFront": [
                 "x-amz-cf-id",
                 "x-amz-cf-pop",
-                "x-cache",
             ],
-            "Fastly": ["x-served-by", "x-cache", "x-timer", "fastly"],
+            # NOTE: "x-cache" is deliberately NOT matched by header name:
+            # generic proxies/Varnish send X-Cache too, and it previously made
+            # every such server brand as "CloudFront" (CloudFront is detected
+            # via the header VALUE below instead).
+            "Fastly": ["x-served-by", "x-timer", "fastly"],
             "Akamai": ["akamai-grn", "x-akamai-transformed", "x-true-ip"],
             "Incapsula": ["x-iinfo", "x-cdn", "incap_ses", "visid_incap"],
             "Sucuri": ["x-sucuri-id", "x-sucuri-cache"],
@@ -496,7 +499,7 @@ if __name__ == "__main__":
     bucket_detector = CloudBucketDetector()
     results = bucket_detector.scan(domain)
 
-    print(f"\n=== Cloud Bucket Results ===")
+    print("\n=== Cloud Bucket Results ===")
     print(f"Found: {len(results['found'])} buckets")
     print(f"Public: {len(results['public'])} buckets")
     print(f"Listable: {len(results['listable'])} buckets")

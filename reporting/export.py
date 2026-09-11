@@ -176,7 +176,9 @@ class HTMLReporter:
         sections.append(self._html_summary(modules))
         sections.append(self._html_dns(modules.get("dns", {})))
         sections.append(self._html_network(modules.get("network", {})))
-        sections.append(self._html_web(modules.get("web", {})))
+        sections.append(
+            self._html_web(modules.get("web", {}), modules.get("endpoints", {}))
+        )
         sections.append(self._html_cloud(modules.get("cloud_buckets", {})))
         sections.append(self._html_emails(modules.get("emails", {})))
         sections.append(self._html_cves(modules.get("cve", {})))
@@ -277,9 +279,13 @@ tr:hover {{ background: #f8f9fa; }}
         html += "</div>"
         return html
 
-    def _html_web(self, web: Dict) -> str:
+    def _html_web(self, web: Dict, endpoints: Dict = None) -> str:
         web = _d(web)
-        if not web:
+        # osint_eye stores endpoint discovery in modules["endpoints"] (the
+        # web module only carries "endpoints.apis"); accept both shapes so
+        # sensitive files actually show up in the HTML report.
+        endpoints = _d(endpoints)
+        if not web and not endpoints:
             return ""
 
         html = '<div class="card"><h2>Web Findings</h2>'
@@ -288,7 +294,9 @@ tr:hover {{ background: #f8f9fa; }}
         if techs:
             html += f"<h3>Technologies</h3><p>{html_escape(', '.join(str(t) for t in techs))}</p>"
 
-        sensitive = _l(_d(web.get("endpoints")).get("sensitive"))
+        sensitive = _l(endpoints.get("sensitive")) or _l(
+            _d(web.get("endpoints")).get("sensitive")
+        )
         if sensitive:
             html += f"<h3>Sensitive Files ({len(sensitive)})</h3><table><tr><th>Path</th><th>Status</th></tr>"
             for s in sensitive:

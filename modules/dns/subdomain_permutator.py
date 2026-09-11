@@ -535,9 +535,14 @@ class SubdomainPermutator:
                 if result:
                     found.add(result)
 
+        # get_stats() keeps the cumulative history, but the RETURN VALUE must
+        # contain only this call's results: the monitor shares one permutator
+        # across targets/cycles, and the old "sorted(list(self.found))" made
+        # every target report the subdomains of every other target (false
+        # "new subdomain" alerts + cache pollution).
         self.found.update(found)
 
-        return sorted(list(self.found))
+        return sorted(found)
 
     def get_stats(self) -> Dict:
         """Get enumeration statistics"""
@@ -682,7 +687,7 @@ if __name__ == "__main__":
     permutator = SubdomainPermutator(threads=100)
     found = permutator.enumerate(domain)
 
-    print(f"\n=== Permutation Results ===")
+    print("\n=== Permutation Results ===")
     print(f"Found: {len(found)} subdomains")
     for sub in found[:30]:
         print(f"  - {sub}")

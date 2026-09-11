@@ -89,14 +89,17 @@ class DNSResolver:
             answers = self.resolver.resolve(dmarc_domain, "TXT")
             for answer in answers:
                 record = str(answer).strip('"')
-                if "v=DMARC1" in record:
+                # RFC 7489 tags are case-insensitive; real records are seen
+                # as "v=DMARC1" but also lowercase "v=dmarc1".
+                lowered = record.lower()
+                if "v=dmarc1" in lowered:
                     result["exists"] = True
                     result["record"] = record
-                    if "p=none" in record:
+                    if "p=none" in lowered:
                         result["policy"] = "none"
-                    elif "p=quarantine" in record:
+                    elif "p=quarantine" in lowered:
                         result["policy"] = "quarantine"
-                    elif "p=reject" in record:
+                    elif "p=reject" in lowered:
                         result["policy"] = "reject"
         except Exception:
             pass
@@ -111,14 +114,18 @@ class DNSResolver:
             answers = self.resolver.resolve(domain, "TXT")
             for answer in answers:
                 record = str(answer).strip('"')
-                if "v=SPF1" in record:
+                # RFC 7208 tags are case-insensitive and virtually all real
+                # records use lowercase "v=spf1"; the old case-sensitive
+                # check ("v=SPF1" in record) never matched real DNS data.
+                lowered = record.lower()
+                if "v=spf1" in lowered:
                     result["exists"] = True
                     result["record"] = record
-                    if "-all" in record:
+                    if "-all" in lowered:
                         result["policy"] = "hardfail"
-                    elif "~all" in record:
+                    elif "~all" in lowered:
                         result["policy"] = "softfail"
-                    elif "+all" in record:
+                    elif "+all" in lowered:
                         result["policy"] = "pass-all"
         except Exception:
             pass
@@ -379,9 +386,8 @@ class SubdomainEnumerator:
     def _check_subdomain(self, subdomain: str, domain: str) -> Optional[str]:
         """Check if a subdomain exists"""
         try:
-            full_domain = f"{subdomain}.{domain}"
-            ip = socket.gethostbyname(full_domain)
-            return full_domain
+            socket.gethostbyname(f"{subdomain}.{domain}")
+            return f"{subdomain}.{domain}"
         except (socket.gaierror, socket.herror):
             return None
 
@@ -552,7 +558,7 @@ if __name__ == "__main__":
     results = scanner.scan(sys.argv[1], "full")
 
     print("\n=== DNS Scan Results ===")
-    print(f"\n[Records]")
+    print("\n[Records]")
     for rtype, values in results["records"].items():
         if values:
             print(f"  {rtype}: {', '.join(values)}")

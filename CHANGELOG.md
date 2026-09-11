@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.1.1] - 2026-09-11
+
+### Dashboard rediseñado
+- **Interfaz nueva minimalista y profesional**: sistema de diseño oscuro con un solo acento,
+  tipografía del sistema con numerales tabulares, micro-labels en mayúsculas, bordes de 1px,
+  sin gradientes ni brillos.
+- **Grafo de superficie 100% autónomo**: layout de fuerzas propio en vanilla SVG (d3 y CDN
+  eliminados) con arrastre, tooltips, leyenda por tipo y etiquetas solo en hubs de alto grado
+  (los grafos densos vuelven a ser legibles).
+- **A prueba de inyección**: todo dato del escaneo se renderiza vía `textContent`; cero
+  `innerHTML` con datos (cierra los hallazgos XSS de la auditoría).
+- **API defensiva por diseño**: `/summary`, `/ports`, `/subdomains`, `/graph`, `/mitre` y
+  `/chains` toleran shapes null/list/dict/escalar — nunca devuelven 500 con datos malformados.
+
+### Corregido (segunda ronda de QA — 15 bugs con tests nuevos)
+- `modules/dns/subdomain_permutator.py`: `enumerate()` devolvía el acumulado de TODAS las
+  llamadas — el monitor compartía estado entre targets y reportaba subdominios ajenos como
+  nuevos (falsas alertas).
+- `modules/cve/nvd.py`: scores CVE `null` (NVD los envía a veces) rompían `analyze_service`
+  y `prioritize_cves` con TypeError.
+- `reporting/export.py`: el informe HTML no mostraba NUNCA los sensitive files de
+  `modules["endpoints"]` (el shape real); paridad restaurada con MD/PDF/Burp.
+- `graph/builder.py`: el grafo ignoraba `modules["permutation"]` — hosts verificados por
+  permutación ausentes del HTML interactivo y del export Cypher.
+- `osint_eye.py`: worker crashes silenciosos en las fases paralelas (`concurrent.futures.wait`
+  descartaba las excepciones) — ahora se imprimen y registran; `--pdf` con targets URL
+  reventaba por nombre sin sanear; `export_all` no creaba el directorio padre.
+- `osint_eye.py` + `ui/wizard.py`: MarkupError real de Rich con targets hostiles tipo
+  `x[/bold]y.com` (escape en panel de monitor, webhook y resumen).
+- `core/correlator.py`, `core/monitor.py`, `reporting/mitre_mapper.py`, `ui/rich_cli.py`,
+  `ui/tui_app.py`: crashes con shapes borde (None, listas, strings, contadores no numéricos).
+- Suite: **118 tests offline** (27 nuevos), pyflakes 0 warnings.
+
+
 ## [2.1.0] - 2026-09-11
 
 ### Corregido

@@ -1,5 +1,6 @@
 """OSINT EYE - Asset Correlation Engine"""
 
+import threading
 from typing import Dict, List
 from datetime import datetime
 from collections import defaultdict
@@ -12,10 +13,22 @@ class AssetCorrelator:
         self.assets = defaultdict(set)
         self.relationships = []
         self._rel_keys = set()
+        # Ingests run concurrently (scan phases share one correlator);
+        # the relationship dedup set is check-then-add, so guard it.
+        self._lock = threading.Lock()
 
     def _asset_count(self, key: str) -> int:
         """Read an asset count without creating empty keys in the defaultdict."""
         return len(self.assets.get(key, ()))
+
+    @staticmethod
+    def _anchor(data: Dict) -> str:
+        """Best-effort anchor (domain/target/url) to relate new assets to."""
+        for key in ("domain", "target", "url"):
+            value = data.get(key)
+            if value and isinstance(value, str):
+                return value
+        return ""
 
     def ingest_dns(self, dns_data: Dict):
         """Ingest DNS data"""
@@ -28,8 +41,21 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("subdomain_of", subdomain, domain)
 
-        for rtype, values in (dns_data.get("records") or {}).items():
-            for value in values or []:
+        records = dns_data.get("records")
+        # records must be a mapping; hand-loaded JSON with a list/None used to
+        # raise AttributeError on .items().
+        if not isinstance(records, dict):
+            records = {}
+        for rtype, values in records.items():
+            # Tolerate a bare string value ("A": "1.2.3.4"): iterating it
+            # directly would add every single character as an asset.
+            if isinstance(values, str):
+                values = [values]
+            elif not isinstance(values, (list, tuple, set)):
+                # Non-iterable junk (int, dict, None...) cannot be a record
+                # value list; skip instead of raising TypeError.
+                continue
+            for value in values:
                 if not value:
                     continue
                 if rtype == "A":
@@ -205,20 +231,123 @@ class AssetCorrelator:
                     "takeover_fingerprint", sub, f"dangling:{service}"
                 )
 
+    def ingest_web(self, web_data: Dict):
+        """Ingest web technology fingerprinting data.
+
+        ``technologies`` may be the TechDetector dict shape
+        (``{"technologies": [...]}``), a plain list/set, or anything else
+        (ignored).
+        """
+        raw = web_data.get("technologies")
+        if isinstance(raw, dict):
+            techs = raw.get("technologies") or []
+        elif isinstance(raw, (list, set, tuple)):
+            techs = list(raw)
+        else:
+            techs = []
+
+        anchor = self._anchor(web_data)
+        for tech in techs:
+            if not tech:
+                continue
+            self.assets["technologies"].add(str(tech))
+            if anchor:
+                self._add_relationship("technology_on", anchor, str(tech))
+
+    def ingest_permutation(self, permutation_data: Dict):
+        """Ingest subdomain permutation results (``{"subdomains": [...]}``)."""
+        domain = permutation_data.get("domain", "") or ""
+
+        for subdomain in permutation_data.get("subdomains") or []:
+            if not subdomain:
+                continue
+            self.assets["subdomains"].add(subdomain)
+            if domain:
+                self._add_relationship("subdomain_of", subdomain, domain)
+
+    def ingest_github(self, github_data: Dict):
+        """Ingest GitHub dorking results (potential leaked secrets)."""
+        domain = github_data.get("domain", "") or ""
+
+        for finding in github_data.get("findings") or []:
+            if isinstance(finding, dict):
+                label = finding.get("file") or finding.get("match") or ""
+            else:
+                label = str(finding) if finding else ""
+            if not label:
+                continue
+            self.assets["github_leaks"].add(str(label))
+            if domain:
+                self._add_relationship("leak_related_to", str(label), domain)
+
+    def ingest_google(self, google_data: Dict):
+        """Ingest Google dorking results (indexed pages per dork category)."""
+        domain = google_data.get("domain", "") or ""
+
+        categories = (
+            "login_pages",
+            "admin_panels",
+            "sensitive_files",
+            "config_files",
+            "backup_files",
+            "sql_errors",
+        )
+        for category in categories:
+            for item in google_data.get(category) or []:
+                url = item.get("url", "") if isinstance(item, dict) else str(item)
+                if not url:
+                    continue
+                self.assets["dork_results"].add(url)
+                if domain:
+                    self._add_relationship("indexed_result", url, domain)
+
+        # enumerate_subdomains() results count as real subdomains.
+        for subdomain in google_data.get("subdomains") or []:
+            if not subdomain:
+                continue
+            self.assets["subdomains"].add(subdomain)
+            if domain:
+                self._add_relationship("subdomain_of", subdomain, domain)
+
+    def ingest_cve(self, cve_data: Dict):
+        """Ingest CVE lookup results (``{"cves": [...]}``)."""
+        for cve in cve_data.get("cves") or []:
+            cve_id = cve.get("id", "") if isinstance(cve, dict) else str(cve)
+            if not cve_id:
+                continue
+            self.assets["vulnerabilities"].add(cve_id)
+
+    def ingest_cdn_waf(self, cdn_data: Dict):
+        """Ingest CDN/WAF fingerprinting data."""
+        anchor = self._anchor(cdn_data)
+
+        cdn = cdn_data.get("cdn") or ""
+        if cdn:
+            self.assets["cdn_providers"].add(str(cdn))
+            if anchor:
+                self._add_relationship("served_by_cdn", anchor, str(cdn))
+
+        waf = cdn_data.get("waf") or ""
+        if waf:
+            self.assets["waf_providers"].add(str(waf))
+            if anchor:
+                self._add_relationship("protected_by_waf", anchor, str(waf))
+
     def _add_relationship(self, rel_type: str, source: str, target: str):
         """Add a relationship between assets (deduplicated by type/source/target)"""
         key = (rel_type, source, target)
-        if key in self._rel_keys:
-            return
-        self._rel_keys.add(key)
-        self.relationships.append(
-            {
-                "type": rel_type,
-                "source": source,
-                "target": target,
-                "timestamp": datetime.now().isoformat(),
-            }
-        )
+        with self._lock:
+            if key in self._rel_keys:
+                return
+            self._rel_keys.add(key)
+            self.relationships.append(
+                {
+                    "type": rel_type,
+                    "source": source,
+                    "target": target,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
     def find_shared_infrastructure(self) -> Dict:
         """Find shared infrastructure across assets"""

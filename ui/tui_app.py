@@ -1,13 +1,9 @@
 """OSINT EYE - Interactive TUI with Textual"""
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, DataTable, Label, Static, Button
-from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.widgets import Header, Footer, DataTable, Label, Static
+from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from rich.text import Text
-from rich.table import Table as RichTable
-import json
-from datetime import datetime
 
 
 class ScanScreen(Screen):
@@ -22,7 +18,7 @@ class ScanScreen(Screen):
         yield Footer()
 
         with Container(id="main-container"):
-            yield Label(f"OSINT EYE - Scan Results", id="title")
+            yield Label("OSINT EYE - Scan Results", id="title")
             yield Label(
                 f"Target: {self.results.get('target', 'N/A')}", id="target-info"
             )
@@ -43,14 +39,30 @@ class ScanScreen(Screen):
 
         dns = self.results.get("modules", {}).get("dns", {})
         records = dns.get("records", {})
+        if not isinstance(records, dict):
+            records = {}
 
         for rtype, values in records.items():
+            values = self._coerce_record_values(values)
             if values:
-                table.add_row(rtype, ", ".join(values[:5]))
+                table.add_row(str(rtype), ", ".join(values[:5]))
 
         subs = dns.get("subdomains", [])
         if subs:
             table.add_row("Subdomains", f"{len(subs)} found")
+
+    @staticmethod
+    def _coerce_record_values(values) -> list:
+        """Normalise a record value payload to a list of strings.
+
+        A bare string ("A": "1.2.3.4") used to be joined character by
+        character ("1, ., 2, ., 3"); non-iterable junk is dropped.
+        """
+        if isinstance(values, str):
+            return [values]
+        if isinstance(values, (list, tuple, set)):
+            return [str(v) for v in values]
+        return []
 
     def _populate_network(self):
         table = self.query_one("#network-table", DataTable)

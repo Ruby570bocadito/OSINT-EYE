@@ -142,7 +142,10 @@ class CertTransparency:
             # "notexample.com" matching "example.com").
             if cert_domain == domain or cert_domain.endswith(f".{domain}"):
                 results["subdomains"].add(cert_domain)
-                results["unique_issuers"].add(cert["issuer"])
+                # Skip empty issuers: crt.sh rows without issuer_org would
+                # otherwise inflate the unique-issuer count with "".
+                if cert["issuer"]:
+                    results["unique_issuers"].add(cert["issuer"])
                 results["certificates"].append(cert)
 
         results["subdomains"] = sorted(list(results["subdomains"]))
@@ -210,7 +213,7 @@ if __name__ == "__main__":
     scanner = CertScanner()
     results = scanner.scan(sys.argv[1])
 
-    print(f"\n=== Certificate Transparency Results ===")
+    print("\n=== Certificate Transparency Results ===")
     print(f"\n[Subdomains: {len(results['subdomains'])}]")
     for sub in results["subdomains"][:30]:
         print(f"  - {sub}")

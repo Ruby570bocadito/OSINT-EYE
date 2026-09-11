@@ -140,24 +140,42 @@ class CVELookup:
         if vuln.get("metrics"):
             metrics = vuln["metrics"]
 
-            if metrics.get("cvssMetricV31"):
-                cvss = metrics["cvssMetricV31"][0]["cvssData"]
-                result["severity"].append(
-                    {
-                        "score": cvss.get("baseScore"),
-                        "severity": cvss.get("baseSeverity"),
-                        "vector": cvss.get("vectorString"),
-                    }
-                )
-            elif metrics.get("cvssMetricV30"):
-                cvss = metrics["cvssMetricV30"][0]["cvssData"]
-                result["severity"].append(
-                    {
-                        "score": cvss.get("baseScore"),
-                        "severity": cvss.get("baseSeverity"),
-                        "vector": cvss.get("vectorString"),
-                    }
-                )
+            # NVD 2.0 exposes several metric generations. Prefer CVSS v3.x,
+            # then fall back to v4.0 / v2.0 (older CVEs often carry ONLY a
+            # cvssMetricV2 entry — previously those got an empty severity
+            # list and were silently ignored by every consumer).
+            for metric_key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV40"):
+                metric_list = metrics.get(metric_key)
+                if metric_list and isinstance(metric_list[0], dict):
+                    cvss = metric_list[0].get("cvssData")
+                    if isinstance(cvss, dict):
+                        result["severity"].append(
+                            {
+                                "score": cvss.get("baseScore"),
+                                "severity": cvss.get("baseSeverity"),
+                                "vector": cvss.get("vectorString"),
+                            }
+                        )
+                        break
+
+            if not result["severity"] and metrics.get("cvssMetricV2"):
+                metric = metrics["cvssMetricV2"][0]
+                cvss = metric.get("cvssData") if isinstance(metric, dict) else None
+                if isinstance(cvss, dict):
+                    # CVSS v2 entries may carry the severity on the metric
+                    # itself ("severity") or inside cvssData ("baseSeverity").
+                    severity = (
+                        cvss.get("baseSeverity")
+                        or metric.get("baseSeverity")
+                        or metric.get("severity")
+                    )
+                    result["severity"].append(
+                        {
+                            "score": cvss.get("baseScore"),
+                            "severity": severity,
+                            "vector": cvss.get("vectorString"),
+                        }
+                    )
 
         if vuln.get("references"):
             for ref in vuln["references"]:
@@ -257,6 +275,22 @@ class CVEAnalyzer:
     def __init__(self):
         self.cve = CVELookup()
 
+    @staticmethod
+    def _score_of(cve: Dict) -> float:
+        """Numeric CVSS score of a CVE entry (0.0 when absent/malformed).
+
+        NVD entries occasionally carry ``"score": null``; the old code
+        compared that None directly (``None >= 9.0`` -> TypeError) and
+        ``sorted()`` on mixed None/float scores crashed the same way.
+        """
+        severity = cve.get("severity")
+        if isinstance(severity, list) and severity and isinstance(severity[0], dict):
+            try:
+                return float(severity[0].get("score") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        return 0.0
+
     def analyze_service(self, service: Dict) -> Dict:
         """Analyze service and find related CVEs"""
         name = service.get("service", "")
@@ -270,17 +304,15 @@ class CVEAnalyzer:
         low_cves = []
 
         for cve in cves:
-            severity_list = cve.get("severity", [])
-            if severity_list:
-                score = severity_list[0].get("score", 0)
-                if score >= 9.0:
-                    critical_cves.append(cve)
-                elif score >= 7.0:
-                    high_cves.append(cve)
-                elif score >= 4.0:
-                    medium_cves.append(cve)
-                else:
-                    low_cves.append(cve)
+            score = self._score_of(cve)
+            if score >= 9.0:
+                critical_cves.append(cve)
+            elif score >= 7.0:
+                high_cves.append(cve)
+            elif score >= 4.0:
+                medium_cves.append(cve)
+            else:
+                low_cves.append(cve)
 
         return {
             "service": name,
@@ -299,14 +331,18 @@ class CVEAnalyzer:
 
         for cve in cves:
             severity_list = cve.get("severity", [])
-            if severity_list:
-                score = severity_list[0].get("score", 0)
+            if severity_list and isinstance(severity_list[0], dict):
                 severity = severity_list[0].get("severity", "UNKNOWN")
             else:
-                score = 0
                 severity = "UNKNOWN"
 
-            scored.append({"cve": cve, "priority_score": score, "severity": severity})
+            scored.append(
+                {
+                    "cve": cve,
+                    "priority_score": self._score_of(cve),
+                    "severity": severity,
+                }
+            )
 
         scored.sort(key=lambda x: x["priority_score"], reverse=True)
 
@@ -354,10 +390,12 @@ if __name__ == "__main__":
     scanner = CVEScanner()
     results = scanner.scan(sys.argv[1])
 
-    print(f"\n=== CVE Results ===")
+    print("\n=== CVE Results ===")
     print(f"\n[Found] {len(results.get('cves', []))} CVEs")
 
     for cve in results.get("cves", [])[:5]:
         print(f"\n{cve.get('id')}")
-        print(f"  Score: {cve.get('severity', [{}])[0].get('score', 'N/A')}")
+        severity = cve.get("severity") or []
+        score = severity[0].get("score", "N/A") if severity else "N/A"
+        print(f"  Score: {score}")
         print(f"  Description: {cve.get('description', '')[:100]}...")

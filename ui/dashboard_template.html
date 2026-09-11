@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSINT EYE — Attack Surface Intelligence</title>
+<style>
+  :root {
+    --bg: #0A0B0E;
+    --surface: #101216;
+    --surface-2: #15181E;
+    --border: #23262E;
+    --border-strong: #31353F;
+    --text: #E8EAF0;
+    --muted: #8B91A0;
+    --faint: #5A5F6C;
+    --accent: #5B8DEF;
+    --accent-soft: rgba(91, 141, 239, 0.12);
+    --ok: #3FB68B;
+    --warn: #E0A458;
+    --danger: #E5484D;
+    --critical: #FF5D5D;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); }
+
+  /* ---------- topbar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 28px;
+    background: rgba(10, 11, 14, 0.88);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: 0.2px; }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    display: grid; place-items: center;
+    color: var(--accent); font-size: 13px; font-weight: 700;
+  }
+  .brand small { color: var(--faint); font-weight: 500; margin-left: 2px; }
+  .targets { display: flex; gap: 6px; flex: 1; overflow-x: auto; padding: 2px; }
+  .targets::-webkit-scrollbar { height: 4px; }
+  .targets::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+  .target-pill {
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 14px;
+    font: inherit; font-size: 13px; cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+    white-space: nowrap;
+  }
+  .target-pill:hover { color: var(--text); border-color: var(--border-strong); }
+  .target-pill.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .score-chip {
+    display: flex; align-items: baseline; gap: 8px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 6px 12px; background: var(--surface);
+  }
+  .score-chip .num { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score-chip .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+  .sev-LOW { color: var(--ok); } .sev-MEDIUM { color: var(--warn); }
+  .sev-HIGH { color: var(--danger); } .sev-CRITICAL { color: var(--critical); }
+
+  /* ---------- layout ---------- */
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 28px 48px; }
+  .banner {
+    display: none; align-items: center; gap: 10px;
+    border: 1px solid rgba(224, 164, 88, .35); background: rgba(224, 164, 88, .08);
+    color: var(--warn); border-radius: var(--radius-sm);
+    padding: 10px 16px; margin-bottom: 20px; font-size: 13px;
+  }
+  .banner.show { display: flex; }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+  }
+  .stat .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .k {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .8px; margin-top: 2px;
+  }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid .span-2 { grid-column: span 2; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .panel-h {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+  }
+  .panel-h h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .panel-h .meta { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .panel-b { padding: 8px 0; }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .7px; color: var(--faint);
+    padding: 8px 18px; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 9px 18px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; color: var(--text); }
+  td.mono, .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; font-size: 12.5px; }
+  td.muted { color: var(--muted); }
+
+  /* ---------- chips ---------- */
+  .sev {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; letter-spacing: .3px;
+  }
+  .sev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .sev.info { color: var(--muted); }
+  .sev.low { color: var(--accent); }
+  .sev.medium { color: var(--warn); }
+  .sev.high { color: var(--danger); }
+  .sev.critical { color: var(--critical); }
+
+  /* ---------- chains ---------- */
+  .chain { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .chain:last-child { border-bottom: none; }
+  .chain-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .chain-name { font-weight: 600; font-size: 13.5px; }
+  .chain-risk { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .chain-risk b { color: var(--text); }
+  .step { display: flex; gap: 10px; padding: 4px 0 4px 2px; font-size: 13px; color: var(--muted); }
+  .step .n {
+    flex: 0 0 18px; height: 18px; border-radius: 50%;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    color: var(--muted); font-size: 10.5px; display: grid; place-items: center;
+    margin-top: 2px; font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- graph ---------- */
+  #graph-box { height: 420px; position: relative; }
+  #graph-box svg { width: 100%; height: 100%; display: block; }
+  .g-edge { stroke: var(--border-strong); stroke-opacity: .8; }
+  .g-node { cursor: grab; }
+  .g-node:active { cursor: grabbing; }
+  .g-label { fill: var(--muted); font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; pointer-events: none; }
+  .g-legend {
+    position: absolute; bottom: 10px; left: 14px; display: flex; gap: 14px;
+    font-size: 11px; color: var(--faint);
+  }
+  .g-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
+  /* ---------- empty states ---------- */
+  .empty {
+    display: grid; place-items: center; gap: 6px;
+    padding: 44px 20px; color: var(--faint); font-size: 13px;
+  }
+  .empty::before { content: "◇"; font-size: 20px; color: var(--border-strong); }
+  .foot {
+    display: flex; gap: 18px; align-items: center;
+    color: var(--faint); font-size: 12px; padding: 18px 2px 0;
+  }
+  .foot .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--border-strong); }
+
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+    .grid .span-2 { grid-column: span 1; }
+    .topbar { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">OE</span>OSINT EYE <small>dashboard</small></div>
+    <nav class="targets" id="targets"></nav>
+    <div class="score-chip">
+      <span class="num" id="score-num">–</span>
+      <span class="lbl" id="score-sev">risk</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="banner" id="banner"></div>
+
+    <section class="stats">
+      <div class="stat"><div class="v" id="s-subs">0</div><div class="k">Subdomains</div></div>
+      <div class="stat"><div class="v" id="s-ports">0</div><div class="k">Open Ports</div></div>
+      <div class="stat"><div class="v" id="s-tech">0</div><div class="k">Technologies</div></div>
+      <div class="stat"><div class="v" id="s-cves">0</div><div class="k">CVEs</div></div>
+      <div class="stat"><div class="v" id="s-emails">0</div><div class="k">Emails</div></div>
+      <div class="stat"><div class="v" id="s-mitre">0</div><div class="k">MITRE Findings</div></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel span-2">
+        <div class="panel-h"><h2>Attack Surface Graph</h2><span class="meta" id="graph-meta"></span></div>
+        <div id="graph-box">
+          <div class="g-legend" id="graph-legend"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><h2>Open Ports</h2><span class="meta" id="ports-meta"></span></div>
+        <div id="ports-body"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><h2>Technologies</h2><span class="meta" id="tech-meta"></span></div>
+        <div id="tech-body"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><h2>MITRE ATT&amp;CK</h2><span class="meta" id="mitre-meta"></span></div>
+        <div id="mitre-body"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><h2>Attack Chains</h2><span class="meta" id="chains-meta"></span></div>
+        <div id="chains-body"></div>
+      </div>
+    </section>
+
+    <div class="foot">
+      <span id="foot-target"></span><span class="dot"></span>
+      <span id="foot-date"></span><span class="dot"></span>
+      <span id="foot-depth"></span>
+    </div>
+  </main>
+
+<script>
+"use strict";
+
+/* ---------- helpers (XSS-safe: everything via textContent) ---------- */
+const $ = (id) => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+function setEmpty(container, message) {
+  clear(container);
+  container.appendChild(el("div", "empty", message));
+}
+
+async function getJSON(url) {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+/* ---------- topbar / targets ---------- */
+let currentTarget = null;
+
+async function loadTargets() {
+  const data = await getJSON("/api/scans");
+  if (!data) return;
+
+  const banner = $("banner");
+  clear(banner);
+  if (data.warning) {
+    banner.appendChild(el("span", null, "⚠ " + data.warning));
+    banner.classList.add("show");
+  } else {
+    banner.classList.remove("show");
+  }
+
+  const nav = $("targets");
+  clear(nav);
+  (data.scans || []).forEach((s) => {
+    const pill = el("button", "target-pill", s.target);
+    pill.addEventListener("click", () => selectTarget(s.target));
+    nav.appendChild(pill);
+  });
+
+  if ((data.scans || []).length > 0) {
+    selectTarget(data.scans[0].target);
+  } else {
+    setEmpty($("ports-body"), "No scans loaded");
+    setEmpty($("tech-body"), "No scans loaded");
+    setEmpty($("mitre-body"), "No scans loaded");
+    setEmpty($("chains-body"), "No scans loaded");
+    setEmpty($("graph-box"), "No graph data");
+  }
+}
+
+/* ---------- summary ---------- */
+async function selectTarget(target) {
+  currentTarget = target;
+  document.querySelectorAll(".target-pill").forEach((p) => {
+    p.classList.toggle("active", p.textContent === target);
+  });
+
+  const summary = await getJSON(`/api/scan/${encodeURIComponent(target)}/summary`);
+  if (!summary) return;
+
+  $("s-subs").textContent = summary.subdomains ?? 0;
+  $("s-ports").textContent = summary.open_ports ?? 0;
+  $("s-tech").textContent = (summary.technologies || []).length;
+  $("s-cves").textContent = summary.cves ?? 0;
+  $("s-emails").textContent = summary.emails ?? 0;
+  $("s-mitre").textContent = summary.mitre_findings ?? 0;
+
+  const score = summary.attack_surface_score || {};
+  $("score-num").textContent = score.score != null ? score.score : "–";
+  const sev = String(score.severity || "LOW").toUpperCase();
+  $("score-sev").textContent = sev;
+  $("score-num").className = "num sev-" + sev;
+
+  $("foot-target").textContent = "Target: " + (summary.target || target);
+  $("foot-date").textContent = "Scanned: " + (summary.date || "—");
+  $("foot-depth").textContent = "Depth: " + (summary.depth || "—");
+
+  renderPorts(target);
+  renderTech(summary.technologies || []);
+  renderMitre(target);
+  renderChains(target);
+  renderGraph(target);
+}
+
+/* ---------- ports ---------- */
+async function renderPorts(target) {
+  const body = $("ports-body");
+  const data = await getJSON(`/api/scan/${encodeURIComponent(target)}/ports`);
+  const ports = (data && data.ports) || [];
+
+  $("ports-meta").textContent = ports.length ? ports.length + " open" : "";
+  if (!ports.length) {
+    setEmpty(body, "No open ports discovered");
+    return;
+  }
+
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Port", "Protocol", "Service", "Version"].forEach((h) => hr.appendChild(el("th", null, h)));
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  ports.forEach((p) => {
+    const tr = el("tr");
+    const tdPort = el("td", "num mono", p.port);
+    const tdProto = el("td", "muted", p.protocol || "tcp");
+    const tdSvc = el("td", null, p.service || "unknown");
+    const tdVer = el("td", "muted mono", p.version || "—");
+    tr.appendChild(tdPort); tr.appendChild(tdProto); tr.appendChild(tdSvc); tr.appendChild(tdVer);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  clear(body);
+  body.appendChild(table);
+}
+
+/* ---------- technologies ---------- */
+function renderTech(techs) {
+  const body = $("tech-body");
+  $("tech-meta").textContent = techs.length ? techs.length + " detected" : "";
+  if (!techs.length) {
+    setEmpty(body, "No technologies fingerprinted");
+    return;
+  }
+  const table = el("table");
+  const tbody = el("tbody");
+  techs.slice(0, 12).forEach((t) => {
+    const tr = el("tr");
+    const name = typeof t === "string" ? t : (t.name || JSON.stringify(t));
+    tr.appendChild(el("td", "mono", name));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  clear(body);
+  body.appendChild(table);
+}
+
+/* ---------- MITRE ---------- */
+async function renderMitre(target) {
+  const body = $("mitre-body");
+  const data = await getJSON(`/api/scan/${encodeURIComponent(target)}/mitre`);
+  const findings = (data && data.findings) || [];
+
+  $("mitre-meta").textContent = findings.length ? findings.length + " findings" : "";
+  if (!findings.length) {
+    setEmpty(body, "No MITRE ATT&CK mappings");
+    return;
+  }
+
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Technique", "Name", "Tactic", "Severity"].forEach((h) => hr.appendChild(el("th", null, h)));
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  findings.forEach((f) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "mono", f.technique_id || "—"));
+    tr.appendChild(el("td", null, f.technique_name || "—"));
+    tr.appendChild(el("td", "muted", f.tactic || "—"));
+    const tdSev = el("td");
+    tdSev.appendChild(el("span", "sev " + String(f.severity || "info").toLowerCase(), f.severity || "info"));
+    tr.appendChild(tdSev);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  clear(body);
+  body.appendChild(table);
+}
+
+/* ---------- chains ---------- */
+async function renderChains(target) {
+  const body = $("chains-body");
+  const chains = await getJSON(`/api/scan/${encodeURIComponent(target)}/chains`) || [];
+
+  $("chains-meta").textContent = chains.length ? chains.length + " chains" : "";
+  if (!chains.length) {
+    setEmpty(body, "No attack chains identified");
+    return;
+  }
+
+  clear(body);
+  chains.slice(0, 6).forEach((chain) => {
+    const box = el("div", "chain");
+    const top = el("div", "chain-top");
+    top.appendChild(el("span", "chain-name", chain.name || "Unnamed chain"));
+    const risk = el("span", "chain-risk");
+    const b = el("b", null, chain.risk_score != null ? chain.risk_score : "—");
+    risk.appendChild(b);
+    risk.appendChild(document.createTextNode(" risk"));
+    top.appendChild(risk);
+    box.appendChild(top);
+
+    (chain.steps || []).slice(0, 8).forEach((step) => {
+      const row = el("div", "step");
+      row.appendChild(el("span", "n", step.step != null ? step.step : "·"));
+      row.appendChild(el("span", null, step.action || step.description || "—"));
+      box.appendChild(row);
+    });
+    body.appendChild(box);
+  });
+}
+
+/* ---------- graph (self-contained force layout, no CDN) ---------- */
+const NODE_COLORS = {
+  domain: "#5B8DEF", subdomain: "#8B91A0", ip: "#3FB68B",
+  port: "#E0A458", email: "#C678DD", tech: "#56B6C2",
+  cve: "#E5484D", related: "#5A5F6C", unknown: "#5A5F6C",
+};
+
+async function renderGraph(target) {
+  const box = $("graph-box");
+  const meta = $("graph-meta");
+  // keep the legend node, drop the rest
+  const legend = $("graph-legend");
+  Array.from(box.children).forEach((child) => { if (child !== legend) child.remove(); });
+
+  const graph = await getJSON(`/api/scan/${encodeURIComponent(target)}/graph`);
+  const nodes = (graph && graph.nodes) || [];
+  const edges = (graph && graph.edges) || [];
+
+  meta.textContent = nodes.length ? nodes.length + " nodes · " + edges.length + " edges" : "";
+  if (!nodes.length) {
+    const empty = el("div", "empty", "No graph data available");
+    box.appendChild(empty);
+    return;
+  }
+
+  const W = box.clientWidth || 800;
+  const H = box.clientHeight || 420;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const edgeG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const nodeG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  svg.appendChild(edgeG); svg.appendChild(nodeG);
+  box.appendChild(svg);
+
+  // deterministic initial positions (ring)
+  nodes.forEach((n, i) => {
+    const a = (2 * Math.PI * i) / nodes.length;
+    n.x = W / 2 + (W / 3.2) * Math.cos(a);
+    n.y = H / 2 + (H / 3.2) * Math.sin(a);
+  });
+  const idx = new Map(nodes.map((n, i) => [n.id !== undefined ? n.id : i, i]));
+
+  const lines = edges.map((e) => {
+    const ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    ln.setAttribute("class", "g-edge");
+    edgeG.appendChild(ln);
+    e._line = ln;
+    e._s = idx.get(e.source);
+    e._t = idx.get(e.target !== undefined ? e.target : e.to);
+    return e;
+  }).filter((e) => e._s !== undefined && e._t !== undefined);
+
+  // degree per node (drives which labels stay visible on dense graphs)
+  const degree = new Array(nodes.length).fill(0);
+  lines.forEach((e) => { degree[e._s]++; degree[e._t]++; });
+
+  const circles = nodes.map((n) => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "g-node");
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    const r = Math.min(13, Math.max(4, (Number(n.size) || 12) * 0.42));
+    c.setAttribute("r", r);
+    c.setAttribute("fill", n.color || NODE_COLORS[String(n.type || "unknown").toLowerCase()] || NODE_COLORS.unknown);
+    c.setAttribute("fill-opacity", "0.9");
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("class", "g-label");
+    t.setAttribute("x", 0); t.setAttribute("y", r + 11);
+    t.setAttribute("text-anchor", "middle");
+    const label = String(n.label || n.id || "");
+    t.textContent = label;
+    // Labels for hubs (high degree) or short names; others reveal on hover
+    const i = nodes.indexOf(n);
+    const isHub = degree[i] >= 4 || label.length <= 10;
+    if (!isHub) t.setAttribute("opacity", "0");
+    g.appendChild(c); g.appendChild(t);
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = label + (n.type ? " · " + n.type : "");
+    g.appendChild(title);
+    g.addEventListener("mouseenter", () => { t.setAttribute("opacity", "1"); });
+    g.addEventListener("mouseleave", () => { if (!isHub) t.setAttribute("opacity", "0"); });
+    nodeG.appendChild(g);
+    n._g = g; n._r = r;
+
+    // drag
+    let dragging = false;
+    g.addEventListener("mousedown", (ev) => { dragging = true; ev.preventDefault(); });
+    window.addEventListener("mousemove", (ev) => {
+      if (!dragging) return;
+      const rect = svg.getBoundingClientRect();
+      n.x = ((ev.clientX - rect.left) / rect.width) * W;
+      n.y = ((ev.clientY - rect.top) / rect.height) * H;
+    });
+    window.addEventListener("mouseup", () => { dragging = false; });
+    return g;
+  });
+
+  // legend (unique node types present)
+  clear(legend);
+  const types = [...new Set(nodes.map((n) => String(n.type || "unknown").toLowerCase()))];
+  types.slice(0, 6).forEach((t) => {
+    const item = el("span");
+    const dot = el("i");
+    dot.style.background = NODE_COLORS[t] || NODE_COLORS.unknown;
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(t));
+    legend.appendChild(item);
+  });
+
+  // simple force simulation
+  let alpha = 0.9;
+  const tick = () => {
+    if (alpha < 0.005) { requestAnimationFrame(tick); return; }
+    // repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
+        const d = Math.sqrt(d2);
+        const f = (3200 / d2) * alpha;
+        const fx = (dx / d) * f, fy = (dy / d) * f;
+        a.x -= fx; a.y -= fy; b.x += fx; b.y += fy;
+      }
+    }
+    // springs
+    edges.forEach((e) => {
+      const a = nodes[e._s], b = nodes[e._t];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const f = ((d - 110) * 0.02) * alpha;
+      const fx = (dx / d) * f, fy = (dy / d) * f;
+      a.x += fx; a.y += fy; b.x -= fx; b.y -= fy;
+    });
+    // gravity + bounds
+    nodes.forEach((n) => {
+      n.x += (W / 2 - n.x) * 0.02 * alpha;
+      n.y += (H / 2 - n.y) * 0.02 * alpha;
+      n.x = Math.max(30, Math.min(W - 30, n.x));
+      n.y = Math.max(24, Math.min(H - 24, n.y));
+    });
+    alpha *= 0.985;
+
+    edges.forEach((e) => {
+      const a = nodes[e._s], b = nodes[e._t];
+      e._line.setAttribute("x1", a.x); e._line.setAttribute("y1", a.y);
+      e._line.setAttribute("x2", b.x); e._line.setAttribute("y2", b.y);
+    });
+    nodes.forEach((n) => {
+      n._g.setAttribute("transform", `translate(${n.x},${n.y})`);
+    });
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+loadTargets();
+</script>
+</body>
+</html>

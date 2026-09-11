@@ -152,9 +152,36 @@ class RiskScorer:
         # Kept for backward compatibility; scoring is fully local.
         self.ollama = ollama
 
+    @staticmethod
+    def _flatten(findings: Dict) -> Dict:
+        """Support both flat payloads and the modules dict osint_eye feeds in.
+
+        ``AIEngine.analyze()`` receives ``results["modules"]`` (keys dns /
+        network / wayback / ...), while the historic flat contract exposes
+        "subdomains" / "services" / "wayback" at the top level. Both shapes
+        must score; previously the modules shape silently scored ~0.
+        """
+        findings = findings or {}
+        if "subdomains" in findings or "services" in findings:
+            return findings
+
+        dns = findings.get("dns") if isinstance(findings.get("dns"), dict) else {}
+        network = (
+            findings.get("network") if isinstance(findings.get("network"), dict) else {}
+        )
+        wayback = (
+            findings.get("wayback") if isinstance(findings.get("wayback"), dict) else {}
+        )
+
+        flattened = dict(findings)
+        flattened.setdefault("subdomains", dns.get("subdomains") or [])
+        flattened.setdefault("services", network.get("services") or [])
+        flattened.setdefault("wayback", wayback)
+        return flattened
+
     def calculate_risk_score(self, findings: Dict) -> Dict:
         """Calculate risk score based on findings (tolerates partial/None data)."""
-        findings = findings or {}
+        findings = self._flatten(findings)
         score = 0
         factors = []
 
@@ -168,6 +195,8 @@ class RiskScorer:
         critical_ports = {21, 22, 23, 25, 445, 3389, 5900, 8080}
         seen_ports = set()
         for svc in services:
+            if not isinstance(svc, dict):
+                continue
             port = svc.get("port")
             if port in critical_ports and port not in seen_ports:
                 seen_ports.add(port)

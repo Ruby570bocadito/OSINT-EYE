@@ -214,7 +214,9 @@ python ui/dashboard.py output/mi_scan.json
 # → http://127.0.0.1:5000
 ```
 
-Incluye KPIs del escaneo, grafo de superficie interactivo, puertos/servicios, técnicas MITRE con severidad y cadenas de ataque ordenadas por riesgo. API REST disponible en `/api/scans`, `/api/scan/<target>`, `/api/scan/<target>/summary`, `/ports`, `/graph`, `/mitre`, `/chains`.
+Interfaz minimalista y oscura con KPIs del escaneo, grafo de superficie interactivo (layout de fuerzas propio, sin CDN — 100% offline), puertos/servicios, tecnologías, técnicas MITRE con severidad y cadenas de ataque ordenadas por riesgo. Todo el contenido se renderiza vía `textContent` (a prueba de inyección desde los datos del escaneo) y la API REST es defensiva: nunca devuelve 500 con datos malformados.
+
+API REST: `/api/scans`, `/api/scan/<target>`, `/api/scan/<target>/summary`, `/ports`, `/graph`, `/mitre`, `/chains`.
 
 ---
 

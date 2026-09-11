@@ -310,22 +310,36 @@ class PassiveDNSDatabase:
         import sqlite3
 
         now = datetime.now().isoformat()
-        modules = results.get("modules", {})
+        modules = results.get("modules", {}) or {}
+        if not isinstance(modules, dict):
+            modules = {}
 
         records_to_insert = []
 
-        dns = modules.get("dns", {})
-        for sub in dns.get("subdomains", []):
+        dns = modules.get("dns") or {}
+        if not isinstance(dns, dict):
+            dns = {}
+
+        for sub in dns.get("subdomains") or []:
             records_to_insert.append((sub, "A", "", results.get("target", "")))
 
-        for rtype, values in dns.get("records", {}).items():
+        dns_records = dns.get("records") or {}
+        if not isinstance(dns_records, dict):
+            dns_records = {}
+        for rtype, values in dns_records.items():
+            if isinstance(values, str):
+                values = [values]
+            elif not isinstance(values, (list, tuple, set)):
+                continue
             for value in values:
                 records_to_insert.append(
                     (results.get("target", ""), rtype, value, results.get("target", ""))
                 )
 
-        certs = modules.get("certs", {})
-        for sub in certs.get("subdomains", []):
+        certs = modules.get("certs") or {}
+        if not isinstance(certs, dict):
+            certs = {}
+        for sub in certs.get("subdomains") or []:
             records_to_insert.append((sub, "CT", "", results.get("target", "")))
 
         with sqlite3.connect(self.db_path) as conn:

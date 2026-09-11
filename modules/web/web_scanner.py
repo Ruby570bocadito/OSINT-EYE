@@ -699,18 +699,20 @@ class SensitiveDataDetector:
         result = {"url": url, "findings": {}, "status_code": None, "content_length": 0}
 
         try:
-            session = requests.Session()
-            session.headers.update(
-                {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-            )
+            # Per-call session (closed eagerly — this method may be invoked
+            # many times in a loop and each open session pins sockets).
+            with requests.Session() as session:
+                session.headers.update(
+                    {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    }
+                )
 
-            response = session.get(url, timeout=10)
-            result["status_code"] = response.status_code
-            result["content_length"] = len(response.content)
+                response = session.get(url, timeout=10)
+                result["status_code"] = response.status_code
+                result["content_length"] = len(response.content)
 
-            result["findings"] = self.scan_content(response.text)
+                result["findings"] = self.scan_content(response.text)
 
         except Exception as e:
             result["error"] = str(e)
@@ -741,10 +743,10 @@ class WebScanner:
         print(f"[*] Detecting technologies on {target}...")
         results["technologies"] = self.tech_detector.detect(target)
 
-        print(f"[*] Discovering API endpoints...")
+        print("[*] Discovering API endpoints...")
         results["endpoints"]["apis"] = self.endpoint_discovery.discover_apis(target)
 
-        print(f"[*] Scanning for sensitive data...")
+        print("[*] Scanning for sensitive data...")
         results["sensitive_data"] = self.sensitive_detector.scan_url(target)
 
         return results
@@ -760,7 +762,7 @@ if __name__ == "__main__":
     scanner = WebScanner()
     results = scanner.scan(sys.argv[1])
 
-    print(f"\n=== Web Scan Results ===")
+    print("\n=== Web Scan Results ===")
 
     tech = results["technologies"]
     if tech.get("technologies"):
@@ -774,6 +776,6 @@ if __name__ == "__main__":
 
     sensitive = results["sensitive_data"]
     if sensitive.get("findings"):
-        print(f"\n[Sensitive Data]")
+        print("\n[Sensitive Data]")
         for category, items in sensitive["findings"].items():
             print(f"  {category}: {len(items)} found")

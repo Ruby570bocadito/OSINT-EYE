@@ -4,7 +4,7 @@ import argparse
 import sys
 import json
 import asyncio
-import traceback
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -22,7 +22,6 @@ from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDND
 from modules.cve import CVEScanner
 from core.correlator import AssetCorrelator
 from core.session_cache import ScanCache, SessionManager
-from core.async_engine import AsyncConfig
 from core.scan_diff import ScanDiff, AttackChainBuilder, BountyReporter
 from core.monitor import SubdomainMonitor, AlertManager
 from core.plugins import PluginManager
@@ -31,9 +30,51 @@ from reporting.markdown_reporter import MarkdownReporter
 from reporting.mitre_mapper import MitreMapper
 from reporting.export import CSVExporter, HTMLReporter
 from reporting.pdf_reporter import PDFReporter
-from reporting.export_tools import BurpExporter, MetasploitExporter, ConfigProfiles
+from reporting.export_tools import BurpExporter, MetasploitExporter
 from ui.rich_cli import RichCLI
 from ai import AIEngine
+
+
+def _sanitize_filename(value: str) -> str:
+    """Turn an arbitrary target into a safe filename fragment.
+
+    Targets can be URLs (``https://acme.com:8443``) whose ``/`` and ``:``
+    would otherwise create/escape path components when composing output
+    filenames, causing FileNotFoundError or files landing in stray
+    directories.
+    """
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(value))
+    return safe.strip("._") or "unknown"
+
+
+def _pdf_output_name(target: str) -> str:
+    """Default PDF filename for a target (sanitized, CWD-relative)."""
+    return (
+        f"osint_eye_{_sanitize_filename(target)}_"
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    )
+
+
+def _print_monitor_panel(console, targets: list, interval: int, webhook_url):
+    """Render the daemon-monitor startup panel (markup-safe).
+
+    Targets/webhooks are user input; a value containing a closing Rich tag
+    (e.g. ``x[/bold]y.com``) used to abort startup with ``MarkupError``
+    because it was interpolated into the panel markup unescaped.
+    """
+    from rich.markup import escape
+    from rich.panel import Panel
+
+    console.print()
+    console.print(
+        Panel(
+            f"  [dim]TARGETS[/dim]   [bold white]{escape(', '.join(map(str, targets)))}[/bold white]\n"
+            f"  [dim]INTERVAL[/dim]  [cyan]{interval}s ({interval // 60} min)[/cyan]\n"
+            f"  [dim]WEBHOOK [/dim]  {'[green]' + escape(str(webhook_url)) + '[/green]' if webhook_url else '[dim]Disabled[/dim]'}",
+            title="[bold cyan]◈  DAEMON MONITOR[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
 
 class OSINTEye:
@@ -114,6 +155,21 @@ class OSINTEye:
     def _print(self, msg):
         print(f"[*] {msg}")
 
+    def _drain_executor_errors(self, futures, phase: str):
+        """Surface exceptions raised inside phase worker threads.
+
+        ``concurrent.futures.wait()`` discards the futures, so without this
+        a crashed worker (e.g. a bug in one run_* method) used to disappear
+        silently: no message, no error entry, missing module data.
+        """
+        for future in futures:
+            exc = future.exception()
+            if exc is not None:
+                self._module_errors += 1
+                error_msg = f"[{phase}] worker crashed: {exc}"
+                self.results["errors"].append(error_msg)
+                print(f"[!] {error_msg}")
+
     def run_dns(self):
         self._print("Running DNS enumeration...")
         result = self._safe_run("dns", self.dns_scanner.scan, self.target, "basic")
@@ -166,8 +222,13 @@ class OSINTEye:
         self._print(f"Detecting technologies on {self.target}...")
         result = self._safe_run("web", self.web_scanner.scan, self.target)
         self.results["modules"]["web"] = result
-        techs = result.get("technologies", {}).get("technologies", [])
-        self._print(f"  Detected: {', '.join(techs[:5]) if techs else 'none'}")
+        self.correlator.ingest_web(result)
+        techs = result.get("technologies")
+        if isinstance(techs, dict):
+            techs = techs.get("technologies") or []
+        elif not isinstance(techs, list):
+            techs = []
+        self._print(f"  Detected: {', '.join(map(str, techs[:5])) if techs else 'none'}")
 
     def run_endpoints(self):
         self._print("Discovering endpoints...")
@@ -202,6 +263,7 @@ class OSINTEye:
         )
         result = self._safe_run("cdn_waf", self.cdn_detector.detect, target_url)
         self.results["modules"]["cdn_waf"] = result
+        self.correlator.ingest_cdn_waf(result)
         self._print(
             f"  CDN: {result.get('cdn', 'None')} | WAF: {result.get('waf', 'None')}"
         )
@@ -210,7 +272,11 @@ class OSINTEye:
         services = (
             self.results.get("modules", {}).get("network", {}).get("services", [])
         )
-        unique_services = {s.get("service") for s in services if s.get("service")}
+        # Tolerate hand-loaded/corrupt shapes: services entries must be dicts
+        # (a bare string used to raise AttributeError inside the set build).
+        unique_services = {
+            s.get("service") for s in services if isinstance(s, dict) and s.get("service")
+        }
         if unique_services:
             self._print("Running CVE lookup...")
             all_cves = []
@@ -218,8 +284,11 @@ class OSINTEye:
                 cves = self._safe_run(
                     f"cve_{service}", self.cve_scanner.scan, service, "keyword"
                 )
-                all_cves.extend(cves.get("cves", []))
+                # ".get('cves', [])" still returns None when the key exists
+                # with a null value; extend(None) would raise TypeError.
+                all_cves.extend(cves.get("cves") or [])
             self.results["modules"]["cve"] = {"cves": all_cves}
+            self.correlator.ingest_cve(self.results["modules"]["cve"])
             self._print(f"  Found {len(all_cves)} potential CVEs")
 
     def run_permutation(self):
@@ -233,7 +302,9 @@ class OSINTEye:
         self.results["modules"]["permutation"] = {
             "subdomains": found,
             "total_found": len(found),
+            "domain": self.target,
         }
+        self.correlator.ingest_permutation(self.results["modules"]["permutation"])
         if self.scan_cache:
             for sub in found:
                 self.scan_cache.add_subdomain(self.target, sub, "permutation")
@@ -244,6 +315,10 @@ class OSINTEye:
         subs = self.results.get("modules", {}).get("permutation", {}).get(
             "subdomains", []
         ) or self.results.get("modules", {}).get("dns", {}).get("subdomains", [])
+        # A JSON "subdomains": null used to reach the slice below and raise
+        # "TypeError: 'NoneType' object is not subscriptable".
+        if not isinstance(subs, list):
+            subs = []
         vulnerable = self._safe_run(
             "takeover", self.takeover_detector.scan_list, subs[:50]
         )
@@ -277,12 +352,14 @@ class OSINTEye:
         self._print("Running GitHub dorks...")
         result = self._safe_run("github", self.github_scanner.scan, self.target)
         self.results["modules"]["github"] = result
+        self.correlator.ingest_github(result)
         self._print(f"  Found {result.get('total_findings', 0)} potential leaks")
 
     def run_google(self):
         self._print("Running Google dorks...")
         result = self._safe_run("google", self.google_scanner.scan, self.target, "full")
         self.results["modules"]["google"] = result
+        self.correlator.ingest_google(result)
 
     def run_correlation(self):
         self._print("Correlating assets...")
@@ -384,6 +461,7 @@ class OSINTEye:
                 executor.submit(self.run_whois),
             ]
             concurrent.futures.wait(p1)
+        self._drain_executor_errors(p1, "phase1")
         self._print("[+] Phase 1 complete.")
 
         phase("Phase 2 · Network & Web Discovery")
@@ -399,6 +477,7 @@ class OSINTEye:
                     p2.append(executor.submit(self.run_github))
                     p2.append(executor.submit(self.run_google))
                 concurrent.futures.wait(p2)
+            self._drain_executor_errors(p2, "phase2")
         self._print("[+] Phase 2 complete.")
 
         phase("Phase 3 · Web Vulnerability Scanning & Deep Recon")
@@ -413,6 +492,7 @@ class OSINTEye:
                         executor.submit(self.run_emails),
                     ]
                     concurrent.futures.wait(p3)
+                self._drain_executor_errors(p3, "phase3")
             self.run_cve()
         self._print("[+] Phase 3 complete.")
 
@@ -434,7 +514,8 @@ class OSINTEye:
         """Export results in all formats"""
         if not output_base:
             output_base = (
-                f"osint_eye_{self.target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                f"osint_eye_{_sanitize_filename(self.target)}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
 
         exports = {}
@@ -443,6 +524,10 @@ class OSINTEye:
             json_path = output_base + ".json"
         else:
             json_path = output_base
+
+        # --output may point into a not-yet-existing directory
+        # (e.g. "out/report"); create it instead of crashing after the scan.
+        Path(json_path).parent.mkdir(parents=True, exist_ok=True)
 
         with open(json_path, "w") as f:
             json.dump(self.results, f, indent=2, default=str)
@@ -510,21 +595,11 @@ def scan_targets(targets: list, args):
 
     if getattr(args, "monitor", False):
         from rich.console import Console
-        from rich.panel import Panel
 
         console = Console(highlight=False)
         interval = getattr(args, "monitor_interval", 3600)
         webhook_url = getattr(args, "webhook", None)
-        console.print()
-        console.print(
-            Panel(
-                f"  [dim]TARGETS[/dim]   [bold white]{', '.join(targets)}[/bold white]\n"
-                f"  [dim]INTERVAL[/dim]  [cyan]{interval}s ({interval // 60} min)[/cyan]\n"
-                f"  [dim]WEBHOOK [/dim]  {'[green]' + webhook_url + '[/green]' if webhook_url else '[dim]Disabled[/dim]'}",
-                title="[bold cyan]◈  DAEMON MONITOR[/bold cyan]",
-                border_style="cyan",
-            )
-        )
+        _print_monitor_panel(console, targets, interval, webhook_url)
 
         monitor = SubdomainMonitor(
             targets, check_interval=args.monitor_interval, cache=not args.no_cache
@@ -533,7 +608,11 @@ def scan_targets(targets: list, args):
             monitor.alert_manager.add_handler(
                 AlertManager.webhook_handler(args.webhook)
             )
-            console.print(f"  [green]✔[/green] Webhook alerts enabled for {args.webhook}")
+            from rich.markup import escape as _escape
+
+            console.print(
+                f"  [green]✔[/green] Webhook alerts enabled for {_escape(str(args.webhook))}"
+            )
 
         try:
             asyncio.run(monitor.run_daemon())
@@ -609,9 +688,9 @@ def scan_targets(targets: list, args):
 
         if getattr(args, "pdf", False):
             try:
-                pdf_path = (
-                    f"osint_eye_{target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                )
+                # Sanitized: a URL-like target used to produce a filename
+                # containing "/" and crash PDF generation (FileNotFoundError).
+                pdf_path = _pdf_output_name(target)
                 engine._print(f"[*] Generating Executive PDF Report -> {pdf_path}...")
                 engine.pdf_reporter.generate(engine.results, pdf_path)
                 print(f"[+] PDF Report saved: {pdf_path}")
@@ -619,7 +698,11 @@ def scan_targets(targets: list, args):
                 print(f"[!] PDF generation failed: {e}")
 
         if args.output:
-            output = args.output if len(targets) == 1 else f"{args.output}_{target}"
+            output = (
+                args.output
+                if len(targets) == 1
+                else f"{args.output}_{_sanitize_filename(target)}"
+            )
             exports = engine.export_all(output)
             print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
 
@@ -629,7 +712,7 @@ def scan_targets(targets: list, args):
             cypher_file = (
                 args.export_cypher
                 if len(targets) == 1
-                else f"{args.export_cypher}_{target}"
+                else f"{args.export_cypher}_{_sanitize_filename(target)}"
             )
             print(f"[*] Exporting Neo4j Cypher to {cypher_file}...")
             exporter = Neo4jExporter(
@@ -651,10 +734,11 @@ def scan_targets(targets: list, args):
                 )
             else:
                 dash_json = (
-                    f"osint_eye_{target}_"
+                    f"osint_eye_{_sanitize_filename(target)}_"
                     f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                 )
             if not Path(dash_json).exists():
+                Path(dash_json).parent.mkdir(parents=True, exist_ok=True)
                 with open(dash_json, "w") as f:
                     json.dump(engine.results, f, indent=2, default=str)
             load_scan_results(dash_json)
@@ -664,7 +748,7 @@ def scan_targets(targets: list, args):
             prev_target = targets[targets.index(target) - 1]
             if prev_target in all_results:
                 diff = ScanDiff()
-                result = diff.compare(all_results[prev_target], engine.results)
+                diff.compare(all_results[prev_target], engine.results)
                 print(f"\n[Diff vs {prev_target}]")
                 print(diff.get_summary())
 

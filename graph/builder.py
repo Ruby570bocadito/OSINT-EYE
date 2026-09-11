@@ -74,6 +74,9 @@ class GraphBuilder:
         if "dns" in modules:
             self._ingest_dns(modules["dns"])
 
+        if "permutation" in modules:
+            self._ingest_permutation(modules["permutation"])
+
         if "certs" in modules:
             self._ingest_certs(modules["certs"])
 
@@ -149,6 +152,25 @@ class GraphBuilder:
                 elif rtype == "NS":
                     self._add_node(value, "nameserver", value)
                     self._add_edge(domain, value, "nameserver")
+
+    def _ingest_permutation(self, permutation_data: Dict):
+        """Ingest resolved permutation subdomains (verified hosts).
+
+        osint_eye stores them under modules["permutation"]; without this
+        the interactive graph silently missed every permutation hit even
+        though the correlator counted them.
+        """
+        domain = permutation_data.get("domain", "") or ""
+        if not domain:
+            return
+
+        self._add_node(domain, "domain", domain)
+
+        for subdomain in permutation_data.get("subdomains") or []:
+            if not subdomain:
+                continue
+            self._add_node(subdomain, "subdomain", subdomain)
+            self._add_edge(domain, subdomain, "has_subdomain")
 
     def _ingest_certs(self, cert_data: Dict):
         """Ingest certificate data"""

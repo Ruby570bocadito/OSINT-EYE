@@ -116,8 +116,12 @@ def _d(value: Any) -> Dict:
 
 
 def _l(value: Any) -> List:
-    """Return ``value`` if it is a list, else ``[]`` (defensive accessor)."""
-    return value if isinstance(value, list) else {}
+    """Return ``value`` if it is a list, else ``[]`` (defensive accessor).
+
+    Must return a real list: callers slice the result (``_l(x)[:3]``) and
+    slicing a dict (the previous fallback ``{}``) raises TypeError.
+    """
+    return value if isinstance(value, list) else []
 
 
 def _cve_sev(cve: Dict) -> Dict:
@@ -128,6 +132,18 @@ def _cve_sev(cve: Dict) -> Dict:
     if isinstance(sev, dict):
         return sev
     return {}
+
+
+def _as_int(value: Any) -> int:
+    """Coerce a scan counter to int (hand-loaded JSON may hold strings/None).
+
+    ``max()`` over mixed str/int counts and ``int("many")`` both raised
+    TypeError/ValueError in the summary renderer.
+    """
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _gradient_banner(banner: str) -> Text:
@@ -368,8 +384,8 @@ class RichCLI:
                 port_str = f"[bold red]{port_str}[/bold red]"
             table.add_row(
                 port_str,
-                str(svc.get("protocol", "tcp")),
-                str(svc.get("service", "unknown")),
+                escape(str(svc.get("protocol", "tcp"))),
+                escape(str(svc.get("service", "unknown"))),
                 escape(str(svc.get("version", ""))),
             )
         self.console.print(Padding(table, (0, 2)))
@@ -457,7 +473,7 @@ class RichCLI:
             table.add_row(
                 str(f.get("technique_id", "")),
                 escape(str(f.get("technique_name", ""))[:44]),
-                str(f.get("tactic", "")),
+                escape(str(f.get("tactic", ""))),
                 Text(severity, style=sev_style(severity)),
             )
         self.console.print(Padding(table, (0, 2)))
@@ -589,7 +605,6 @@ class RichCLI:
         Tolerates minimal/empty ``results`` — every key is read defensively.
         """
         results = _d(results)
-        modules = _d(results.get("modules"))
         corr = _d(results.get("correlation"))
         mitre = _d(results.get("mitre"))
         chains = _l(results.get("attack_chains"))
@@ -645,14 +660,16 @@ class RichCLI:
         )
 
         # ── Right: module coverage with mini bars ───────────────────────
-        counts = self._module_counts(results)
+        counts = [
+            (label, _as_int(count), color)
+            for label, count, color in self._module_counts(results)
+        ]
         max_count = max([c for _, c, _ in counts] + [1])
         coverage = Table.grid(padding=(0, 1))
         coverage.add_column(justify="left", no_wrap=True)
         coverage.add_column(justify="right", width=6)
         coverage.add_column(no_wrap=True)
         for label, count, color in counts:
-            count = int(count or 0)
             bar = Text()
             if count:
                 fill = max(1, int(round(count / max_count * 8)))
@@ -794,8 +811,8 @@ class RichCLI:
             port_str = f"[bold red]{port}[/bold red]" if port in [21, 23, 3389, 5900, 445] else str(port)
             table.add_row(
                 port_str,
-                str(svc.get("protocol", "tcp")),
-                str(svc.get("service", "")),
+                escape(str(svc.get("protocol", "tcp"))),
+                escape(str(svc.get("service", ""))),
                 escape(str(svc.get("version", ""))),
             )
         return self._panel("NETWORK", table, len(services) or None)
@@ -834,7 +851,7 @@ class RichCLI:
             table.add_row(
                 str(f.get("technique_id", "")),
                 escape(str(f.get("technique_name", ""))[:44]),
-                str(f.get("tactic", "")),
+                escape(str(f.get("tactic", ""))),
                 Text(severity, style=sev_style(severity)),
             )
         return self._panel("MITRE ATT&CK", table, mitre.get("total_findings", len(findings)))
@@ -1037,7 +1054,7 @@ class RichCLI:
                         if b.get("public")
                         else Text("private", style="bright_black")
                     )
-                    table.add_row(escape(str(b.get("url", ""))), str(b.get("provider", "")), state)
+                    table.add_row(escape(str(b.get("url", ""))), escape(str(b.get("provider", ""))), state)
                 self.console.print(self._panel("CLOUD STORAGE", table, len(found)))
             else:
                 self.console.print(
@@ -1127,7 +1144,7 @@ class RichCLI:
                     v = _d(v)
                     table.add_row(
                         Text(str(v.get("subdomain", "")), style="bold red"),
-                        str(v.get("service", "")),
+                        escape(str(v.get("service", ""))),
                         escape(str(v.get("signature", ""))[:40]),
                     )
                 self.console.print(self._panel("SUBDOMAIN TAKEOVER", table, len(vulns)))

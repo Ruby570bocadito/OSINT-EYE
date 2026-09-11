@@ -5,7 +5,7 @@ ATT&CK Navigator layer JSON compatible with https://mitre-attack.github.io/.
 """
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass
 
 
@@ -203,7 +203,9 @@ class MitreMapper:
     def map_findings(self, scan_results: Dict) -> List[MitreFinding]:
         """Map all scan findings to MITRE ATT&CK"""
         self.findings = []
-        modules = _d(scan_results.get("modules")) if isinstance(scan_results, dict) else {}
+        if not isinstance(scan_results, dict):
+            scan_results = {}
+        modules = _d(scan_results.get("modules"))
 
         if _l(_d(modules.get("dns")).get("subdomains")):
             count = len(modules["dns"]["subdomains"])
@@ -218,8 +220,7 @@ class MitreMapper:
                 )
             )
 
-        net = _d(scan_results.get("modules")).get("network") if isinstance(scan_results.get("modules"), dict) else {}
-        net = _d(net)
+        net = _d(modules.get("network"))
         open_ports = [s for s in _l(net.get("services")) if _d(s).get("state") == "open"]
         if open_ports:
             port_list = ", ".join(
@@ -236,8 +237,11 @@ class MitreMapper:
                 )
             )
 
-        web = modules.get("web", {})
-        techs = web.get("technologies", {}).get("technologies", []) if isinstance(web.get("technologies"), dict) else []
+        web = _d(modules.get("web"))
+        # A JSON null web module used to crash here ("NoneType" has no
+        # .get); _d() normalises it to {} first.
+        raw_techs = web.get("technologies")
+        techs = raw_techs.get("technologies", []) if isinstance(raw_techs, dict) else []
         if techs:
             self.findings.append(
                 MitreFinding(
