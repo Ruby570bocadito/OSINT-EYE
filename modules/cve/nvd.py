@@ -1,35 +1,118 @@
-"""OSINT EYE - CVE Module (NVD API - Free)"""
+"""OSINT EYE - CVE Module (NVD API 2.0 - Free)
+
+Queries the free NVD REST API directly (no nvdlib/API key required to
+WORK — but the key gives much better throughput: without it NVD allows
+only ~5 requests per rolling 30 s window, so this module enforces a
+conservative pacing by default).
+
+    * Optional API key: pass ``api_key`` or set ``NVD_API_KEY`` env var.
+    * Every request has a timeout and honours the rate limit.
+    * HTTP 403/429 triggers a backoff + single retry; on persistent
+      failure the lookup degrades to an empty list with a ``[!]``
+      warning ("get a free key at https://nvd.nist.gov/developers/
+      request-an-api-key") instead of raising.
+    * CVEScanner().scan(service, "keyword") always returns
+      {"cves": [...]}
+"""
+
+import os
+import time
+from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Optional
 
 import requests
-import time
-from typing import List, Dict, Optional
 
 
 class CVELookup:
-    """CVE lookup via NVD API (free, no key required)"""
+    """CVE lookup via the NVD API (free; optional API key).
 
-    def __init__(self, rate_limit_delay: float = 0.6):
-        self.rate_limit_delay = rate_limit_delay
+    Without an API key NVD rate-limits to ~5 requests / 30 s, hence the
+    default 6 s pacing. With a key (constructor arg or ``NVD_API_KEY``
+    env var) the limit rises to ~50 requests / 30 s and pacing drops to
+    ~0.7 s. All lookups degrade gracefully to empty results on failure.
+    """
+
+    #: NVD's documented no-key limit is 5 requests / 30 s.
+    NO_KEY_DELAY = 6.0
+    #: With a key: 50 requests / 30 s -> ~0.7 s per request is safe.
+    WITH_KEY_DELAY = 0.7
+
+    def __init__(
+        self,
+        rate_limit_delay: Optional[float] = None,
+        api_key: Optional[str] = None,
+    ):
         self.base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        self.api_key = api_key or os.environ.get("NVD_API_KEY") or None
+        if rate_limit_delay is not None:
+            self.rate_limit_delay = max(0.0, rate_limit_delay)
+        else:
+            self.rate_limit_delay = (
+                self.WITH_KEY_DELAY if self.api_key else self.NO_KEY_DELAY
+            )
+        self._last_request_ts: float = 0.0
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"})
+        if self.api_key:
+            self.session.headers.update({"apiKey": self.api_key})
+
+    def _respect_rate_limit(self) -> None:
+        """Sleep just enough to keep the configured minimum interval."""
+        elapsed = time.time() - self._last_request_ts
+        if elapsed < self.rate_limit_delay:
+            time.sleep(self.rate_limit_delay - elapsed)
+        self._last_request_ts = time.time()
+
+    def _get(self, params: Dict) -> Optional[Dict]:
+        """Rate-limited GET against NVD with timeout, backoff and retry.
+
+        Returns parsed JSON on success, or None (after warning) on
+        persistent failure/rate limiting. Never raises.
+        """
+        for attempt in range(2):
+            try:
+                self._respect_rate_limit()
+                response = self.session.get(self.base_url, params=params, timeout=30)
+
+                if response.status_code == 200:
+                    return response.json()
+
+                if response.status_code in (403, 429):
+                    wait = 30 if not self.api_key else 10
+                    print(
+                        f"[!] NVD API rate limited (HTTP {response.status_code}). "
+                        f"Backing off {wait}s..."
+                    )
+                    time.sleep(wait)
+                    continue
+
+                print(f"[!] NVD API returned HTTP {response.status_code}")
+                return None
+
+            except requests.RequestException as e:
+                print(f"[!] NVD API request error: {e}")
+                return None
+            except ValueError as e:
+                print(f"[!] NVD API returned non-JSON payload: {e}")
+                return None
+
+        print(
+            "[!] NVD API unavailable/rate-limited - degrading to empty results. "
+            "Tip: request a free API key at "
+            "https://nvd.nist.gov/developers/request-an-api-key"
+        )
+        return None
 
     def search_cve(self, cve_id: str) -> Dict:
         """Get CVE by ID"""
-        try:
-            params = {"cveId": cve_id}
-            response = self.session.get(self.base_url, params=params, timeout=30)
+        data = self._get({"cveId": cve_id})
+        if data is None:
+            return {"error": "NVD API unavailable", "cve_id": cve_id}
 
-            if response.status_code == 200:
-                data = response.json()
-                return self._parse_cve_data(data)
-            elif response.status_code == 404:
-                return {"error": "CVE not found", "cve_id": cve_id}
-            else:
-                return {"error": f"Status {response.status_code}", "cve_id": cve_id}
+        if not data.get("vulnerabilities"):
+            return {"error": "CVE not found", "cve_id": cve_id}
 
-        except Exception as e:
-            return {"error": str(e), "cve_id": cve_id}
+        return self._parse_cve_data(data)
 
     def _parse_cve_data(self, data: Dict) -> Dict:
         """Parse NVD API response"""
@@ -102,58 +185,53 @@ class CVELookup:
         return result
 
     def search_by_keyword(self, keyword: str, max_results: int = 20) -> List[Dict]:
-        """Search CVEs by keyword"""
+        """Search CVEs by keyword (empty list if the API is unavailable)."""
         results = []
 
-        try:
-            params = {"keywordSearch": keyword, "resultsPerPage": max_results}
+        params = {"keywordSearch": keyword, "resultsPerPage": max_results}
+        data = self._get(params)
 
-            response = self.session.get(self.base_url, params=params, timeout=30)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("vulnerabilities"):
-                    for v in data["vulnerabilities"]:
-                        results.append(self._parse_cve_data({"vulnerabilities": [v]}))
-
-        except Exception as e:
-            print(f"[!] Search error: {e}")
+        if data and data.get("vulnerabilities"):
+            for v in data["vulnerabilities"]:
+                results.append(self._parse_cve_data({"vulnerabilities": [v]}))
 
         return results
 
     def search_by_product(
-        self, vendor: str, product: str, version: str = None
+        self, vendor: str, product: Optional[str] = None, version: Optional[str] = None
     ) -> List[Dict]:
-        """Search CVEs by product"""
-        keyword = f"{vendor} {product}"
-        if version:
-            keyword += f" {version}"
+        """Search CVEs by vendor/product (all args optional)."""
+        parts = [p for p in (vendor, product, version) if p]
+        if not parts:
+            return []
 
+        keyword = " ".join(parts)
         return self.search_by_keyword(keyword)
 
     def get_recent_cves(self, days: int = 7, max_results: int = 20) -> List[Dict]:
-        """Get recent CVEs"""
+        """Get CVEs published in the last ``days`` days.
+
+        NVD 2.0 requires pubStartDate AND pubEndDate together (ISO-8601,
+        range <= 120 days); the old code sent only one date with an
+        invalid " UTC" suffix, which the API rejects.
+        """
         results = []
+        days = max(1, min(days, 120))
 
-        try:
-            from datetime import datetime, timedelta
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=days)
 
-            pub_start = (datetime.now() - timedelta(days=days)).strftime(
-                "%Y-%m-%dT00:00:00.000 UTC"
-            )
+        params = {
+            "pubStartDate": start.strftime("%Y-%m-%dT%H:%M:%S.000"),
+            "pubEndDate": end.strftime("%Y-%m-%dT%H:%M:%S.000"),
+            "resultsPerPage": max_results,
+        }
 
-            params = {"pubStartDate": pub_start, "resultsPerPage": max_results}
+        data = self._get(params)
 
-            response = self.session.get(self.base_url, params=params, timeout=30)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("vulnerabilities"):
-                    for v in data["vulnerabilities"]:
-                        results.append(self._parse_cve_data({"vulnerabilities": [v]}))
-
-        except Exception as e:
-            print(f"[!] Error getting recent CVEs: {e}")
+        if data and data.get("vulnerabilities"):
+            for v in data["vulnerabilities"]:
+                results.append(self._parse_cve_data({"vulnerabilities": [v]}))
 
         return results
 
@@ -236,22 +314,34 @@ class CVEAnalyzer:
 
 
 class CVEScanner:
-    """Main CVE scanning orchestrator"""
+    """Main CVE scanning orchestrator.
+
+    ``scan(target, scan_type)`` always returns {"cves": [...]} so the
+    CLI/report layer can rely on the key even when the NVD API is
+    unreachable or rate-limited (empty list + "error" key then).
+    """
 
     def __init__(self):
         self.cve = CVELookup()
         self.analyzer = CVEAnalyzer()
 
     def scan(self, target: str, scan_type: str = "keyword") -> Dict:
-        """Scan for CVEs"""
+        """Scan for CVEs ("keyword" | "recent" | "product" | CVE id)."""
         if scan_type == "keyword":
             return {"cves": self.cve.search_by_keyword(target)}
         elif scan_type == "recent":
             return {"cves": self.cve.get_recent_cves()}
         elif scan_type == "product":
-            return {"cves": self.cve.search_by_product(target)}
+            # "target" may be "vendor", "vendor product" or
+            # "vendor product version".
+            parts = target.split()[:3]
+            return {"cves": self.cve.search_by_product(*parts)}
         else:
-            return {"cves": self.cve.search_cve(target)}
+            # Single CVE id lookup (e.g. "CVE-2021-44228").
+            result = self.cve.search_cve(target)
+            if result.get("error"):
+                return {"cves": [], "error": result["error"], "cve_id": target}
+            return {"cves": [result]}
 
 
 if __name__ == "__main__":

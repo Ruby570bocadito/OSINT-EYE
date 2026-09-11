@@ -3,9 +3,8 @@
 import sqlite3
 import json
 import hashlib
-import os
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from pathlib import Path
 
 
@@ -21,9 +20,17 @@ class ScanCache:
         self.db_path = db_path
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        """Open a connection with a generous busy timeout.
+
+        Multiple worker threads write to the cache concurrently (scan phases),
+        so the default 5s busy timeout is too tight under load.
+        """
+        return sqlite3.connect(self.db_path, timeout=30)
+
     def _init_db(self):
         """Initialize database tables"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS scans (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +100,7 @@ class ScanCache:
                 return list(obj)
             return str(obj)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """INSERT INTO scans (target, scan_type, timestamp, depth, results)
                    VALUES (?, ?, ?, ?, ?)""",
@@ -110,7 +117,7 @@ class ScanCache:
         """Get the most recent scan if within age limit"""
         cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """SELECT * FROM scans WHERE target = ? AND timestamp > ?
@@ -120,10 +127,14 @@ class ScanCache:
             row = cursor.fetchone()
 
             if row:
+                try:
+                    results = json.loads(row["results"]) if row["results"] else {}
+                except (TypeError, json.JSONDecodeError):
+                    results = {}
                 return {
                     "timestamp": row["timestamp"],
                     "depth": row["depth"],
-                    "results": json.loads(row["results"]),
+                    "results": results,
                 }
         return None
 
@@ -131,7 +142,7 @@ class ScanCache:
         """Add or update a subdomain"""
         now = datetime.now().isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """INSERT INTO subdomains (target, subdomain, source, first_seen, last_seen, ip)
                    VALUES (?, ?, ?, ?, ?, ?)
@@ -142,7 +153,7 @@ class ScanCache:
 
     def get_subdomains(self, target: str, source: str = None) -> List[Dict]:
         """Get all known subdomains for a target"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.row_factory = sqlite3.Row
 
             if source:
@@ -162,7 +173,7 @@ class ScanCache:
 
     def get_new_subdomains(self, target: str, since: str) -> List[str]:
         """Get subdomains discovered since a timestamp"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.execute(
                 """SELECT DISTINCT subdomain FROM subdomains
                    WHERE target = ? AND first_seen > ?""",
@@ -182,7 +193,7 @@ class ScanCache:
         """Add or update a port"""
         now = datetime.now().isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """INSERT INTO ports (target, host, port, protocol, service, version, state, first_seen, last_seen)
                    VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)
@@ -205,7 +216,7 @@ class ScanCache:
 
     def get_ports(self, target: str) -> List[Dict]:
         """Get all known ports for a target"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """SELECT * FROM ports WHERE target = ? ORDER BY port""",
@@ -221,7 +232,7 @@ class ScanCache:
             "changes": [],
         }
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.execute(
                 """SELECT * FROM ports WHERE target = ? AND first_seen > ?""",
                 (target, since),
@@ -232,7 +243,7 @@ class ScanCache:
 
     def get_stats(self, target: str) -> Dict:
         """Get cache statistics for a target"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             sub_count = conn.execute(
                 "SELECT COUNT(DISTINCT subdomain) FROM subdomains WHERE target = ?",
                 (target,),
@@ -270,10 +281,13 @@ class ScanCache:
         """Remove old entries"""
         cutoff = (datetime.now() - timedelta(days=max_age_days)).isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute("DELETE FROM scans WHERE timestamp < ?", (cutoff,))
             conn.execute("DELETE FROM subdomains WHERE last_seen < ?", (cutoff,))
             conn.execute("DELETE FROM ports WHERE last_seen < ?", (cutoff,))
+            conn.execute(
+                "DELETE FROM http_responses WHERE last_seen < ?", (cutoff,)
+            )
 
 
 class SessionManager:

@@ -6,8 +6,7 @@ import ssl
 import time
 import random
 from typing import Dict, List, Optional, Callable, Any
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 
 
 @dataclass
@@ -38,23 +37,34 @@ class AsyncConfig:
         return random.choice(self.USER_AGENTS)
 
     def get_delay(self) -> float:
+        """Delay before the next request.
+
+        stealth: 2..8s, paranoid: 30..120s, otherwise honour rate_limit
+        (default ~0 = no artificial delay).
+        """
         if self.paranoid:
             return random.uniform(30, 120)
         elif self.stealth:
             return random.uniform(2, 8)
-        elif self.rate_limit > 0:
-            return self.rate_limit
-        return random.uniform(0.1, 0.5)
+        return max(0.0, self.rate_limit)
 
 
 class AsyncSession:
-    """Async HTTP session with rate limiting and retries"""
+    """Async HTTP session with rate limiting and retries.
+
+    Note: TLS verification is intentionally disabled (OSINT tooling must be
+    able to probe misconfigured/self-signed lab hosts).
+    """
 
     def __init__(self, config: AsyncConfig = None):
         self.config = config or AsyncConfig()
         self._session = None
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent)
         self._last_request = 0
+        # aiohttp only accepts a proxy per-request, never on ClientSession().
+        self._proxy = self.config.proxy
+        if not self._proxy and self.config.tor:
+            self._proxy = "socks5://127.0.0.1:9050"
         self.stats = {"requests": 0, "errors": 0, "retries": 0}
 
     async def __aenter__(self):
@@ -70,16 +80,11 @@ class AsyncSession:
 
         timeout = aiohttp.ClientTimeout(total=self.config.timeout)
 
-        session_kwargs = {
-            "connector": connector,
-            "timeout": timeout,
-            "headers": {"User-Agent": self.config.get_ua()},
-        }
-
-        if self.config.proxy:
-            session_kwargs["proxy"] = self.config.proxy
-
-        self._session = aiohttp.ClientSession(**session_kwargs)
+        self._session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers={"User-Agent": self.config.get_ua()},
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -93,20 +98,27 @@ class AsyncSession:
             await asyncio.sleep(delay - elapsed)
         self._last_request = time.time()
 
+    def _merge_headers(self, kwargs: Dict) -> Dict:
+        """Merge per-request headers (popped once, before any retry)."""
+        headers = {"User-Agent": self.config.get_ua()}
+        custom = kwargs.pop("headers", None)
+        if custom:
+            headers.update(custom)
+        return headers
+
     async def get(self, url: str, **kwargs) -> Optional[aiohttp.ClientResponse]:
         async with self._semaphore:
             await self._apply_rate_limit()
+            headers = self._merge_headers(kwargs)
 
             for attempt in range(self.config.retries + 1):
                 try:
                     self.stats["requests"] += 1
-                    headers = {"User-Agent": self.config.get_ua()}
-                    if "headers" in kwargs:
-                        headers.update(kwargs.pop("headers"))
-
-                    resp = await self._session.get(url, headers=headers, **kwargs)
+                    resp = await self._session.get(
+                        url, headers=headers, proxy=self._proxy, **kwargs
+                    )
                     return resp
-                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                except (aiohttp.ClientError, asyncio.TimeoutError):
                     self.stats["errors"] += 1
                     if attempt < self.config.retries:
                         self.stats["retries"] += 1
@@ -117,15 +129,14 @@ class AsyncSession:
     async def post(self, url: str, **kwargs) -> Optional[aiohttp.ClientResponse]:
         async with self._semaphore:
             await self._apply_rate_limit()
+            headers = self._merge_headers(kwargs)
 
             for attempt in range(self.config.retries + 1):
                 try:
                     self.stats["requests"] += 1
-                    headers = {"User-Agent": self.config.get_ua()}
-                    if "headers" in kwargs:
-                        headers.update(kwargs.pop("headers"))
-
-                    resp = await self._session.post(url, headers=headers, **kwargs)
+                    resp = await self._session.post(
+                        url, headers=headers, proxy=self._proxy, **kwargs
+                    )
                     return resp
                 except (aiohttp.ClientError, asyncio.TimeoutError):
                     self.stats["errors"] += 1
@@ -161,30 +172,12 @@ class AsyncTaskRunner:
         self.config = config or AsyncConfig()
         self.results = []
         self.errors = []
-        self.progress_callback = None
 
-    async def run_batch(self, func: Callable, items: List, *args, **kwargs) -> List:
+    async def run_batch(
+        self, func: Callable, items: List, *args, **kwargs
+    ) -> List:
         """Run function on all items concurrently"""
-        self.results = []
-        self.errors = []
-
-        semaphore = asyncio.Semaphore(self.config.max_concurrent)
-
-        async def _run(item):
-            async with semaphore:
-                try:
-                    result = await func(item, *args, **kwargs)
-                    if result:
-                        self.results.append(result)
-                    return result
-                except Exception as e:
-                    self.errors.append({"item": item, "error": str(e)})
-                    return None
-
-        tasks = [_run(item) for item in items]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        return self.results
+        return await self.run_batch_with_progress(func, items, None, *args, **kwargs)
 
     async def run_batch_with_progress(
         self, func: Callable, items: List, progress_cb: Callable = None, *args, **kwargs
@@ -204,16 +197,14 @@ class AsyncTaskRunner:
                     result = await func(item, *args, **kwargs)
                     if result:
                         self.results.append(result)
-                    completed += 1
-                    if progress_cb:
-                        progress_cb(completed, total)
                     return result
                 except Exception as e:
                     self.errors.append({"item": item, "error": str(e)})
+                    return None
+                finally:
                     completed += 1
                     if progress_cb:
                         progress_cb(completed, total)
-                    return None
 
         tasks = [_run(item) for item in items]
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -232,17 +223,19 @@ async def async_get_many(urls: List[str], config: AsyncConfig = None) -> Dict[st
             text = await session.get_text(url)
             return url, text
 
-        tasks = [fetch(url) for url in urls]
-        done = await asyncio.gather(*tasks, return_exceptions=True)
+        done = await asyncio.gather(
+            *(fetch(url) for url in urls), return_exceptions=True
+        )
 
-        for result in done:
-            if isinstance(result, tuple) and len(result) == 2:
-                results[result[0]] = {"content": result[1], "success": True}
+        # Zip with the original url list: gather results are positional, and
+        # exceptions cannot be used as mapping keys (previous code did
+        # result[0] on an Exception -> TypeError).
+        for url, outcome in zip(urls, done):
+            if isinstance(outcome, Exception):
+                results[url] = {"content": None, "success": False, "error": str(outcome)}
             else:
-                results[result[0] if isinstance(result, Exception) else str(result)] = {
-                    "content": None,
-                    "success": False,
-                }
+                _, text = outcome
+                results[url] = {"content": text, "success": text is not None}
 
     return results
 

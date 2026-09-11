@@ -1,4 +1,4 @@
-"""OSINT EYE v2 - Main Entry Point with Async, Cache & Multi-Target"""
+"""OSINT EYE v2.1 - Main Entry Point with Async, Cache & Multi-Target"""
 
 import argparse
 import sys
@@ -185,10 +185,12 @@ class OSINTEye:
             target_url,
         )
         self.results["modules"]["endpoints"] = {
+            "target": target_url,
             "found": endpoints.get("found", []),
             "sensitive": sensitive.get("found", []),
             "total_found": len(endpoints.get("found", [])),
         }
+        self.correlator.ingest_endpoints(self.results["modules"]["endpoints"])
         self._print(f"  Found {len(endpoints.get('found', []))} endpoints")
 
     def run_cdn_waf(self):
@@ -249,12 +251,14 @@ class OSINTEye:
             "checked": len(subs[:50]),
             "vulnerable": vulnerable,
         }
+        self.correlator.ingest_takeover({"vulnerable": vulnerable})
         self._print(f"  Found {len(vulnerable)} potential takeovers")
 
     def run_cloud_buckets(self):
         self._print("Scanning cloud buckets...")
         result = self._safe_run("cloud", self.cloud_detector.scan, self.target)
         self.results["modules"]["cloud_buckets"] = result
+        self.correlator.ingest_cloud(result)
         self._print(
             f"  Found {len(result.get('found', []))} buckets, {len(result.get('public', []))} public"
         )
@@ -266,6 +270,7 @@ class OSINTEye:
             "emails", self.email_enumerator.scan, self.target, whois_data
         )
         self.results["modules"]["emails"] = result
+        self.correlator.ingest_emails(result)
         self._print(f"  Found {len(result.get('emails_found', []))} emails")
 
     def run_github(self):
@@ -361,68 +366,64 @@ class OSINTEye:
         import concurrent.futures
         from rich.console import Console
 
+        # Plain phase rules instead of console.status(): worker threads
+        # print() progress directly, which garbles a Live/Status display.
         console = Console()
+        deep_enough = self.depth in ("deep", "full")
 
-        with console.status(
-            "[bold green]Phase 1: Concurrent OSINT Collection...[/bold green]",
-            spinner="dots",
-        ):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                p1 = [
-                    executor.submit(self.run_dns),
-                    executor.submit(self.run_certs),
-                    executor.submit(self.run_wayback),
-                    executor.submit(self.run_whois),
-                ]
-                concurrent.futures.wait(p1)
-        self._print("[+] Phase 1 Complete.")
+        def phase(title: str):
+            console.print()
+            console.rule(f"[bold cyan]{title}[/bold cyan]", style="dim cyan")
 
-        with console.status(
-            "[bold green]Phase 2: Network & Web Discovery...[/bold green]",
-            spinner="dots",
-        ):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        phase("Phase 1 · Concurrent OSINT Collection")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            p1 = [
+                executor.submit(self.run_dns),
+                executor.submit(self.run_certs),
+                executor.submit(self.run_wayback),
+                executor.submit(self.run_whois),
+            ]
+            concurrent.futures.wait(p1)
+        self._print("[+] Phase 1 complete.")
+
+        phase("Phase 2 · Network & Web Discovery")
+        if self.depth != "quick":
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
                 p2 = [
                     executor.submit(self.run_network),
                     executor.submit(self.run_cdn_waf),
                 ]
-                if self.depth in ["deep", "full"]:
+                if deep_enough:
                     p2.append(executor.submit(self.run_permutation))
                 if not self.stealth:
                     p2.append(executor.submit(self.run_github))
                     p2.append(executor.submit(self.run_google))
                 concurrent.futures.wait(p2)
+        self._print("[+] Phase 2 complete.")
 
-        with console.status(
-            "[bold green]Running Web Vulnerability Scanner...[/bold green]",
-            spinner="dots",
-        ):
-            self.run_web()
-        self._print("[+] Phase 2 Complete.")
+        phase("Phase 3 · Web Vulnerability Scanning & Deep Recon")
+        self.run_web()
+        if self.depth != "quick":
+            if deep_enough:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                    p3 = [
+                        executor.submit(self.run_takeover_check),
+                        executor.submit(self.run_endpoints),
+                        executor.submit(self.run_cloud_buckets),
+                        executor.submit(self.run_emails),
+                    ]
+                    concurrent.futures.wait(p3)
+            self.run_cve()
+        self._print("[+] Phase 3 complete.")
 
-        with console.status(
-            "[bold green]Phase 3: Vulnerability Scanning & Deep Recon...[/bold green]",
-            spinner="bouncingBar",
-        ):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                p3 = [executor.submit(self.run_cve)]
-                if self.depth in ["deep", "full"]:
-                    p3.append(executor.submit(self.run_takeover_check))
-                    p3.append(executor.submit(self.run_endpoints))
-                    p3.append(executor.submit(self.run_cloud_buckets))
-                    p3.append(executor.submit(self.run_emails))
-                concurrent.futures.wait(p3)
-        self._print("[+] Phase 3 Complete.")
-
-        with console.status(
-            "[bold green]Phase 4: Correlation & AI...[/bold green]", spinner="dots"
-        ):
-            self.run_correlation()
-            self.run_graph()
-            self.run_mitre()
+        phase("Phase 4 · Correlation, Graph & AI")
+        self.run_correlation()
+        self.run_graph()
+        self.run_mitre()
+        if deep_enough:
             self.run_attack_chains()
-            self.run_ai()
-        self._print("[+] Phase 4 Complete.")
+        self.run_ai()
+        self._print("[+] Phase 4 complete.")
 
         if self.scan_cache:
             self.scan_cache.save_scan(self.target, "full", self.results, self.depth)
@@ -508,10 +509,22 @@ def scan_targets(targets: list, args):
     all_results = {}
 
     if getattr(args, "monitor", False):
-        print(f"\n{'#' * 60}")
-        print(f"# Continuous Monitoring Mode")
-        print(f"# Targets: {', '.join(targets)}")
-        print(f"{'#' * 60}\n")
+        from rich.console import Console
+        from rich.panel import Panel
+
+        console = Console(highlight=False)
+        interval = getattr(args, "monitor_interval", 3600)
+        webhook_url = getattr(args, "webhook", None)
+        console.print()
+        console.print(
+            Panel(
+                f"  [dim]TARGETS[/dim]   [bold white]{', '.join(targets)}[/bold white]\n"
+                f"  [dim]INTERVAL[/dim]  [cyan]{interval}s ({interval // 60} min)[/cyan]\n"
+                f"  [dim]WEBHOOK [/dim]  {'[green]' + webhook_url + '[/green]' if webhook_url else '[dim]Disabled[/dim]'}",
+                title="[bold cyan]◈  DAEMON MONITOR[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
         monitor = SubdomainMonitor(
             targets, check_interval=args.monitor_interval, cache=not args.no_cache
@@ -520,13 +533,13 @@ def scan_targets(targets: list, args):
             monitor.alert_manager.add_handler(
                 AlertManager.webhook_handler(args.webhook)
             )
-            print(f"[*] Webhook alerts enabled for {args.webhook}")
+            console.print(f"  [green]✔[/green] Webhook alerts enabled for {args.webhook}")
 
         try:
             asyncio.run(monitor.run_daemon())
         except KeyboardInterrupt:
             monitor.stop()
-            print("\n[*] Monitor stopped gracefully")
+            console.print("\n  [bold green]✔  Monitor stopped gracefully.[/bold green]")
         return {}
 
     for target in targets:
@@ -628,11 +641,23 @@ def scan_targets(targets: list, args):
         if args.dashboard and len(targets) == 1:
             from ui.dashboard import load_scan_results, start_dashboard
 
-            load_scan_results(
-                args.output
-                if args.output
-                else f"osint_eye_{target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            )
+            # Persist the scan JSON first so the dashboard always has real
+            # data to load, then hand the exact path over.
+            if args.output:
+                dash_json = (
+                    args.output
+                    if args.output.endswith(".json")
+                    else args.output + ".json"
+                )
+            else:
+                dash_json = (
+                    f"osint_eye_{target}_"
+                    f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                )
+            if not Path(dash_json).exists():
+                with open(dash_json, "w") as f:
+                    json.dump(engine.results, f, indent=2, default=str)
+            load_scan_results(dash_json)
             start_dashboard()
 
         if args.diff and len(targets) > 1:
@@ -648,9 +673,69 @@ def scan_targets(targets: list, args):
     return all_results
 
 
+MODULE_CATALOG = {
+    "dns": "DNS record enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA) + subdomain brute-force",
+    "certs": "Certificate transparency (crt.sh) subdomain discovery",
+    "wayback": "Wayback Machine URL history and snapshot timeline",
+    "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
+    "whois": "Domain registration and ownership data",
+    "github": "GitHub code-search dorking for leaked secrets and configs",
+    "google": "Google dorking for exposed panels, files and backups",
+    "cve": "NVD/CVE lookup for services discovered by the network module",
+    "web": "HTTP technology fingerprinting of the target",
+    "endpoints": "JS/HTML endpoint discovery + sensitive file probing",
+    "cloud": "Cloud bucket (S3/GCP/Azure) discovery and public exposure",
+    "emails": "Email enumeration from WHOIS and public sources",
+    "permutation": "Subdomain permutation generation and resolution",
+    "takeover": "Subdomain takeover detection (dangling CNAME fingerprints)",
+    "cdn_waf": "CDN and WAF fingerprinting",
+    "correlation": "Cross-module asset correlation + attack surface score",
+    "graph": "Entity relationship graph (interactive HTML export)",
+    "mitre": "MITRE ATT&CK technique mapping + Navigator layer export",
+    "chains": "Attack chain builder (multi-step kill-chain hypotheses)",
+}
+
+
+def _positive_int(value: str) -> int:
+    """argparse type: strictly positive integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"{value!r} must be a positive integer")
+    return ivalue
+
+
+def _print_module_catalog():
+    """Print the available scan modules as a Rich table."""
+    from rich.console import Console
+    from rich.table import Table
+    from rich import box
+
+    console = Console()
+    table = Table(
+        title="[bold cyan]◈  OSINT EYE · Module Catalog[/bold cyan]",
+        box=box.ROUNDED,
+        header_style="bold cyan",
+        border_style="cyan",
+    )
+    table.add_column("MODULE", style="bold", min_width=12)
+    table.add_column("DESCRIPTION")
+    for name, description in MODULE_CATALOG.items():
+        table.add_row(name, description)
+    console.print()
+    console.print(table)
+    console.print(
+        "\n[dim]Usage:[/dim] python osint_eye.py <target> "
+        "--modules dns certs wayback graph mitre\n"
+        "[dim]Docs:[/dim]  https://github.com/Ruby570bocadito/OSINT-EYE\n"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="OSINT EYE v2 - AI-Powered Attack Surface Intelligence",
+        description="OSINT EYE v2.1 - AI-Powered Attack Surface Intelligence",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -662,7 +747,11 @@ Examples:
         """,
     )
 
-    parser.add_argument("targets", nargs="+", help="Target domain(s) or IP(s)")
+    parser.add_argument(
+        "targets",
+        nargs="*",
+        help="Target domain(s) or IP(s) (omit for the interactive wizard)",
+    )
     parser.add_argument("--stealth", action="store_true", help="Stealth mode")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI")
     parser.add_argument("--no-cache", action="store_true", help="Disable caching")
@@ -685,7 +774,7 @@ Examples:
     )
     parser.add_argument(
         "--monitor-interval",
-        type=int,
+        type=_positive_int,
         default=3600,
         help="Seconds between monitor checks (default: 3600)",
     )
@@ -751,85 +840,23 @@ Examples:
         args = parser.parse_args()
         interactive_mode = False
 
-    if getattr(args, "monitor", False):
-        import time
-        from core.scan_diff import ScanDiff
+    # `--modules` without a value prints the module catalog and exits.
+    if getattr(args, "modules", None) is not None and len(args.modules) == 0:
+        _print_module_catalog()
+        return 0
+
+    if not getattr(args, "targets", None):
+        parser.error(
+            "no targets given - pass one or more domains/IPs, or run without "
+            "arguments for the interactive wizard"
+        )
+
+    # Print the banner once for every non-interactive run (scan or monitor).
+    # Monitor mode's daemon loop lives entirely inside scan_targets().
+    if not interactive_mode:
         from ui.rich_cli import RichCLI as _RCli
 
-        _cli = _RCli()
-        _cli.print_banner()
-        from rich.console import Console as _C
-        from rich.panel import Panel as _P
-
-        _c = _C(highlight=False)
-        interval = getattr(args, "monitor_interval", 3600)
-        webhook_url = getattr(args, "webhook", None)
-        _c.print(
-            _P(
-                f"  [dim]TARGETS[/dim]   [bold white]{', '.join(args.targets)}[/bold white]\n"
-                f"  [dim]INTERVAL[/dim]  [cyan]{interval}s ({interval // 60} min)[/cyan]\n"
-                f"  [dim]WEBHOOK [/dim]  {'[green]' + webhook_url + '[/green]' if webhook_url else '[dim]Disabled[/dim]'}",
-                title="[bold cyan]◈  DAEMON MONITOR[/bold cyan]",
-                border_style="cyan",
-            )
-        )
-        previous_results = {}
-        loop = 1
-        try:
-            while True:
-                from rich.rule import Rule as _Rule
-
-                _c.print(
-                    _Rule(
-                        f"[bold cyan]  Cycle #{loop}[/bold cyan]  [dim]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/dim]",
-                        style="bright_black",
-                    )
-                )
-                current = scan_targets(args.targets, args)
-                for tgt, res in current.items():
-                    if tgt in previous_results:
-                        diff = ScanDiff()
-                        diff.compare(previous_results[tgt], res)
-                        summary = diff.get_summary()
-                        changes = [
-                            diff.diff.get("new_subdomains", []),
-                            diff.diff.get("new_ports", []),
-                            diff.diff.get("new_cves", []),
-                        ]
-                        if any(changes):
-                            _c.print(
-                                f"  [bold red]⚠  NEW SURFACE DETECTED on {tgt}![/bold red]"
-                            )
-                            _c.print(summary)
-                            if webhook_url:
-                                try:
-                                    import requests as _requests
-
-                                    _requests.post(
-                                        webhook_url,
-                                        json={
-                                            "text": f"*OSINT EYE ALERT* - New surface on `{tgt}`:\n```{summary[:1800]}```"
-                                        },
-                                        timeout=10,
-                                    )
-                                except Exception:
-                                    pass
-                        else:
-                            _c.print(
-                                f"  [green]✔[/green]  [dim]No changes detected on {tgt}.[/dim]"
-                            )
-                    previous_results[tgt] = res
-                loop += 1
-                _c.print(f"\n  [dim]Sleeping {interval}s... (Ctrl+C to stop)[/dim]")
-                time.sleep(interval)
-        except KeyboardInterrupt:
-            _c.print("\n  [bold green]✔  Daemon stopped gracefully.[/bold green]")
-            return 0
-    else:
-        if not interactive_mode:
-            from ui.rich_cli import RichCLI as _RCli
-
-            _RCli().print_banner()
+        _RCli().print_banner()
         scan_targets(args.targets, args)
     return 0
 

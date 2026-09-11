@@ -1,22 +1,32 @@
-"""OSINT EYE - Advanced Subdomain Permutation Engine"""
+"""OSINT EYE - Advanced Subdomain Permutation Engine
+
+Generates subdomain permutations (prefix/suffix combos and variants of
+already-discovered hosts), resolves them and detects potential subdomain
+takeover via provider-specific error signatures.
+
+Contract consumed by osint_eye.py:
+    SubdomainPermutator(threads=N):
+        .generate_permutations(domain) -> list
+        .generate_from_discovered(domain, discovered) -> list
+        .enumerate(target, discovered) -> list
+    SubdomainTakeoverDetector().scan_list(subdomains) -> list
+"""
 
 import socket
-import dns.resolver
 import concurrent.futures
-import itertools
-import hashlib
-from typing import List, Dict, Set, Optional
 from datetime import datetime
+from typing import List, Dict, Optional, Set
+
+import requests
 
 
 class SubdomainPermutator:
     """Advanced subdomain permutation algorithm"""
 
     def __init__(self, threads: int = 50, timeout: int = 2):
-        self.threads = threads
+        # Keep the thread pool bounded (plain socket lookups, not raw fds).
+        self.threads = max(1, min(threads, 200))
         self.timeout = timeout
-        self.resolver = dns.resolver.Resolver()
-        self.resolver.timeout = timeout
         self.found: Set[str] = set()
 
         self.prefixes = [
@@ -47,7 +57,6 @@ class SubdomainPermutator:
             "qa",
             "demo",
             "sandbox",
-            "sandbox",
             "api",
             "app",
             "admin",
@@ -61,7 +70,6 @@ class SubdomainPermutator:
             "oauth",
             "signin",
             "sign-in",
-            "signin",
             "secure",
             "securemail",
             "vpn",
@@ -83,7 +91,6 @@ class SubdomainPermutator:
             "files",
             "docs",
             "doc",
-            "docs",
             "wiki",
             "kb",
             "help",
@@ -147,7 +154,6 @@ class SubdomainPermutator:
             "cache",
             "memcached",
             "elastic",
-            "kibana",
             "grafana",
             "monitor",
             "monitoring",
@@ -308,7 +314,6 @@ class SubdomainPermutator:
             "healthcheck",
             "ping",
             "heartbeat",
-            "metrics",
             "prometheus",
             "alertmanager",
             "alert",
@@ -358,12 +363,9 @@ class SubdomainPermutator:
             "private",
             "confidential",
             "classified",
-            "restricted",
             "internal-only",
-            "restricted",
             "protected",
             "sensitive",
-            "confidential",
         ]
 
         self.suffixes = [
@@ -428,16 +430,7 @@ class SubdomainPermutator:
             full = f"{subdomain}.{domain}"
             socket.gethostbyname(full)
             return full
-        except (socket.gaierror, socket.herror):
-            return None
-
-    def _check_subdomain_dns(self, subdomain: str, domain: str) -> Optional[str]:
-        """Check if subdomain has DNS records"""
-        try:
-            full = f"{subdomain}.{domain}"
-            self.resolver.resolve(full, "A")
-            return full
-        except Exception:
+        except (socket.gaierror, socket.herror, OSError):
             return None
 
     def generate_permutations(
@@ -527,7 +520,7 @@ class SubdomainPermutator:
 
         print(f"[*] Testing {len(all_permutations)} permutations for {domain}...")
 
-        found = set()
+        found: Set[str] = set()
 
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=self.threads
@@ -552,7 +545,17 @@ class SubdomainPermutator:
 
 
 class SubdomainTakeoverDetector:
-    """Detect potential subdomain takeovers"""
+    """Detect potential subdomain takeovers.
+
+    Sends an HTTP(S) GET to each candidate subdomain and matches the
+    response body against known "dangling resource" signatures of
+    popular hosting providers (S3, GitHub Pages, Heroku, Azure, ...).
+    Best-effort: network errors are swallowed and reported as
+    non-vulnerable, never raised.
+    """
+
+    #: Cap on the amount of body text scanned per response (bytes).
+    MAX_BODY_SCAN = 51200
 
     def __init__(self):
         self.takeover_signatures = {
@@ -574,7 +577,7 @@ class SubdomainTakeoverDetector:
         }
 
     def check_takeover(self, subdomain: str) -> Dict:
-        """Check if a subdomain is vulnerable to takeover"""
+        """Check if a subdomain is vulnerable to takeover (never raises)."""
         result = {
             "subdomain": subdomain,
             "vulnerable": False,
@@ -582,36 +585,51 @@ class SubdomainTakeoverDetector:
             "signature": None,
         }
 
-        try:
-            import requests
+        # HTTPS first; plain HTTP as fallback (many dangling CNAMEs only
+        # serve the provider error page over one of the two schemes).
+        for scheme in ("https", "http"):
+            try:
+                response = requests.get(
+                    f"{scheme}://{subdomain}",
+                    timeout=10,
+                    allow_redirects=True,
+                    headers={"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"},
+                )
+            except requests.RequestException:
+                continue
+            except Exception:
+                continue
 
-            response = requests.get(
-                f"http://{subdomain}", timeout=10, allow_redirects=True
-            )
-
+            body = response.text[: self.MAX_BODY_SCAN].lower()
             for service, signatures in self.takeover_signatures.items():
                 for sig in signatures:
-                    if sig.lower() in response.text.lower():
+                    if sig.lower() in body:
                         result["vulnerable"] = True
                         result["service"] = service
                         result["signature"] = sig
-                        break
+                        return result
 
-                if result["vulnerable"]:
-                    break
-        except Exception:
-            pass
+            # Got a response; no need to try the other scheme.
+            break
 
         return result
 
-    def scan_list(self, subdomains: List[str]) -> List[Dict]:
-        """Check multiple subdomains for takeover"""
-        results = []
+    def scan_list(self, subdomains: List[str], max_workers: int = 10) -> List[Dict]:
+        """Check multiple subdomains for takeover (bounded parallelism)."""
+        results: List[Dict] = []
+        if not subdomains:
+            return results
 
-        for sub in subdomains:
-            result = self.check_takeover(sub)
-            if result["vulnerable"]:
-                results.append(result)
+        max_workers = max(1, min(max_workers, 20))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(self.check_takeover, sub) for sub in subdomains]
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                except Exception:
+                    continue
+                if result and result.get("vulnerable"):
+                    results.append(result)
 
         return results
 

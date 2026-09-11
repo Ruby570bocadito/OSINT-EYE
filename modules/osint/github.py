@@ -1,10 +1,19 @@
-"""OSINT EYE - GitHub Dorking Module"""
+"""OSINT EYE - GitHub Dorking Module
+
+GitHub code-search dorking WITHOUT an API key: it scrapes the public
+search UI (github.com/search), so it is inherently best-effort — GitHub
+can rate-limit (HTTP 429), require a login for code search or change
+its HTML markup at any time. In all those cases every search degrades
+to an empty result with a ``[!]`` warning; ``scan()`` always returns
+the full result shape ("total_findings", category lists, ...).
+For reliable operation, a GitHub token via the official REST API is
+recommended (not implemented here to keep the tool key-free).
+"""
 
 import requests
 import time
 import re
-from typing import List, Dict, Set
-from urllib.parse import quote
+from typing import List, Dict
 
 
 class GitHubDorker:
@@ -78,11 +87,10 @@ class GitHubDorker:
         return []
 
     def _parse_results(self, html: str) -> List[Dict]:
-        """Parse search results from HTML"""
+        """Parse search results from HTML (best-effort; [] if markup changed)."""
         results = []
 
         file_pattern = re.compile(r"file-entry[^>]*>(.*?)</a>", re.DOTALL)
-        repo_pattern = re.compile(r'href="([^"]+)"[^>]*class="[^"]*link-[^"]*"')
 
         files = file_pattern.findall(html)
 
@@ -155,7 +163,12 @@ class GitHubDorker:
 
 
 class GitHubScanner:
-    """Main GitHub scanning orchestrator"""
+    """Main GitHub scanning orchestrator (no API key needed).
+
+    Uses public search-UI scraping; see :class:`GitHubDorker` for the
+    degradation behaviour (rate limits and markup changes yield empty
+    categories, never exceptions).
+    """
 
     def __init__(self):
         self.dorker = GitHubDorker()

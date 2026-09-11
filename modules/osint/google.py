@@ -1,10 +1,17 @@
-"""OSINT EYE - Google Dorking Module"""
+"""OSINT EYE - Google Dorking Module
+
+Google search dorking WITHOUT an API key: it scrapes the public results
+page, so it is inherently best-effort — Google may rate-limit (HTTP
+429), serve a consent/CAPTCHA page or change its markup at any time.
+Every search degrades to an empty result with a ``[!]`` warning and
+backoff/retry; ``full_scan()`` always returns the complete result shape
+so reports never break.
+"""
 
 import requests
 import time
 import re
 from typing import List, Dict
-from urllib.parse import quote, urlencode
 
 
 class GoogleDorker:
@@ -190,7 +197,11 @@ class GoogleDorker:
 
 
 class GoogleScanner:
-    """Main Google dorking orchestrator"""
+    """Main Google dorking orchestrator (no API key needed).
+
+    Scrapes public search results; see :class:`GoogleDorker` for the
+    degradation behaviour on rate limiting / markup changes.
+    """
 
     def __init__(self):
         self.dorker = GoogleDorker()

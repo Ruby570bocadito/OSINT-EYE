@@ -1,9 +1,9 @@
 """OSINT EYE - WHOIS Module"""
 
-import whois
-import socket
 from datetime import datetime
 from typing import Dict, Optional
+
+import whois
 
 
 class WhoisLookup:
@@ -21,26 +21,44 @@ class WhoisLookup:
             return {"error": str(e), "domain": domain}
 
     def _parse_whois_data(self, w) -> Dict:
-        """Parse WHOIS data into structured format"""
+        """Parse WHOIS data into structured format.
+
+        python-whois returns a ``WhoisEntry`` (dict subclass); fields are
+        read with dict access and normalised so callers always get the
+        same keys (lists/strings or None).
+        """
         result = {
-            "domain": str(w.domain) if w.domain else None,
-            "registrar": str(w.registrar) if w.registrar else None,
-            "creation_date": self._normalize_date(w.creation_date),
-            "expiration_date": self._normalize_date(w.expiration_date),
-            "updated_date": self._normalize_date(w.updated_date),
-            "status": self._normalize_status(w.status),
-            "name_servers": self._normalize_name_servers(w.name_servers),
+            "domain": self._clean(w.get("domain")),
+            "registrar": self._clean(w.get("registrar")),
+            "creation_date": self._normalize_date(w.get("creation_date")),
+            "expiration_date": self._normalize_date(w.get("expiration_date")),
+            "updated_date": self._normalize_date(w.get("updated_date")),
+            "status": self._normalize_status(w.get("status")),
+            "name_servers": self._normalize_name_servers(w.get("name_servers")),
             "registrant": self._parse_registrant(w),
             "admin": self._parse_admin(w),
+            "emails": self._normalize_emails(w.get("emails")),
             "raw": str(w)[:500] if w else None,
         }
 
-        if w.emails:
-            result["emails"] = (
-                list(w.emails) if isinstance(w.emails, (list, set)) else [w.emails]
-            )
-
         return result
+
+    @staticmethod
+    def _clean(value) -> Optional[str]:
+        """Normalise scalar WHOIS values (empty strings become None)."""
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @staticmethod
+    def _normalize_emails(emails) -> list:
+        """Normalise the emails field to a list of strings."""
+        if not emails:
+            return []
+        if isinstance(emails, str):
+            return [emails]
+        return [str(e) for e in emails if e]
 
     def _normalize_date(self, date) -> Optional[str]:
         """Normalize date fields"""
@@ -71,26 +89,37 @@ class WhoisLookup:
         return [str(ns).lower()]
 
     def _parse_registrant(self, w) -> Optional[Dict]:
-        """Parse registrant info"""
-        if hasattr(w, "registrant") and w.registrant:
-            return {
-                "name": getattr(w.registrant, "name", None),
-                "organization": getattr(w.registrant, "organization", None),
-                "country": getattr(w.registrant, "country", None),
-                "city": getattr(w.registrant, "city", None),
-                "state": getattr(w.registrant, "state", None),
-            }
+        """Parse registrant info from dict-style WHOIS entries.
+
+        python-whois exposes flat keys ("name", "org", "country", ...);
+        the old code used attribute access, which never matched and
+        always returned None.
+        """
+        registrant = {
+            "name": w.get("name"),
+            "organization": w.get("org"),
+            "country": w.get("country"),
+            "city": w.get("city"),
+            "state": w.get("state"),
+        }
+        if any(registrant.values()):
+            return registrant
         return None
 
     def _parse_admin(self, w) -> Optional[Dict]:
-        """Parse admin contact info"""
-        if hasattr(w, "admin") and w.admin:
-            return {
-                "name": getattr(w.admin, "name", None),
-                "email": getattr(w.admin, "email", None),
-                "org": getattr(w.admin, "organization", None),
-                "country": getattr(w.admin, "country", None),
+        """Parse admin contact info (dict-style; best effort)."""
+        admin = w.get("admin")
+        if isinstance(admin, dict):
+            cleaned = {
+                "name": admin.get("name"),
+                "email": admin.get("email"),
+                "org": admin.get("organization") or admin.get("org"),
+                "country": admin.get("country"),
             }
+            if any(cleaned.values()):
+                return cleaned
+        elif isinstance(admin, str):
+            return {"name": admin}
         return None
 
     def check_expiration(self, domain: str) -> Dict:

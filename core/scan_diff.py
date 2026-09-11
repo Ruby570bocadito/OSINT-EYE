@@ -1,8 +1,28 @@
 """OSINT EYE - Scan Diff & Comparison Engine"""
 
-import json
-from typing import Dict, List, Set, Optional
+import re
+from typing import Dict, List, Set
 from datetime import datetime
+from pathlib import Path
+
+
+def _tech_set(raw) -> Set[str]:
+    """Normalize a technologies payload (dict/list/set) into a set of strings."""
+    if isinstance(raw, dict):
+        return set(raw.get("technologies") or [])
+    if isinstance(raw, (set, list, tuple)):
+        return set(raw)
+    return set()
+
+
+def _severity_score(cve: Dict) -> float:
+    """Extract the CVSS score from a CVE entry ([{"score": x, ...}])."""
+    severity = cve.get("severity")
+    if isinstance(severity, list) and severity:
+        first = severity[0]
+        if isinstance(first, dict):
+            return float(first.get("score") or 0)
+    return 0.0
 
 
 class ScanDiff:
@@ -100,25 +120,11 @@ class ScanDiff:
                 )
 
     def _diff_technologies(self, old: Dict, new: Dict):
-        old_techs_raw = old.get("web", {}).get("technologies", {})
-        new_techs_raw = new.get("web", {}).get("technologies", {})
+        old_techs = _tech_set(old.get("web", {}).get("technologies"))
+        new_techs = _tech_set(new.get("web", {}).get("technologies"))
 
-        if isinstance(old_techs_raw, dict):
-            old_techs = set(old_techs_raw.get("technologies", []))
-        elif isinstance(old_techs_raw, set):
-            old_techs = old_techs_raw
-        else:
-            old_techs = set()
-
-        if isinstance(new_techs_raw, dict):
-            new_techs = set(new_techs_raw.get("technologies", []))
-        elif isinstance(new_techs_raw, set):
-            new_techs = new_techs_raw
-        else:
-            new_techs = set()
-
-        self.diff["new_technologies"] = sorted(list(new_techs - old_techs))
-        self.diff["removed_technologies"] = sorted(list(old_techs - new_techs))
+        self.diff["new_technologies"] = sorted(map(str, new_techs - old_techs))
+        self.diff["removed_technologies"] = sorted(map(str, old_techs - new_techs))
 
     def _diff_emails(self, old: Dict, new: Dict):
         old_emails = set(old.get("emails", {}).get("emails_found", []))
@@ -127,38 +133,30 @@ class ScanDiff:
         self.diff["new_emails"] = sorted(list(new_emails - old_emails))
 
     def _diff_cves(self, old: Dict, new: Dict):
-        old_cves = {c.get("id") for c in old.get("cve", {}).get("cves", [])}
-        new_cves = {c.get("id") for c in new.get("cve", {}).get("cves", [])}
+        old_cves = {c.get("id") for c in old.get("cve", {}).get("cves") or []}
+        new_cve_entries = new.get("cve", {}).get("cves") or []
+        new_cves = {c.get("id") for c in new_cve_entries}
 
-        new_cve_list = []
-        for cve in new.get("cve", {}).get("cves", []):
-            if cve.get("id") in (new_cves - old_cves):
-                new_cve_list.append(cve)
-
-        self.diff["new_cves"] = new_cve_list
+        self.diff["new_cves"] = [
+            c for c in new_cve_entries if c.get("id") in (new_cves - old_cves)
+        ]
 
     def _diff_cloud(self, old: Dict, new: Dict):
         old_buckets = {
-            b.get("url") for b in old.get("cloud_buckets", {}).get("found", [])
+            b.get("url") for b in old.get("cloud_buckets", {}).get("found") or []
         }
-        new_buckets = {
-            b.get("url") for b in new.get("cloud_buckets", {}).get("found", [])
-        }
+        new_bucket_entries = new.get("cloud_buckets", {}).get("found") or []
+        new_buckets = {b.get("url") for b in new_bucket_entries}
 
-        new_bucket_list = []
-        for b in new.get("cloud_buckets", {}).get("found", []):
-            if b.get("url") in (new_buckets - old_buckets):
-                new_bucket_list.append(b)
-
-        self.diff["new_cloud_buckets"] = new_bucket_list
+        self.diff["new_cloud_buckets"] = [
+            b for b in new_bucket_entries if b.get("url") in (new_buckets - old_buckets)
+        ]
 
     def _diff_scores(self, old: Dict, new: Dict):
-        old_score = (
-            old.get("correlation", {}).get("attack_surface_score", {}).get("score", 0)
-        )
-        new_score = (
-            new.get("correlation", {}).get("attack_surface_score", {}).get("score", 0)
-        )
+        old_corr = old.get("correlation") or {}
+        new_corr = new.get("correlation") or {}
+        old_score = (old_corr.get("attack_surface_score") or {}).get("score", 0) or 0
+        new_score = (new_corr.get("attack_surface_score") or {}).get("score", 0) or 0
 
         self.diff["score_change"] = {
             "before": old_score,
@@ -247,13 +245,11 @@ class AttackChainBuilder:
         return self.chains
 
     def _build_initial_access_chains(self, modules: Dict):
-        cves = modules.get("cve", {}).get("cves", [])
-        services = modules.get("network", {}).get("services", [])
-        subdomains = modules.get("dns", {}).get("subdomains", [])
+        cves = modules.get("cve", {}).get("cves") or []
+        services = modules.get("network", {}).get("services") or []
 
         for cve in cves[:5]:
-            sev = cve.get("severity", [{}])[0] if cve.get("severity") else {}
-            score = sev.get("score", 0)
+            score = _severity_score(cve)
 
             if score >= 7.0:
                 chain = {
@@ -262,7 +258,7 @@ class AttackChainBuilder:
                     "steps": [
                         {
                             "step": 1,
-                            "action": f"Identify vulnerable service via port scan",
+                            "action": "Identify vulnerable service via port scan",
                             "evidence": f"{len([s for s in services if s.get('state') == 'open'])} open ports found",
                         },
                         {
@@ -309,9 +305,8 @@ class AttackChainBuilder:
             self.chains.append(chain)
 
     def _build_credential_chains(self, modules: Dict):
-        emails = modules.get("emails", {}).get("emails_found", [])
+        emails = modules.get("emails", {}).get("emails_found") or []
         github = modules.get("github", {})
-        web = modules.get("web", {})
 
         if github.get("total_findings", 0) > 0:
             chain = {
@@ -366,11 +361,11 @@ class AttackChainBuilder:
             self.chains.append(chain)
 
     def _build_cloud_chains(self, modules: Dict):
-        buckets = modules.get("cloud_buckets", {}).get("public", [])
+        buckets = modules.get("cloud_buckets", {}).get("public") or []
 
         for bucket in buckets:
             chain = {
-                "name": f"Data exfiltration via public cloud bucket",
+                "name": "Data exfiltration via public cloud bucket",
                 "risk_score": 80,
                 "steps": [
                     {
@@ -395,13 +390,7 @@ class AttackChainBuilder:
             self.chains.append(chain)
 
     def _build_supply_chain(self, modules: Dict):
-        techs_raw = modules.get("web", {}).get("technologies", {})
-        if isinstance(techs_raw, dict):
-            techs = techs_raw.get("technologies", [])
-        elif isinstance(techs_raw, set):
-            techs = list(techs_raw)
-        else:
-            techs = []
+        techs = list(_tech_set(modules.get("web", {}).get("technologies")))
 
         known_vuln_stacks = {
             "WordPress": "Plugin/theme vulnerabilities common",
@@ -462,21 +451,27 @@ class AttackChainBuilder:
 class BountyReporter:
     """Generate bug bounty ready reports"""
 
+    OUTPUT_DIR = "output"
+
     def generate(self, scan_results: Dict, program_name: str = None) -> str:
-        target = scan_results.get("target", "unknown")
+        """Write a markdown bounty report and return its path.
+
+        Files land in a deterministic directory (``./output/`` relative to the
+        CWD); the target is sanitized so URL-like targets cannot inject path
+        separators. Works with minimal/empty results.
+        """
+        scan_results = scan_results or {}
+        target = scan_results.get("target", "unknown") or "unknown"
         program = program_name or target
-        modules = scan_results.get("modules", {})
+        modules = scan_results.get("modules") or {}
 
-        filename = f"bounty_report_{target}.md"
+        safe_target = re.sub(r"[^A-Za-z0-9._-]", "_", str(target)) or "unknown"
+        out_dir = Path(self.OUTPUT_DIR)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        filename = str(out_dir / f"bounty_report_{safe_target}.md")
 
-        techs = modules.get("web", {}).get("technologies", {})
-        if isinstance(techs, dict):
-            tech_list = techs.get("technologies", [])
-        elif isinstance(techs, set):
-            tech_list = list(techs)
-        else:
-            tech_list = []
-        techs_str = ", ".join(tech_list[:5]) if tech_list else "None detected"
+        tech_list = list(_tech_set(modules.get("web", {}).get("technologies")))
+        techs_str = ", ".join(map(str, tech_list[:5])) if tech_list else "None detected"
 
         report = f"""# Bug Bounty Reconnaissance Report - {program}
 
@@ -539,7 +534,7 @@ All findings are derived from publicly available information and passive/active 
 
         report += "\n".join(critical_findings)
 
-        report += f"""
+        report += """
 
 ## Recommendations
 
@@ -562,7 +557,7 @@ This assessment used the following techniques:
 *Report generated by OSINT EYE - For authorized security assessment only*
 """
 
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             f.write(report)
 
         print(f"[+] Bounty report saved to: {filename}")

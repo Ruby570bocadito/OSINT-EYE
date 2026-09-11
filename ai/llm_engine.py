@@ -1,8 +1,16 @@
-"""OSINT EYE - AI Engine Module (Ollama Local)"""
+"""OSINT EYE - AI Engine Module (Ollama Local Only).
+
+Privacy by design: this engine talks EXCLUSIVELY to a local Ollama server
+(localhost:11434). No remote endpoints, no API keys, no telemetry.
+"""
 
 import json
-import subprocess
-from typing import Dict, List, Optional
+from typing import Dict, List
+
+# Connect/read timeouts (seconds): fail fast if Ollama is not running, but
+# allow long generation times once the stream is connected.
+OLLAMA_CONNECT_TIMEOUT = 3
+OLLAMA_READ_TIMEOUT = 60
 
 
 class OllamaEngine:
@@ -10,21 +18,24 @@ class OllamaEngine:
 
     def __init__(self, model: str = "llama3", base_url: str = "http://localhost:11434"):
         self.model = model
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
         self.available = self._check_connection()
 
     def _check_connection(self) -> bool:
-        """Check if Ollama is running"""
+        """Check if Ollama is running (short connect timeout, never hangs)."""
         try:
             import requests
 
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/api/tags",
+                timeout=(OLLAMA_CONNECT_TIMEOUT, OLLAMA_CONNECT_TIMEOUT),
+            )
             return response.status_code == 200
         except Exception:
             return False
 
     def _call_ollama(self, prompt: str, system: str = None) -> str:
-        """Call Ollama API"""
+        """Call the local Ollama API. Never raises; returns an error string on failure."""
         try:
             import requests
 
@@ -34,7 +45,9 @@ class OllamaEngine:
                 payload["system"] = system
 
             response = requests.post(
-                f"{self.base_url}/api/generate", json=payload, timeout=120
+                f"{self.base_url}/api/generate",
+                json=payload,
+                timeout=(OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT),
             )
 
             if response.status_code == 200:
@@ -45,11 +58,15 @@ class OllamaEngine:
         except Exception as e:
             return f"Connection error: {str(e)}"
 
+    def call(self, prompt: str, system: str = None) -> str:
+        """Public wrapper around the local LLM call."""
+        return self._call_ollama(prompt, system)
+
     def analyze_findings(self, osint_data: Dict) -> str:
         """Analyze OSINT findings with AI"""
         prompt = self._build_analysis_prompt(osint_data)
 
-        system_prompt = """You are a senior penetration tester and red team analyst. 
+        system_prompt = """You are a senior penetration tester and red team analyst.
 Analyze the OSINT findings and provide:
 1. Most critical attack vectors
 2. Recommended priority order for testing
@@ -72,7 +89,7 @@ Be concise and tactical."""
             prompt += "DNS RECORDS:\n"
             for rtype, values in data["records"].items():
                 if values:
-                    prompt += f"- {rtype}: {', '.join(values[:3])}\n"
+                    prompt += f"- {rtype}: {', '.join(map(str, values[:3]))}\n"
             prompt += "\n"
 
         if data.get("services"):
@@ -81,13 +98,14 @@ Be concise and tactical."""
                 prompt += f"- {svc.get('port')}/{svc.get('protocol')}: {svc.get('service')} {svc.get('version', '')}\n"
             prompt += "\n"
 
-        if data.get("wayback"):
-            prompt += (
-                f"WAYBACK ({data['wayback'].get('total_snapshots', 0)} snapshots):\n"
-            )
-            if data["wayback"].get("interesting_urls"):
-                for url in data["wayback"]["interesting_urls"][:5]:
-                    prompt += f"- [{url['pattern']}] {url['url']}\n"
+        wayback = data.get("wayback") or {}
+        if wayback.get("interesting_urls"):
+            prompt += f"WAYBACK ({wayback.get('total_snapshots', 0)} snapshots):\n"
+            for url in wayback["interesting_urls"][:5]:
+                if isinstance(url, dict):
+                    prompt += f"- [{url.get('pattern', '')}] {url.get('url', '')}\n"
+                else:
+                    prompt += f"- {url}\n"
             prompt += "\n"
 
         prompt += "What are the most promising attack vectors and where should a red team focus first?"
@@ -105,7 +123,7 @@ Generate a step-by-step attack hypothesis in the style of a real red team engage
 Include initial access, privilege escalation, and persistence vectors.
 Be specific and actionable."""
 
-        system_prompt = """You are a red team operator. Generate realistic attack paths based on 
+        system_prompt = """You are a red team operator. Generate realistic attack paths based on
 reconnaissance findings. Be specific about techniques and tools."""
 
         return self._call_ollama(prompt, system_prompt)
@@ -121,36 +139,43 @@ reconnaissance findings. Be specific about techniques and tools."""
             "\nProvide specific tool recommendations (Metasploit, ExploitDB, etc.)"
         )
 
-        system_prompt = """You are a penetration testing expert. Recommend specific 
+        system_prompt = """You are a penetration testing expert. Recommend specific
 exploitation techniques and available tools for each service."""
 
         return self._call_ollama(prompt, system_prompt)
 
 
 class RiskScorer:
-    """AI-powered risk scoring"""
+    """Heuristic risk scoring (no AI required - always available)."""
 
     def __init__(self, ollama: OllamaEngine = None):
-        self.ollama = ollama or OllamaEngine()
+        # Kept for backward compatibility; scoring is fully local.
+        self.ollama = ollama
 
     def calculate_risk_score(self, findings: Dict) -> Dict:
-        """Calculate risk score based on findings"""
+        """Calculate risk score based on findings (tolerates partial/None data)."""
+        findings = findings or {}
         score = 0
         factors = []
 
-        if findings.get("subdomains"):
-            sub_count = len(findings["subdomains"])
+        subdomains = findings.get("subdomains")
+        if subdomains:
+            sub_count = len(subdomains)
             score += min(sub_count * 2, 20)
             factors.append(f"{sub_count} subdomains discovered")
 
-        if findings.get("services"):
-            critical_ports = [21, 22, 23, 25, 445, 3389, 5900, 8080]
-            for svc in findings["services"]:
-                if svc.get("port") in critical_ports:
-                    score += 10
-                    factors.append(f"Critical port open: {svc['port']}")
+        services = findings.get("services") or []
+        critical_ports = {21, 22, 23, 25, 445, 3389, 5900, 8080}
+        seen_ports = set()
+        for svc in services:
+            port = svc.get("port")
+            if port in critical_ports and port not in seen_ports:
+                seen_ports.add(port)
+                score += 10
+                factors.append(f"Critical port open: {port}")
 
-        if findings.get("wayback", {}).get("interesting_urls"):
+        wayback = findings.get("wayback") or {}
+        if wayback.get("interesting_urls"):
             score += 15
             factors.append("Interesting Wayback URLs found")
 
@@ -168,7 +193,11 @@ class RiskScorer:
 
 
 class AIEngine:
-    """Main AI orchestrator"""
+    """Main AI orchestrator.
+
+    Degrades gracefully without Ollama: ``analyze()`` returns
+    ``{"status": "unavailable", "risk_score": {}}`` and never raises.
+    """
 
     def __init__(self, model: str = "llama3"):
         self.ollama = OllamaEngine(model=model)
@@ -179,31 +208,51 @@ class AIEngine:
             print("[!] Install Ollama: https://ollama.ai/")
 
     def analyze(self, findings: Dict) -> Dict:
-        """Perform full AI analysis"""
-        results = {"ollama_available": self.ollama.available, "risk_score": {}}
+        """Perform full AI analysis (never raises, never hangs)."""
+        findings = findings or {}
 
-        if self.ollama.available:
+        if not self.ollama.available:
+            return {
+                "status": "unavailable",
+                "ollama_available": False,
+                "analysis": "Ollama not available",
+                "risk_score": {},
+            }
+
+        results = {
+            "status": "ok",
+            "ollama_available": True,
+            "risk_score": {},
+        }
+
+        try:
             results["analysis"] = self.ollama.analyze_findings(findings)
             results["attack_hypothesis"] = self.ollama.generate_attack_hypothesis(
                 findings.get("domain", "unknown"), findings
             )
-            results["risk_score"] = self.risk_scorer.calculate_risk_score(findings)
-        else:
-            results["analysis"] = "Ollama not available"
-            results["risk_score"] = self.risk_scorer.calculate_risk_score(findings)
+        except Exception as e:
+            results["analysis"] = f"AI analysis error: {e}"
 
+        results["risk_score"] = self.risk_scorer.calculate_risk_score(findings)
         return results
 
     def generate_redteam_playbook(self, findings: Dict) -> Dict:
-        """Act as an AI Agent and generate an execution playbook"""
+        """Act as an AI Agent and generate an execution playbook.
+
+        Returns ``{"playbook": str}`` always (with a ``status`` hint); local
+        Ollama only.
+        """
         if not self.ollama.available:
-            return {"playbook": "Ollama not available - Cannot generate Agent Playbook"}
+            return {
+                "status": "unavailable",
+                "playbook": "Ollama not available - Cannot generate Agent Playbook",
+            }
 
         prompt = f"""Based on the following exact OSINT findings:
-{json.dumps(findings, indent=2, default=lambda x: list(x) if isinstance(x, set) else str(x))[:3000]}
+{json.dumps(findings or {}, indent=2, default=lambda x: list(x) if isinstance(x, set) else str(x))[:3000]}
 
 Assume the role of the Lead Red Teamer. The user is a junior pentester waiting for your orders.
-Give them a tactical, step-by-step Execution Playbook. 
+Give them a tactical, step-by-step Execution Playbook.
 You MUST provide the EXACT terminal commands to run (e.g., nmap, sqlmap, curl, gobuster) against specific IPs, urls, or domains discovered.
 Be direct, highly action-oriented, and base all payloads strictly on the technologies/ports found.
 """
@@ -213,8 +262,8 @@ Be direct, highly action-oriented, and base all payloads strictly on the technol
             "Always give the exact bash/terminal commands using the real IPs/hostnames from the findings."
         )
 
-        playbook = self.ollama._call_ollama(prompt, system_prompt)
-        return {"playbook": playbook}
+        playbook = self.ollama.call(prompt, system_prompt)
+        return {"status": "ok", "playbook": playbook}
 
 
 if __name__ == "__main__":

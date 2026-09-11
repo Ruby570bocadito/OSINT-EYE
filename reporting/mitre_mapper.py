@@ -1,8 +1,22 @@
-"""OSINT EYE - MITRE ATT&CK Mapper"""
+"""OSINT EYE - MITRE ATT&CK Mapper
+
+Maps OSINT findings to real MITRE ATT&CK Enterprise techniques and exports
+ATT&CK Navigator layer JSON compatible with https://mitre-attack.github.io/.
+"""
 
 import json
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+
+def _d(value) -> Dict:
+    """Return value if dict else {} (defensive accessor for scan data)."""
+    return value if isinstance(value, dict) else {}
+
+
+def _l(value) -> List:
+    """Return value if list else []."""
+    return value if isinstance(value, list) else []
 
 
 @dataclass
@@ -116,15 +130,15 @@ class MitreMapper:
             "wayback_interesting": [
                 {
                     "technique_id": "T1593.002",
-                    "technique_name": "Search Owned Websites: Search Engines",
+                    "technique_name": "Search Open Websites/Domains: Search Engines",
                     "tactic": "Reconnaissance",
                     "severity": "LOW",
                 },
             ],
             "github_leaks": [
                 {
-                    "technique_id": "T1593.001",
-                    "technique_name": "Search Owned Websites: Code Repositories",
+                    "technique_id": "T1593.003",
+                    "technique_name": "Search Open Websites/Domains: Code Repositories",
                     "tactic": "Reconnaissance",
                     "severity": "HIGH",
                 },
@@ -189,9 +203,9 @@ class MitreMapper:
     def map_findings(self, scan_results: Dict) -> List[MitreFinding]:
         """Map all scan findings to MITRE ATT&CK"""
         self.findings = []
-        modules = scan_results.get("modules", {})
+        modules = _d(scan_results.get("modules")) if isinstance(scan_results, dict) else {}
 
-        if modules.get("dns", {}).get("subdomains"):
+        if _l(_d(modules.get("dns")).get("subdomains")):
             count = len(modules["dns"]["subdomains"])
             self.findings.append(
                 MitreFinding(
@@ -204,10 +218,13 @@ class MitreMapper:
                 )
             )
 
-        net = modules.get("network", {})
-        open_ports = [s for s in net.get("services", []) if s.get("state") == "open"]
+        net = _d(scan_results.get("modules")).get("network") if isinstance(scan_results.get("modules"), dict) else {}
+        net = _d(net)
+        open_ports = [s for s in _l(net.get("services")) if _d(s).get("state") == "open"]
         if open_ports:
-            port_list = ", ".join([str(s["port"]) for s in open_ports[:5]])
+            port_list = ", ".join(
+                str(_d(s).get("port", "?")) for s in open_ports[:5]
+            )
             self.findings.append(
                 MitreFinding(
                     technique_id="T1046",
@@ -220,7 +237,7 @@ class MitreMapper:
             )
 
         web = modules.get("web", {})
-        techs = web.get("technologies", {}).get("technologies", [])
+        techs = web.get("technologies", {}).get("technologies", []) if isinstance(web.get("technologies"), dict) else []
         if techs:
             self.findings.append(
                 MitreFinding(
@@ -233,10 +250,14 @@ class MitreMapper:
                 )
             )
 
-        endpoints = web.get("endpoints", {})
-        sensitive = endpoints.get("sensitive", [])
+        # Sensitive files live in modules["endpoints"] (osint_eye.run_endpoints);
+        # fall back to web["endpoints"]["sensitive"] for older result shapes.
+        endpoints = _d(modules.get("endpoints"))
+        sensitive = _l(endpoints.get("sensitive")) or _l(
+            _d(web.get("endpoints")).get("sensitive")
+        )
         if sensitive:
-            paths = ", ".join([s.get("path", "") for s in sensitive[:3]])
+            paths = ", ".join([_d(s).get("path", "") for s in sensitive[:3]])
             self.findings.append(
                 MitreFinding(
                     technique_id="T1552.001",
@@ -248,20 +269,20 @@ class MitreMapper:
                 )
             )
 
-        cloud = modules.get("cloud_buckets", {})
+        cloud = modules.get("cloud_buckets", {}) if isinstance(modules.get("cloud_buckets"), dict) else {}
         if cloud.get("public"):
             self.findings.append(
                 MitreFinding(
                     technique_id="T1530",
                     technique_name="Data from Cloud Storage",
                     tactic="Collection",
-                    evidence=f"{len(cloud['public'])} public cloud buckets",
+                    evidence=f"{len(cloud.get('public') or [])} public cloud buckets",
                     severity="HIGH",
                     source_module="cloud_buckets",
                 )
             )
 
-        emails = modules.get("emails", {}).get("emails_found", [])
+        emails = _l(_d(modules.get("emails")).get("emails_found"))
         if emails:
             self.findings.append(
                 MitreFinding(
@@ -274,7 +295,7 @@ class MitreMapper:
                 )
             )
 
-        cves = modules.get("cve", {}).get("cves", [])
+        cves = _l(_d(modules.get("cve")).get("cves"))
         if cves:
             def is_critical(c):
                 sev = c.get("severity")
@@ -298,20 +319,20 @@ class MitreMapper:
                     )
                 )
 
-        github = modules.get("github", {})
-        if github.get("total_findings", 0) > 0:
+        github = modules.get("github", {}) if isinstance(modules.get("github"), dict) else {}
+        if github.get("total_findings", 0):
             self.findings.append(
                 MitreFinding(
-                    technique_id="T1552.001",
-                    technique_name="Unsecured Credentials: Credentials In Files",
-                    tactic="Credential Access",
-                    evidence=f"{github['total_findings']} potential leaks on GitHub",
+                    technique_id="T1593.003",
+                    technique_name="Search Open Websites/Domains: Code Repositories",
+                    tactic="Reconnaissance",
+                    evidence=f"{github.get('total_findings')} potential leaks on GitHub",
                     severity="CRITICAL",
                     source_module="github",
                 )
             )
 
-        takeover = modules.get("takeover", {}).get("vulnerable", [])
+        takeover = _l(_d(modules.get("takeover")).get("vulnerable"))
         if takeover:
             self.findings.append(
                 MitreFinding(
@@ -400,8 +421,13 @@ class MitreMapper:
         }
 
     def export_navigator_layer(self) -> Dict:
-        """Export as MITRE ATT&CK Navigator layer"""
-        techniques = []
+        """Export as a valid MITRE ATT&CK Navigator layer JSON.
+
+        Produces the canonical structure (name/versions/domain/techniques)
+        with full sub-technique IDs (e.g. ``T1595.002``), deduplicated per
+        technique keeping the maximum score and merged comments.
+        """
+        merged: Dict[str, Dict] = {}
         for finding in self.findings:
             score = {
                 "CRITICAL": 100,
@@ -410,28 +436,34 @@ class MitreMapper:
                 "LOW": 25,
                 "INFO": 10,
             }.get(finding.severity, 0)
-            techniques.append(
+            entry = merged.setdefault(
+                finding.technique_id,
                 {
-                    "techniqueID": finding.technique_id.split(".")[0],
-                    "subID": finding.technique_id.split(".")[1]
-                    if "." in finding.technique_id
-                    else None,
-                    "score": score,
-                    "color": "",
-                    "comment": finding.evidence,
+                    "techniqueID": finding.technique_id,
+                    "score": 0,
+                    "comment": "",
                     "enabled": True,
-                    "metadata": [
-                        {"name": "Source", "value": finding.source_module},
-                        {"name": "Severity", "value": finding.severity},
-                    ],
+                    "metadata": [],
+                },
+            )
+            entry["score"] = max(entry["score"], score)
+            comment = f"{finding.source_module}: {finding.evidence}"
+            if comment not in entry["comment"]:
+                entry["comment"] = (entry["comment"] + " | " + comment).strip(" | ")
+            entry["metadata"].append(
+                {
+                    "name": "Severity",
+                    "value": finding.severity,
                 }
             )
 
+        techniques = list(merged.values())
+
         return {
-            "name": f"OSINT EYE - Attack Surface Mapping",
+            "name": "OSINT EYE - Attack Surface Mapping",
             "versions": {
                 "attack": "15",
-                "navigator": "5.0.0",
+                "navigator": "4.9",
                 "layer": "4.5",
             },
             "domain": "enterprise-attack",

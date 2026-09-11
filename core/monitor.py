@@ -1,12 +1,11 @@
 """OSINT EYE - Subdomain Monitoring Daemon"""
 
 import asyncio
-import time
 import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Callable, Optional
 from pathlib import Path
 
@@ -26,17 +25,17 @@ class AlertManager:
         self.handlers.append(handler)
 
     def send(
-        self, alert_type: str, message: str, severity: str = "medium", data: Dict = None
+        self, alert_type: str, message: str, severity: str = "medium", data: Optional[Dict] = None
     ):
         for handler in self.handlers:
             try:
                 handler(alert_type, message, severity, data or {})
-            except Exception:
-                pass
+            except Exception as e:
+                # A broken alert channel must never take the monitor down.
+                print(f"[!] Alert handler {getattr(handler, '__name__', handler)} failed: {e}")
 
     @staticmethod
     def log_handler(alert_type, message, severity, data):
-        timestamp = datetime.now().isoformat()
         print(f"[ALERT] [{severity.upper()}] [{alert_type}] {message}")
 
     @staticmethod
@@ -80,14 +79,19 @@ Data: {json.dumps(data, indent=2)}
                 msg.attach(MIMEText(body, "plain"))
 
                 server = smtplib.SMTP(
-                    smtp_config["server"], smtp_config.get("port", 587)
+                    smtp_config["server"], smtp_config.get("port", 587), timeout=15
                 )
-                server.starttls()
-                server.login(smtp_config["user"], smtp_config["password"])
-                server.send_message(msg)
-                server.quit()
-            except Exception:
-                pass
+                try:
+                    server.starttls()
+                    server.login(smtp_config["user"], smtp_config["password"])
+                    server.send_message(msg)
+                finally:
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"[!] Email alert failed: {e}")
 
         return handler
 
@@ -108,8 +112,8 @@ Data: {json.dumps(data, indent=2)}
                     },
                     timeout=10,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[!] Webhook alert failed: {e}")
 
         return handler
 
@@ -145,23 +149,32 @@ class SubdomainMonitor:
         """Check a single target for changes"""
         new_subdomains = set()
 
+        # Lazily build the baseline (from cache) so run_once() callers get a
+        # meaningful diff too; previously a missing baseline re-alerted everything.
+        if target not in self.baseline:
+            self.set_baseline(target)
+
+        # The scanners are blocking (requests/threads) - run them in worker
+        # threads so the event loop (and stop()) stays responsive.
         try:
-            dns_result = self.dns_scanner.scan(target, "basic")
-            new_subdomains.update(dns_result.get("subdomains", []))
-        except Exception:
-            pass
+            dns_result = await asyncio.to_thread(self.dns_scanner.scan, target, "basic")
+            new_subdomains.update(dns_result.get("subdomains") or [])
+        except Exception as e:
+            print(f"[!] DNS check failed for {target}: {e}")
 
         try:
-            cert_result = self.cert_scanner.scan(target)
-            new_subdomains.update(cert_result.get("subdomains", []))
-        except Exception:
-            pass
+            cert_result = await asyncio.to_thread(self.cert_scanner.scan, target)
+            new_subdomains.update(cert_result.get("subdomains") or [])
+        except Exception as e:
+            print(f"[!] CT check failed for {target}: {e}")
 
         try:
-            perm_result = self.permutator.enumerate(target, list(new_subdomains)[:10])
-            new_subdomains.update(perm_result)
-        except Exception:
-            pass
+            perm_result = await asyncio.to_thread(
+                self.permutator.enumerate, target, list(new_subdomains)[:10]
+            )
+            new_subdomains.update(perm_result or [])
+        except Exception as e:
+            print(f"[!] Permutation check failed for {target}: {e}")
 
         if self.scan_cache:
             for sub in new_subdomains:
@@ -171,12 +184,13 @@ class SubdomainMonitor:
         discovered = new_subdomains - baseline
 
         if discovered:
-            self.baseline[target] = new_subdomains
+            # Merge instead of replace so subs seen in prior cycles stay known.
+            self.baseline[target] = set(baseline) | new_subdomains
 
         return {
             "target": target,
             "total_subdomains": len(new_subdomains),
-            "new_subdomains": sorted(list(discovered)),
+            "new_subdomains": sorted(discovered),
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -200,20 +214,20 @@ class SubdomainMonitor:
         return await self.check_all()
 
     async def run_daemon(self, max_cycles: int = 0):
-        """Run as daemon"""
+        """Run as daemon (max_cycles=0 means run until stop() is called)"""
         self.running = True
         cycle = 0
 
-        print(f"[*] Starting OSINT EYE Monitor")
+        print("[*] Starting OSINT EYE Monitor")
         print(f"[*] Targets: {', '.join(self.targets)}")
         print(f"[*] Check interval: {self.check_interval}s")
-        print(f"[*] Setting baselines...")
+        print("[*] Setting baselines...")
 
         for target in self.targets:
             self.set_baseline(target)
             print(f"  - {target}: {len(self.baseline[target])} known subdomains")
 
-        print(f"[*] Monitoring started")
+        print("[*] Monitoring started")
 
         while self.running:
             if max_cycles > 0 and cycle >= max_cycles:
@@ -225,7 +239,12 @@ class SubdomainMonitor:
                 f"[*] Check #{cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
-            results = await self.check_all()
+            try:
+                results = await self.check_all()
+            except Exception as e:
+                # A failing cycle (network outage, scanner bug) must not kill the daemon.
+                print(f"[!] Check cycle #{cycle} failed: {e}")
+                results = []
 
             for result in results:
                 if result["new_subdomains"]:
@@ -236,9 +255,18 @@ class SubdomainMonitor:
                         print(f"    + {sub}")
 
             if self.running and (max_cycles == 0 or cycle < max_cycles):
-                await asyncio.sleep(self.check_interval)
+                await self._interruptible_sleep(self.check_interval)
 
         print(f"\n[*] Monitor stopped after {cycle} cycles")
+
+    async def _interruptible_sleep(self, seconds: float):
+        """Sleep in short slices so stop() is honoured promptly (no stale asyncio.sleep)."""
+        step = 1.0
+        slept = 0.0
+        while self.running and slept < seconds:
+            chunk = min(step, seconds - slept)
+            await asyncio.sleep(chunk)
+            slept += chunk
 
     def stop(self):
         self.running = False

@@ -1,11 +1,11 @@
 """OSINT EYE - Cloud Bucket Discovery & Email Enumeration"""
 
-import requests
 import re
 import socket
-from typing import Dict, List, Set, Optional
-from urllib.parse import urlparse
+from typing import Dict, List, Set
 import concurrent.futures
+
+import requests
 
 
 class CloudBucketDetector:
@@ -222,12 +222,6 @@ class EmailEnumerator:
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
         )
 
-        self.name_sources = [
-            "https://www.google.com/search?q=site:{domain}+email",
-            "https://www.google.com/search?q=site:{domain}+contact",
-            'https://www.google.com/search?q=site:{domain}+"@{domain}"',
-        ]
-
     def extract_from_web(self, domain: str) -> Set[str]:
         """Extract emails from web pages"""
         emails = set()
@@ -249,7 +243,7 @@ class EmailEnumerator:
                 found = self.email_pattern.findall(response.text)
 
                 for email in found:
-                    if email.endswith(domain):
+                    if self._email_matches_domain(email, domain):
                         emails.add(email.lower())
 
             except Exception:
@@ -257,13 +251,30 @@ class EmailEnumerator:
 
         return emails
 
+    @staticmethod
+    def _email_matches_domain(email: str, domain: str) -> bool:
+        """True if the email's domain is the target or a subdomain of it.
+
+        Prevents substring false positives ("x@badexample.com" must not
+        match target "example.com").
+        """
+        _, _, email_domain = email.lower().partition("@")
+        if not email_domain:
+            return False
+        return email_domain == domain or email_domain.endswith("." + domain)
+
     def extract_from_whois(self, whois_data: Dict) -> Set[str]:
-        """Extract emails from WHOIS data"""
+        """Extract well-formed email addresses from WHOIS data."""
         emails = set()
 
-        if whois_data.get("emails"):
-            for email in whois_data["emails"]:
-                emails.add(email.lower())
+        raw_emails = whois_data.get("emails") or []
+        if isinstance(raw_emails, str):
+            raw_emails = [raw_emails]
+
+        for email in raw_emails:
+            email = str(email).strip().lower()
+            if self.email_pattern.fullmatch(email):
+                emails.add(email)
 
         return emails
 
@@ -379,6 +390,11 @@ class CDNDetector:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
         self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+        )
 
         self.cdn_headers = {
             "Cloudflare": [
@@ -390,7 +406,7 @@ class CDNDetector:
             "CloudFront": [
                 "x-amz-cf-id",
                 "x-amz-cf-pop",
-                "x-cache: Hit from cloudfront",
+                "x-cache",
             ],
             "Fastly": ["x-served-by", "x-cache", "x-timer", "fastly"],
             "Akamai": ["akamai-grn", "x-akamai-transformed", "x-true-ip"],
@@ -429,12 +445,25 @@ class CDNDetector:
             for header, value in response.headers.items():
                 result["headers"][header] = value
 
+            headers_lower = {h.lower(): v for h, v in response.headers.items()}
             for cdn, headers in self.cdn_headers.items():
                 for header in headers:
-                    if header.lower() in [h.lower() for h in response.headers]:
+                    if header.lower() in headers_lower:
                         result["cdn"] = cdn
-                        result["indicators"].append(f"CDN: {cdn} (header: {header})")
+                        result["indicators"].append(
+                            f"CDN: {cdn} (header: {header})"
+                        )
                         break
+
+            # X-Cache identifies the CDN only via its VALUE (e.g.
+            # "Hit from cloudfront"), not by its mere presence.
+            if not result["cdn"]:
+                x_cache = headers_lower.get("x-cache", "").lower()
+                if "cloudfront" in x_cache:
+                    result["cdn"] = "CloudFront"
+                    result["indicators"].append(
+                        f"CDN: CloudFront (X-Cache: {x_cache[:60]})"
+                    )
 
             html = response.text.lower()
             for waf, indicators in self.waf_indicators.items():

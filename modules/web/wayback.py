@@ -1,10 +1,10 @@
 """OSINT EYE - Wayback Machine Module"""
 
-import requests
 import re
-from datetime import datetime
-from typing import List, Dict, Set, Optional
-from urllib.parse import urljoin, urlparse
+from typing import List, Dict
+from urllib.parse import urlparse
+
+import requests
 
 
 class WaybackMachine:

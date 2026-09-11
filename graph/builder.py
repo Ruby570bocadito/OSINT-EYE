@@ -2,9 +2,25 @@
 
 import networkx as nx
 from pyvis.network import Network
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Set
 from datetime import datetime
-import json
+
+
+def _node_tech_set(raw) -> Set[str]:
+    """Normalize a technologies payload (dict/list/set) into a set of strings."""
+    if isinstance(raw, dict):
+        return set(raw.get("technologies") or [])
+    if isinstance(raw, (set, list, tuple)):
+        return set(raw)
+    return set()
+
+
+def _cve_score(cve: Dict) -> float:
+    """Extract the CVSS score from a CVE entry ([{"score": x, ...}])."""
+    severity = cve.get("severity")
+    if isinstance(severity, list) and severity and isinstance(severity[0], dict):
+        return float(severity[0].get("score") or 0)
+    return 0.0
 
 
 class GraphBuilder:
@@ -95,7 +111,17 @@ class GraphBuilder:
             )
 
     def _add_edge(self, source: str, target: str, label: str = ""):
-        """Add an edge to the graph"""
+        """Add an edge to the graph.
+
+        Endpoints are auto-registered as generic nodes if unseen, so edges
+        never create attribute-less orphans (they render colorless/undefined).
+        """
+        if source == target:
+            return
+        if not self.graph.has_node(source):
+            self._add_node(source, "unknown", str(source)[:50])
+        if not self.graph.has_node(target):
+            self._add_node(target, "unknown", str(target)[:50])
         if not self.graph.has_edge(source, target):
             self.graph.add_edge(source, target, label=label, title=label)
 
@@ -147,9 +173,10 @@ class GraphBuilder:
         self._add_node(host, "ip", host)
 
         for svc in network_data.get("services", []):
-            if svc.get("state") == "open":
-                port_key = f"{host}:{svc['port']}"
-                self._add_node(port_key, "port", f"Port {svc['port']}")
+            port = svc.get("port")
+            if svc.get("state") == "open" and port is not None:
+                port_key = f"{host}:{port}"
+                self._add_node(port_key, "port", f"Port {port}")
                 self._add_edge(host, port_key, "has_port")
 
                 service_name = svc.get("service", "unknown")
@@ -181,8 +208,7 @@ class GraphBuilder:
 
     def _ingest_web(self, web_data: Dict):
         """Ingest web scan data"""
-        tech_data = web_data.get("technologies", {})
-        for tech in tech_data.get("technologies", []):
+        for tech in _node_tech_set(web_data.get("technologies")):
             self._add_node(tech, "technology", tech)
 
     def _ingest_cloud(self, cloud_data: Dict):
@@ -198,19 +224,20 @@ class GraphBuilder:
 
     def _ingest_emails(self, email_data: Dict):
         """Ingest email data"""
-        domain = email_data.get("domain", "")
-        for email in email_data.get("emails_found", []):
+        domain = email_data.get("domain", "") or ""
+        for email in email_data.get("emails_found") or []:
+            if not email:
+                continue
             self._add_node(email, "email", email)
-            self._add_edge(domain, email, "contact_email")
+            if domain:
+                self._add_edge(domain, email, "contact_email")
 
     def _ingest_cves(self, cve_data: Dict):
         """Ingest CVE data"""
-        for cve in cve_data.get("cves", [])[:20]:
+        for cve in (cve_data.get("cves") or [])[:20]:
             cve_id = cve.get("id", "")
             if cve_id:
-                severity = cve.get("severity", [{}])[0] if cve.get("severity") else {}
-                score = severity.get("score", 0)
-
+                score = _cve_score(cve)
                 self._add_node(cve_id, "vulnerability", cve_id, score=score)
 
     def _ingest_cdn_waf(self, cdn_data: Dict):
@@ -285,48 +312,69 @@ class GraphBuilder:
         }
 
     def export_html(self, filename=None):
-        """Export interactive HTML visualization"""
+        """Export interactive HTML visualization.
+
+        Uses pyvis with inline (bundled) JS so the file is self-contained:
+        no CDN calls and no extra lib/ folder next to the output. Safe for
+        empty graphs (0 nodes).
+        """
         if not filename:
             filename = "attack_surface_graph.html"
-        net = Network(
-            height="800px",
-            width="100%",
-            bgcolor="#1a1a2e",
-            font_color=True,
-            directed=True,
-        )
 
+        try:
+            net = Network(
+                height="800px",
+                width="100%",
+                bgcolor="#14141f",
+                font_color="#e0e0e8",
+                directed=True,
+                cdn_resources="in_line",
+            )
+        except TypeError:
+            # Older pyvis without the cdn_resources argument.
+            net = Network(
+                height="800px",
+                width="100%",
+                bgcolor="#14141f",
+                font_color="#e0e0e8",
+                directed=True,
+            )
+
+        # Soft physics: gentle repulsion + heavier damping for a calm layout.
         net.set_options(
             """
             {
                 "physics": {
                     "enabled": true,
-                    "stabilization": {"iterations": 100},
+                    "stabilization": {"iterations": 150, "fit": true},
                     "barnesHut": {
-                        "gravitationalConstant": -3000,
-                        "centralGravity": 0.3,
-                        "springLength": 95,
-                        "springConstant": 0.04,
-                        "damping": 0.09
+                        "gravitationalConstant": -2000,
+                        "centralGravity": 0.4,
+                        "springLength": 120,
+                        "springConstant": 0.03,
+                        "damping": 0.18,
+                        "avoidOverlap": 0.4
                     }
                 },
                 "interaction": {
                     "hover": true,
                     "tooltipDelay": 200,
                     "zoomView": true,
-                    "dragView": true
+                    "dragView": true,
+                    "navigationButtons": true
                 },
                 "nodes": {
                     "shape": "dot",
                     "scaling": {"min": 10, "max": 40},
-                    "font": {"size": 12, "color": "white"},
+                    "font": {"size": 13, "color": "#e0e0e8", "face": "monospace"},
                     "borderWidth": 2,
                     "shadow": true
                 },
                 "edges": {
                     "width": 1,
-                    "color": {"color": "#4a4a6a", "highlight": "#00d2ff"},
-                    "smooth": {"type": "continuous"}
+                    "arrows": {"to": {"enabled": true, "scaleFactor": 0.6}},
+                    "color": {"color": "#3d3d5c", "highlight": "#00d2ff", "hover": "#5c5c8a"},
+                    "smooth": {"enabled": true, "type": "continuous"}
                 }
             }
             """
@@ -335,7 +383,7 @@ class GraphBuilder:
         for node, data in self.graph.nodes(data=True):
             net.add_node(
                 node,
-                label=data.get("label", node)[:30],
+                label=str(data.get("label", node))[:30],
                 color=data.get("color", "#95a5a6"),
                 size=data.get("size", 20),
                 title=f"{node}\nType: {data.get('type', 'unknown')}",
@@ -344,7 +392,30 @@ class GraphBuilder:
         for source, target, data in self.graph.edges(data=True):
             net.add_edge(source, target, title=data.get("label", ""))
 
-        net.show(filename, notebook=False)
+        # write_html() instead of show(): show() prints the filename bare
+        # to stdout (pyvis quirk) and pollutes the CLI output.
+        net.write_html(filename, notebook=False)
+
+        # pyvis' template always injects two bootstrap CDN tags (only used by
+        # the optional filter/select menus, which are disabled here). Strip
+        # them so the exported HTML is fully self-contained/offline.
+        try:
+            import re
+
+            with open(filename, "r", encoding="utf-8") as f:
+                html = f.read()
+            cleaned = re.sub(
+                r"<(?:script|link)[^>]*bootstrap[^>]*>(?:\s*</script>)?",
+                "",
+                html,
+                flags=re.IGNORECASE,
+            )
+            if cleaned != html:
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(cleaned)
+        except OSError as e:
+            print(f"[!] Could not strip CDN tags from {filename}: {e}")
+
         print(f"[+] Graph exported to: {filename}")
 
 
@@ -408,6 +479,8 @@ class GraphAnalyzer:
 
 
 if __name__ == "__main__":
+    import json
+
     builder = GraphBuilder()
 
     test_data = {

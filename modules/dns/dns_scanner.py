@@ -1,13 +1,22 @@
-"""OSINT EYE - DNS Resolution Module"""
+"""OSINT EYE - DNS Resolution Module
+
+Provides DNS record resolution, subdomain bruteforce enumeration and
+zone-transfer (AXFR) checks, orchestrated by :class:`DNSScanner`.
+
+Contract consumed by osint_eye.py:
+    DNSScanner().scan(target, "basic") -> dict with keys "domain",
+    "subdomains" (list), "records" (dict per record type) and
+    "spf"/"dmarc" dicts (always present, even on partial failures).
+"""
 
 import socket
+import concurrent.futures
+from pathlib import Path
+from typing import Dict, List, Optional, Set
+
 import dns.resolver
 import dns.query
 import dns.zone
-import dns.name
-import concurrent.futures
-from typing import List, Dict, Optional, Set
-import time
 
 
 class DNSResolver:
@@ -44,15 +53,21 @@ class DNSResolver:
             return []
 
     def resolve_with_fallback(self, domain: str, record_type: str = "A") -> List[str]:
-        """Try multiple nameservers as fallback"""
-        for ns in self.nameservers:
-            try:
-                self.resolver.nameservers = [ns]
-                results = self.resolve(domain, record_type)
-                if results:
-                    return results
-            except Exception:
-                continue
+        """Try multiple nameservers as fallback (restores defaults after)."""
+        original_nameservers = list(self.resolver.nameservers)
+        try:
+            for ns in self.nameservers:
+                try:
+                    self.resolver.nameservers = [ns]
+                    results = self.resolve(domain, record_type)
+                    if results:
+                        return results
+                except Exception:
+                    continue
+        finally:
+            # Restore the system resolver so later lookups are not pinned
+            # to the last public nameserver we tried.
+            self.resolver.nameservers = original_nameservers
         return []
 
     def get_all_records(self, domain: str) -> Dict[str, List[str]]:
@@ -112,25 +127,54 @@ class DNSResolver:
 
 
 class SubdomainEnumerator:
-    """Subdomain enumeration using bruteforce"""
+    """Subdomain enumeration using DNS bruteforce.
 
-    def __init__(self, wordlist_path: str, threads: int = 50, timeout: int = 3):
-        self.wordlist_path = wordlist_path
-        self.threads = threads
+    The wordlist is resolved relative to this module file (not the CWD)
+    and falls back to a small built-in list if it is missing.
+    """
+
+    #: Fallback wordlist location relative to the repository root.
+    DEFAULT_WORDLIST = Path(__file__).resolve().parents[2] / "data" / "wordlists" / "common.txt"
+
+    def __init__(self, wordlist_path: Optional[str] = None, threads: int = 50, timeout: int = 3):
+        self.wordlist_path = str(wordlist_path) if wordlist_path else str(self.DEFAULT_WORDLIST)
+        # Keep the thread count bounded; DNS lookups are socket-bound but
+        # hundreds of threads only add overhead and fd pressure.
+        self.threads = max(1, min(threads, 200))
         self.timeout = timeout
         self.resolver = DNSResolver(timeout=timeout)
         self.found_subdomains: Set[str] = set()
 
     def load_wordlist(self) -> List[str]:
-        """Load wordlist from file"""
+        """Load wordlist from file (module-relative); never fails hard.
+
+        Tolerates both one-word-per-line files and single-line
+        comma-separated lists (the bundled data/wordlists/*.txt mix both
+        formats). Whitespace is stripped and duplicates removed.
+        """
         try:
-            with open(self.wordlist_path, "r") as f:
-                return [line.strip() for line in f if line.strip()]
-        except FileNotFoundError:
+            with open(self.wordlist_path, "r", encoding="utf-8", errors="ignore") as f:
+                raw = f.read()
+        except OSError:
+            raw = None
+
+        words: List[str] = []
+        if raw:
+            # Split on newlines and commas, then normalise each entry.
+            for token in raw.replace(",", "\n").split("\n"):
+                token = token.strip()
+                if token:
+                    words.append(token)
+            # Deduplicate preserving order.
+            words = list(dict.fromkeys(words))
+
+        if not words:
+            print(f"[!] Wordlist not readable at {self.wordlist_path}, using built-in defaults")
             return self._get_default_wordlist()
+        return words
 
     def _get_default_wordlist(self) -> List[str]:
-        """Default common subdomains"""
+        """Default common subdomains (deduplicated)"""
         return [
             "www",
             "mail",
@@ -179,7 +223,7 @@ class SubdomainEnumerator:
             "live",
             "office",
             "owa",
-            " lyncdiscover",
+            "lyncdiscover",
             "i",
             "remote",
             "s3",
@@ -191,7 +235,6 @@ class SubdomainEnumerator:
             "crm",
             "erp",
             "portal",
-            "admin",
             "intranet",
             "gitlab",
             "jenkins",
@@ -204,9 +247,7 @@ class SubdomainEnumerator:
             "mysql",
             "sql",
             "phpmyadmin",
-            "shop",
             "support",
-            "intranet",
             "platform",
             "ads",
             "ads1",
@@ -307,7 +348,6 @@ class SubdomainEnumerator:
             "storefront",
             "streaming",
             "subscribe",
-            "support",
             "test1",
             "tickets",
             "tools",
@@ -346,7 +386,7 @@ class SubdomainEnumerator:
             return None
 
     def enumerate(self, domain: str, progress_callback=None) -> List[str]:
-        """Enumerate subdomains using bruteforce"""
+        """Enumerate subdomains using bruteforce (bounded thread pool)."""
         wordlist = self.load_wordlist()
         self.found_subdomains = set()
 
@@ -441,15 +481,22 @@ class ZoneTransfer:
 
 
 class DNSScanner:
-    """Main DNS scanning orchestrator"""
+    """Main DNS scanning orchestrator.
+
+    ``scan()`` always returns a dict with the full result shape
+    ("domain", "records", "subdomains", "spf", "dmarc",
+    "zone_transfer") even if an individual step fails, so the CLI and
+    report generation never break on partial results.
+    """
 
     def __init__(self, wordlist_path: str = None):
         self.resolver = DNSResolver()
-        self.subenum = SubdomainEnumerator(wordlist_path or "data/wordlists/common.txt")
+        # Default wordlist is module-relative (works from any CWD).
+        self.subenum = SubdomainEnumerator(wordlist_path)
         self.zonetransfer = ZoneTransfer()
 
     def scan(self, domain: str, scan_type: str = "basic") -> Dict:
-        """Perform complete DNS scan"""
+        """Perform a DNS scan; each step degrades independently on error."""
         results = {
             "domain": domain,
             "records": {},
@@ -460,21 +507,36 @@ class DNSScanner:
         }
 
         print(f"[*] Getting DNS records for {domain}...")
-        results["records"] = self.resolver.get_all_records(domain)
+        try:
+            results["records"] = self.resolver.get_all_records(domain)
+        except Exception as e:
+            print(f"[!] DNS record lookup failed for {domain}: {e}")
 
         print(f"[*] Checking SPF for {domain}...")
-        results["spf"] = self.resolver.check_spf(domain)
+        try:
+            results["spf"] = self.resolver.check_spf(domain)
+        except Exception as e:
+            print(f"[!] SPF check failed for {domain}: {e}")
 
         print(f"[*] Checking DMARC for {domain}...")
-        results["dmarc"] = self.resolver.check_dmarc(domain)
+        try:
+            results["dmarc"] = self.resolver.check_dmarc(domain)
+        except Exception as e:
+            print(f"[!] DMARC check failed for {domain}: {e}")
 
-        if scan_type in ["full", "subdomains"]:
+        if scan_type in ("full", "subdomains"):
             print(f"[*] Enumerating subdomains for {domain}...")
-            results["subdomains"] = self.subenum.enumerate(domain)
+            try:
+                results["subdomains"] = self.subenum.enumerate(domain)
+            except Exception as e:
+                print(f"[!] Subdomain enumeration failed for {domain}: {e}")
 
         if scan_type == "full":
             print(f"[*] Checking zone transfer for {domain}...")
-            results["zone_transfer"] = self.zonetransfer.check_axfr_enabled(domain)
+            try:
+                results["zone_transfer"] = self.zonetransfer.check_axfr_enabled(domain)
+            except Exception as e:
+                print(f"[!] Zone transfer check failed for {domain}: {e}")
 
         return results
 

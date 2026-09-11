@@ -1,28 +1,49 @@
 """OSINT EYE - CSV & HTML Export"""
 
 import csv
-import io
 from typing import Dict, List
 from datetime import datetime
+from html import escape as html_escape
+
+
+def _d(value) -> Dict:
+    """Return value if dict else {} (defensive accessor for scan data)."""
+    return value if isinstance(value, dict) else {}
+
+
+def _l(value) -> List:
+    """Return value if list else []."""
+    return value if isinstance(value, list) else []
+
+
+def _cve_sev(cve: Dict) -> Dict:
+    """Normalise the many shapes a CVE 'severity' field can take."""
+    sev = cve.get("severity")
+    if isinstance(sev, list) and sev and isinstance(sev[0], dict):
+        return sev[0]
+    if isinstance(sev, dict):
+        return sev
+    return {}
 
 
 class CSVExporter:
-    """Export scan results to CSV"""
+    """Export scan results to CSV files (subdomains, ports, emails, CVEs)."""
 
     def export_subdomains(self, results: Dict, filename: str = None) -> str:
+        results = _d(results)
         if not filename:
-            filename = f"subdomains_{results.get('target', 'unknown')}.csv"
+            filename = f"subdomains_{results.get('target') or 'unknown'}.csv"
 
         rows = []
-        modules = results.get("modules", {})
+        modules = _d(results.get("modules"))
 
-        for sub in modules.get("dns", {}).get("subdomains", []):
+        for sub in _l(_d(modules.get("dns")).get("subdomains")):
             rows.append({"subdomain": sub, "source": "dns", "ip": ""})
 
-        for sub in modules.get("certs", {}).get("subdomains", []):
+        for sub in _l(_d(modules.get("certs")).get("subdomains")):
             rows.append({"subdomain": sub, "source": "cert_transparency", "ip": ""})
 
-        for sub in modules.get("permutation", {}).get("subdomains", []):
+        for sub in _l(_d(modules.get("permutation")).get("subdomains")):
             rows.append({"subdomain": sub, "source": "permutation", "ip": ""})
 
         seen = set()
@@ -40,18 +61,19 @@ class CSVExporter:
         return filename
 
     def export_ports(self, results: Dict, filename: str = None) -> str:
+        results = _d(results)
         if not filename:
-            filename = f"ports_{results.get('target', 'unknown')}.csv"
+            filename = f"ports_{results.get('target') or 'unknown'}.csv"
 
         rows = []
-        services = results.get("modules", {}).get("network", {}).get("services", [])
+        network = _d(_d(results.get("modules")).get("network"))
+        services = _l(network.get("services"))
 
         for svc in services:
+            svc = _d(svc)
             rows.append(
                 {
-                    "host": results.get("modules", {})
-                    .get("network", {})
-                    .get("host", ""),
+                    "host": network.get("host", ""),
                     "port": svc.get("port", ""),
                     "protocol": svc.get("protocol", ""),
                     "service": svc.get("service", ""),
@@ -71,10 +93,11 @@ class CSVExporter:
         return filename
 
     def export_emails(self, results: Dict, filename: str = None) -> str:
+        results = _d(results)
         if not filename:
-            filename = f"emails_{results.get('target', 'unknown')}.csv"
+            filename = f"emails_{results.get('target') or 'unknown'}.csv"
 
-        emails = results.get("modules", {}).get("emails", {}).get("emails_found", [])
+        emails = _l(_d(_d(results.get("modules")).get("emails")).get("emails_found"))
 
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
@@ -85,18 +108,20 @@ class CSVExporter:
         return filename
 
     def export_cves(self, results: Dict, filename: str = None) -> str:
+        results = _d(results)
         if not filename:
-            filename = f"cves_{results.get('target', 'unknown')}.csv"
+            filename = f"cves_{results.get('target') or 'unknown'}.csv"
 
         rows = []
-        for cve in results.get("modules", {}).get("cve", {}).get("cves", []):
-            sev = cve.get("severity", [{}])[0] if cve.get("severity") else {}
+        for cve in _l(_d(_d(results.get("modules")).get("cve")).get("cves")):
+            cve = _d(cve)
+            sev = _cve_sev(cve)
             rows.append(
                 {
                     "cve_id": cve.get("id", ""),
                     "score": sev.get("score", ""),
                     "severity": sev.get("severity", ""),
-                    "description": cve.get("description", "")[:200],
+                    "description": str(cve.get("description", ""))[:200],
                 }
             )
 
@@ -109,15 +134,17 @@ class CSVExporter:
 
         return filename
 
-    def export_all(self, results: Dict, prefix: str = None) -> List[str]:
-        if not prefix:
-            prefix = f"osint_eye_{results.get('target', 'unknown')}"
+    def export_all(self, results: Dict, base: str = None) -> List[str]:
+        """Export all CSVs using ``base`` as filename prefix; returns the paths."""
+        results = _d(results)
+        if not base:
+            base = f"osint_eye_{results.get('target') or 'unknown'}"
 
         files = []
-        files.append(self.export_subdomains(results, f"{prefix}_subdomains.csv"))
-        files.append(self.export_ports(results, f"{prefix}_ports.csv"))
-        files.append(self.export_emails(results, f"{prefix}_emails.csv"))
-        files.append(self.export_cves(results, f"{prefix}_cves.csv"))
+        files.append(self.export_subdomains(results, f"{base}_subdomains.csv"))
+        files.append(self.export_ports(results, f"{base}_ports.csv"))
+        files.append(self.export_emails(results, f"{base}_emails.csv"))
+        files.append(self.export_cves(results, f"{base}_cves.csv"))
 
         return files
 
@@ -126,8 +153,9 @@ class HTMLReporter:
     """Generate HTML reports with embedded CSS"""
 
     def generate(self, results: Dict, filename: str = None) -> str:
+        results = _d(results)
         if not filename:
-            filename = f"report_{results.get('target', 'unknown')}.html"
+            filename = f"report_{results.get('target') or 'unknown'}.html"
 
         html = self._build_html(results)
 
@@ -138,9 +166,10 @@ class HTMLReporter:
         return filename
 
     def _build_html(self, results: Dict) -> str:
-        target = results.get("target", "Unknown")
-        date = results.get("scan_date", datetime.now().isoformat())
-        modules = results.get("modules", {})
+        results = _d(results)
+        target = results.get("target") or "Unknown"
+        date = results.get("scan_date") or datetime.now().isoformat()
+        modules = _d(results.get("modules"))
 
         sections = []
         sections.append(self._html_header(target, date))
@@ -161,7 +190,7 @@ class HTMLReporter:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OSINT EYE Report - {target}</title>
+<title>OSINT EYE Report - {html_escape(str(target))}</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; color: #333; }}
 .container {{ max-width: 1200px; margin: 0 auto; }}
@@ -187,15 +216,16 @@ tr:hover {{ background: #f8f9fa; }}
 <body>
 <div class="container">
 <h1>OSINT EYE - Reconnaissance Report</h1>
-<p><strong>Target:</strong> {target} | <strong>Date:</strong> {date}</p>"""
+<p><strong>Target:</strong> {html_escape(str(target))} | <strong>Date:</strong> {html_escape(str(date))}</p>"""
 
     def _html_summary(self, modules: Dict) -> str:
-        dns_count = len(modules.get("dns", {}).get("subdomains", []))
-        perm_count = modules.get("permutation", {}).get("total_found", 0)
-        net_services = modules.get("network", {}).get("services", [])
-        open_ports = len([s for s in net_services if s.get("state") == "open"])
-        email_count = len(modules.get("emails", {}).get("emails_found", []))
-        cve_count = len(modules.get("cve", {}).get("cves", []))
+        modules = _d(modules)
+        dns_count = len(_l(_d(modules.get("dns")).get("subdomains")))
+        perm_count = _d(modules.get("permutation")).get("total_found", 0) or 0
+        net_services = _l(_d(modules.get("network")).get("services"))
+        open_ports = len([s for s in net_services if _d(s).get("state") == "open"])
+        email_count = len(_l(_d(modules.get("emails")).get("emails_found")))
+        cve_count = len(_l(_d(modules.get("cve")).get("cves")))
 
         return f"""<div class="card">
 <h2>Summary</h2>
@@ -206,117 +236,137 @@ tr:hover {{ background: #f8f9fa; }}
 </div>"""
 
     def _html_dns(self, dns: Dict) -> str:
+        dns = _d(dns)
         if not dns:
             return ""
 
         html = '<div class="card"><h2>DNS Findings</h2>'
 
-        subs = dns.get("subdomains", [])
+        subs = _l(dns.get("subdomains"))
         if subs:
             html += (
                 f"<h3>Subdomains ({len(subs)})</h3><table><tr><th>Subdomain</th></tr>"
             )
             for sub in subs[:50]:
-                html += f"<tr><td><code>{sub}</code></td></tr>"
+                html += f"<tr><td><code>{html_escape(str(sub))}</code></td></tr>"
             html += "</table>"
 
         html += "</div>"
         return html
 
     def _html_network(self, network: Dict) -> str:
+        network = _d(network)
         if not network:
             return ""
 
         html = '<div class="card"><h2>Network Findings</h2>'
-        services = [s for s in network.get("services", []) if s.get("state") == "open"]
+        services = [s for s in _l(network.get("services")) if _d(s).get("state") == "open"]
 
         if services:
             html += "<table><tr><th>Port</th><th>Protocol</th><th>Service</th><th>Version</th></tr>"
             for svc in services:
-                html += f"<tr><td>{svc.get('port')}</td><td>{svc.get('protocol')}</td><td>{svc.get('service')}</td><td>{svc.get('version', '')}</td></tr>"
+                svc = _d(svc)
+                html += (
+                    f"<tr><td>{html_escape(str(svc.get('port', '')))}</td>"
+                    f"<td>{html_escape(str(svc.get('protocol', '')))}</td>"
+                    f"<td>{html_escape(str(svc.get('service', '')))}</td>"
+                    f"<td>{html_escape(str(svc.get('version', '')))}</td></tr>"
+                )
             html += "</table>"
 
         html += "</div>"
         return html
 
     def _html_web(self, web: Dict) -> str:
+        web = _d(web)
         if not web:
             return ""
 
         html = '<div class="card"><h2>Web Findings</h2>'
 
-        techs = web.get("technologies", {}).get("technologies", [])
+        techs = _l(_d(web.get("technologies")).get("technologies"))
         if techs:
-            html += f"<h3>Technologies</h3><p>{', '.join(techs)}</p>"
+            html += f"<h3>Technologies</h3><p>{html_escape(', '.join(str(t) for t in techs))}</p>"
 
-        sensitive = web.get("endpoints", {}).get("sensitive", [])
+        sensitive = _l(_d(web.get("endpoints")).get("sensitive"))
         if sensitive:
             html += f"<h3>Sensitive Files ({len(sensitive)})</h3><table><tr><th>Path</th><th>Status</th></tr>"
             for s in sensitive:
-                html += f"<tr><td><code>{s.get('path')}</code></td><td>{s.get('status')}</td></tr>"
+                s = _d(s)
+                html += f"<tr><td><code>{html_escape(str(s.get('path', '')))}</code></td><td>{html_escape(str(s.get('status', '')))}</td></tr>"
             html += "</table>"
 
         html += "</div>"
         return html
 
     def _html_cloud(self, cloud: Dict) -> str:
+        cloud = _d(cloud)
         if not cloud:
             return ""
 
         html = '<div class="card"><h2>Cloud Buckets</h2>'
-        found = cloud.get("found", [])
+        found = _l(cloud.get("found"))
 
         if found:
             html += "<table><tr><th>URL</th><th>Provider</th><th>Public</th></tr>"
             for b in found:
+                b = _d(b)
                 badge = (
                     '<span class="badge badge-critical">PUBLIC</span>'
                     if b.get("public")
                     else '<span class="badge badge-info">Private</span>'
                 )
-                html += f"<tr><td>{b.get('url')}</td><td>{b.get('provider')}</td><td>{badge}</td></tr>"
+                html += f"<tr><td>{html_escape(str(b.get('url', '')))}</td><td>{html_escape(str(b.get('provider', '')))}</td><td>{badge}</td></tr>"
             html += "</table>"
 
         html += "</div>"
         return html
 
     def _html_emails(self, emails: Dict) -> str:
+        emails = _d(emails)
         if not emails:
             return ""
 
         html = '<div class="card"><h2>Email Addresses</h2>'
-        found = emails.get("emails_found", [])
+        found = _l(emails.get("emails_found"))
 
         if found:
             html += "<table><tr><th>Email</th></tr>"
             for email in found:
-                html += f"<tr><td>{email}</td></tr>"
+                html += f"<tr><td>{html_escape(str(email))}</td></tr>"
             html += "</table>"
 
         html += "</div>"
         return html
 
     def _html_cves(self, cves: Dict) -> str:
+        cves = _d(cves)
         if not cves:
             return ""
 
         html = '<div class="card"><h2>CVEs</h2>'
-        cve_list = cves.get("cves", [])
+        cve_list = _l(cves.get("cves"))
 
         if cve_list:
             html += "<table><tr><th>CVE</th><th>Score</th><th>Severity</th><th>Description</th></tr>"
             for cve in cve_list[:20]:
-                sev = cve.get("severity", [{}])[0] if cve.get("severity") else {}
+                cve = _d(cve)
+                sev = _cve_sev(cve)
                 score = sev.get("score", "N/A")
-                severity = sev.get("severity", "N/A")
+                severity = str(sev.get("severity", "N/A"))
                 badge_class = {
                     "CRITICAL": "critical",
                     "HIGH": "high",
                     "MEDIUM": "medium",
                     "LOW": "low",
-                }.get(severity, "info")
-                desc = cve.get("description", "")[:100]
-                html += f"<tr><td>{cve.get('id')}</td><td>{score}</td><td><span class='badge badge-{badge_class}'>{severity}</span></td><td>{desc}</td></tr>"
+                }.get(severity.upper(), "info")
+                desc = str(cve.get("description", ""))[:100]
+                html += (
+                    f"<tr><td>{html_escape(str(cve.get('id', '')))}</td>"
+                    f"<td>{html_escape(str(score))}</td>"
+                    f"<td><span class='badge badge-{badge_class}'>{html_escape(severity)}</span></td>"
+                    f"<td>{html_escape(desc)}</td></tr>"
+                )
             html += "</table>"
 
         html += "</div>"

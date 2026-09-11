@@ -2,8 +2,8 @@
 
 import requests
 import re
-from typing import Dict, List, Optional, Set
-from urllib.parse import urljoin, urlparse
+from typing import Dict, List
+from urllib.parse import urljoin
 import concurrent.futures
 
 
@@ -146,7 +146,12 @@ class TechDetector:
         }
 
     def detect(self, url: str) -> Dict:
-        """Detect technologies on a URL"""
+        """Detect technologies on a URL (never raises; see result["error"]).
+
+        The returned dict always contains a JSON-serialisable
+        ``technologies`` list (possibly empty), so report generation is
+        safe even when the request fails mid-analysis.
+        """
         result = {
             "url": url,
             "technologies": set(),
@@ -191,10 +196,12 @@ class TechDetector:
                         result["technologies"].add(tech)
                         break
 
-            result["technologies"] = sorted(list(result["technologies"]))
-
         except Exception as e:
             result["error"] = str(e)
+        finally:
+            # Always serialise to a sorted list (a raw set would break
+            # json.dumps in the reporting layer if an error occurred).
+            result["technologies"] = sorted(list(result["technologies"]))
 
         return result
 
@@ -223,7 +230,12 @@ class EndpointDiscovery:
             }
         )
 
-        self.common_paths = [
+        # Ordered dedup: probing the same path twice just wastes requests.
+        self.common_paths = list(dict.fromkeys(self._build_common_paths()))
+        self.sensitive_paths = list(dict.fromkeys(self._build_sensitive_paths()))
+
+    def _build_common_paths(self) -> List[str]:
+        return [
             "/admin",
             "/admin/",
             "/admin/login",
@@ -428,7 +440,9 @@ class EndpointDiscovery:
             "/zookeeper",
         ]
 
-        self.sensitive_paths = [
+    @staticmethod
+    def _build_sensitive_paths() -> List[str]:
+        return [
             "/.env",
             "/.env.local",
             "/.env.production",

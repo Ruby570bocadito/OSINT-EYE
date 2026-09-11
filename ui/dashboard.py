@@ -1,8 +1,12 @@
-"""OSINT EYE - Web Dashboard (Flask + D3.js)"""
+"""OSINT EYE - Web Dashboard (Flask + D3.js)
 
-from flask import Flask, render_template_string, jsonify, request, send_from_directory
+Loads scan-result JSON files (tolerating missing/renamed paths) and serves a
+local-only web dashboard on 127.0.0.1. Every REST endpoint is defensive and
+never raises a 500 on malformed or empty scan data.
+"""
+
+from flask import Flask, render_template_string, jsonify
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +15,9 @@ app.config["JSON_SORT_KEYS"] = False
 
 SCAN_RESULTS = {}
 SCAN_HISTORY = []
+
+# Message shown in the web UI when a scan file could not be located.
+LAST_LOAD_WARNING = None
 
 
 @app.route("/")
@@ -24,6 +31,7 @@ def list_scans():
         {
             "scans": SCAN_HISTORY,
             "total": len(SCAN_HISTORY),
+            "warning": LAST_LOAD_WARNING,
         }
     )
 
@@ -136,24 +144,130 @@ def get_summary(target):
     )
 
 
-def load_scan_results(filepath: str):
-    """Load scan results from JSON file"""
-    with open(filepath) as f:
-        data = json.load(f)
+def _empty_scan_data(target: str = "demo") -> dict:
+    """Safe, empty demo payload so the dashboard always renders something."""
+    return {
+        "target": target,
+        "scan_date": datetime.now().isoformat(),
+        "depth": "demo",
+        "modules": {
+            "dns": {"subdomains": [], "records": {}},
+            "certs": {"subdomains": []},
+            "permutation": {"subdomains": []},
+            "network": {"services": []},
+            "web": {"technologies": {"technologies": []}},
+            "emails": {"emails_found": []},
+            "cloud_buckets": {"found": [], "public": []},
+            "cve": {"cves": []},
+        },
+        "correlation": {
+            "attack_surface_score": {"score": 0, "severity": "LOW", "factors": []}
+        },
+        "mitre": {"findings": [], "total_findings": 0},
+        "attack_chains": [],
+        "graph": {"nodes": [], "edges": []},
+        "demo": True,
+    }
 
-    target = data.get("target", "unknown")
+
+def _resolve_results_path(filepath: str):
+    """Resolve a scan-results path tolerantly.
+
+    Order of attempts:
+      1. the path exactly as given,
+      2. the path + '.json' (osint_eye.py sometimes passes the base name),
+      3. the newest '<stem>*.json' match in the working directory,
+      4. the newest 'osint_eye_*.json' file in the working directory.
+
+    Returns a Path or None when nothing usable exists.
+    """
+    if not filepath:
+        return None
+
+    candidates = [Path(filepath)]
+    if not str(filepath).endswith(".json"):
+        candidates.append(Path(str(filepath) + ".json"))
+
+    for cand in candidates:
+        if cand.is_file():
+            return cand
+
+    try:
+        stem = Path(filepath).stem or ""
+        here = Path.cwd()
+        for pattern in (f"{stem}*.json" if stem else None, "osint_eye_*.json"):
+            if not pattern:
+                continue
+            matches = sorted(
+                (p for p in here.glob(pattern) if p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if matches:
+                return matches[0]
+    except OSError:
+        pass
+
+    return None
+
+
+def load_scan_results(filepath: str) -> str:
+    """Load scan results from a JSON file — never raises.
+
+    Accepts paths with or without the .json extension; falls back to the most
+    recent matching JSON in the working directory; finally loads safe demo
+    data so the dashboard still renders (warning shown in the web UI).
+
+    Returns the target key the data was stored under.
+    """
+    global LAST_LOAD_WARNING
+    LAST_LOAD_WARNING = None
+
+    data = None
+    resolved = _resolve_results_path(filepath)
+    if resolved is not None:
+        try:
+            with open(resolved, encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                data = loaded
+            else:
+                LAST_LOAD_WARNING = (
+                    f"{resolved} does not contain a JSON object; showing demo data."
+                )
+        except (OSError, ValueError) as exc:
+            LAST_LOAD_WARNING = f"Could not read {resolved}: {exc}"
+    else:
+        LAST_LOAD_WARNING = (
+            f"Scan file '{filepath}' (or any matching .json) not found — "
+            "showing empty demo data."
+        )
+
+    if data is None:
+        data = _empty_scan_data()
+        print(f"[!] {LAST_LOAD_WARNING}")
+    elif LAST_LOAD_WARNING is None and filepath and not str(filepath).endswith(".json"):
+        # Friendly note when the extension had to be guessed.
+        if str(resolved) != str(filepath):
+            LAST_LOAD_WARNING = f"Loaded {resolved} (requested: '{filepath}')"
+            print(f"[*] {LAST_LOAD_WARNING}")
+
+    target = str(data.get("target") or "unknown")
     SCAN_RESULTS[target] = data
     SCAN_HISTORY.append(
         {
             "target": target,
-            "date": data.get("scan_date", datetime.now().isoformat()),
-            "depth": data.get("depth", "unknown"),
+            "date": data.get("scan_date") or datetime.now().isoformat(),
+            "depth": data.get("depth") or "unknown",
+            "demo": bool(data.get("demo")),
+            "warning": LAST_LOAD_WARNING,
         }
     )
+    return target
 
 
 def start_dashboard(host="127.0.0.1", port=5000, debug=False):
-    """Start the web dashboard"""
+    """Start the web dashboard (binds to localhost by default)"""
     print(f"[*] Starting OSINT EYE Dashboard at http://{host}:{port}")
     app.run(host=host, port=port, debug=debug)
 
@@ -200,6 +314,7 @@ DASHBOARD_HTML = """
         .chain-card { background: #16213e; border-left: 4px solid #e74c3c; padding: 15px; margin-bottom: 10px; border-radius: 0 8px 8px 0; }
         .chain-card h4 { color: #e74c3c; margin-bottom: 8px; }
         .chain-step { padding: 5px 0 5px 15px; border-left: 2px solid #0f3460; margin-left: 10px; font-size: 13px; }
+        .warn-banner { display: none; background: #3a2c10; border: 1px solid #f39c12; color: #ffd48a; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
         @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
     </style>
 </head>
@@ -213,6 +328,7 @@ DASHBOARD_HTML = """
     </div>
 
     <div class="container">
+        <div class="warn-banner" id="warn-banner"></div>
         <div class="target-selector" id="target-selector"></div>
 
         <div class="stats-row" id="stats-row">
@@ -257,6 +373,14 @@ DASHBOARD_HTML = """
             const countEl = document.getElementById('scan-count');
             countEl.textContent = `${data.total} scan(s) loaded`;
 
+            const banner = document.getElementById('warn-banner');
+            if (data.warning) {
+                banner.textContent = 'Warning: ' + data.warning;
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+
             selector.innerHTML = '';
             data.scans.forEach(s => {
                 const btn = document.createElement('button');
@@ -277,15 +401,17 @@ DASHBOARD_HTML = """
                 b.classList.toggle('active', b.textContent === target);
             });
 
-            const resp = await fetch(`/api/scan/${target}/summary`);
+            const resp = await fetch(`/api/scan/${encodeURIComponent(target)}/summary`);
+            if (!resp.ok) { return; }
             const summary = await resp.json();
 
-            document.getElementById('stat-subs').textContent = summary.subdomains;
-            document.getElementById('stat-ports').textContent = summary.open_ports;
-            document.getElementById('stat-techs').textContent = summary.technologies.length;
-            document.getElementById('stat-cves').textContent = summary.cves;
-            document.getElementById('stat-emails').textContent = summary.emails;
-            document.getElementById('stat-score').textContent = summary.attack_surface_score.score || '-';
+            document.getElementById('stat-subs').textContent = summary.subdomains ?? 0;
+            document.getElementById('stat-ports').textContent = summary.open_ports ?? 0;
+            document.getElementById('stat-techs').textContent = (summary.technologies || []).length;
+            document.getElementById('stat-cves').textContent = summary.cves ?? 0;
+            document.getElementById('stat-emails').textContent = summary.emails ?? 0;
+            const score = summary.attack_surface_score || {};
+            document.getElementById('stat-score').textContent = (score.score != null && score.score !== 0) ? score.score : (score.score === 0 ? '0' : '-');
 
             loadPorts(target);
             loadGraph(target);
@@ -294,17 +420,19 @@ DASHBOARD_HTML = """
         }
 
         async function loadPorts(target) {
-            const resp = await fetch(`/api/scan/${target}/ports`);
+            const resp = await fetch(`/api/scan/${encodeURIComponent(target)}/ports`);
+            if (!resp.ok) { return; }
             const data = await resp.json();
             const container = document.getElementById('ports-table');
+            const ports = data.ports || [];
 
-            if (data.ports.length === 0) {
+            if (ports.length === 0) {
                 container.innerHTML = '<p style="color: #7f8c8d;">No open ports found</p>';
                 return;
             }
 
             let html = '<table><tr><th>Port</th><th>Protocol</th><th>Service</th><th>Version</th></tr>';
-            data.ports.forEach(p => {
+            ports.forEach(p => {
                 html += `<tr><td>${p.port}</td><td>${p.protocol}</td><td>${p.service}</td><td>${p.version || ''}</td></tr>`;
             });
             html += '</table>';
@@ -312,7 +440,8 @@ DASHBOARD_HTML = """
         }
 
         async function loadGraph(target) {
-            const resp = await fetch(`/api/scan/${target}/graph`);
+            const resp = await fetch(`/api/scan/${encodeURIComponent(target)}/graph`);
+            if (!resp.ok) { return; }
             const graph = await resp.json();
             const container = document.getElementById('graph-container');
             container.innerHTML = '';
@@ -373,18 +502,20 @@ DASHBOARD_HTML = """
         }
 
         async function loadMitre(target) {
-            const resp = await fetch(`/api/scan/${target}/mitre`);
+            const resp = await fetch(`/api/scan/${encodeURIComponent(target)}/mitre`);
+            if (!resp.ok) { return; }
             const data = await resp.json();
             const container = document.getElementById('mitre-table');
+            const findings = data.findings || [];
 
-            if (!data.findings || data.findings.length === 0) {
+            if (findings.length === 0) {
                 container.innerHTML = '<p style="color: #7f8c8d;">No MITRE findings</p>';
                 return;
             }
 
             let html = '<table><tr><th>Technique</th><th>Name</th><th>Tactic</th><th>Severity</th></tr>';
-            data.findings.forEach(f => {
-                const badgeClass = f.severity.toLowerCase();
+            findings.forEach(f => {
+                const badgeClass = (f.severity || 'info').toLowerCase();
                 html += `<tr><td>${f.technique_id}</td><td>${f.technique_name}</td><td>${f.tactic}</td><td><span class="badge badge-${badgeClass}">${f.severity}</span></td></tr>`;
             });
             html += '</table>';
@@ -392,11 +523,12 @@ DASHBOARD_HTML = """
         }
 
         async function loadChains(target) {
-            const resp = await fetch(`/api/scan/${target}/chains`);
+            const resp = await fetch(`/api/scan/${encodeURIComponent(target)}/chains`);
+            if (!resp.ok) { return; }
             const chains = await resp.json();
             const container = document.getElementById('chains-container');
 
-            if (chains.length === 0) {
+            if (!chains || chains.length === 0) {
                 container.innerHTML = '<p style="color: #7f8c8d;">No attack chains identified</p>';
                 return;
             }
@@ -425,9 +557,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1:
         for filepath in sys.argv[1:]:
-            if filepath.endswith(".json"):
-                load_scan_results(filepath)
-                print(f"[*] Loaded: {filepath}")
+            target = load_scan_results(filepath)  # tolerates missing .json
+            print(f"[*] Loaded '{target}' from: {filepath}")
 
     if not SCAN_RESULTS:
         print(

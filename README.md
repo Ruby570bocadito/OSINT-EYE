@@ -1,466 +1,319 @@
-
 <div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d47a1,100:001529&height=250&section=header&text=Horizon-Intel&fontSize=70&fontColor=fff&animation=fadeIn&fontAlignY=38&desc=Open-Source%20Intelligence%20%26%20Attack%20Surface%20Reconnaissance&descAlignY=55&descAlign=50" width="100%" />
+
+<img src="https://capsule-render.vercel.app/api?type=cylinder&color=0:0f172a,50:2563eb,100:7c3aed&height=220&section=header&text=OSINT%20EYE&fontSize=72&fontColor=fff&animation=blink&fontAlignY=35&desc=AI-Powered%20Attack%20Surface%20Intelligence&descAlignY=58&descAlign=50" width="100%" />
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-2.1.0-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/Tests-61%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
+
 </div>
 
-<p align="center">
-  <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=22&duration=3500&pause=500&color=3B82F6&center=true&vCenter=true&width=600&lines=Automated+Reconnaissance+from+Public+Sources;DNS+Enumeration+%26+Subdomain+Discovery;Web+%26+Certificate+Intelligence;GitHub+%26+Google+Dorking+Engine;NVD+%2F+CVE+Vulnerability+Lookup;OSINT+%7C+Reconnaissance+%7C+Analysis" alt="Typing SVG" />
-  </a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/OSINT-Platform-1E90FF?style=for-the-badge&logo=internetexplorer&logoColor=white" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white" />
-  <img src="https://img.shields.io/badge/Version-2.0.0-blue?style=for-the-badge&logo=semver&logoColor=white" />
-  <img src="https://img.shields.io/badge/Status-Active-success?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Contributions-Welcome-brightgreen?style=for-the-badge&logo=github&logoColor=white" />
-</p>
-
-<p align="center">
-  <b>Formerly known as</b> <code>OSINT-EYE</code> &nbsp;|&nbsp; <b>Now rebranded to</b> <code>Horizon-Intel</code>
-</p>
+<h3 align="center">Recon automatizado desde fuentes públicas · 100% gratuito · IA local vía Ollama</h3>
 
 ---
 
-## 📋 Table of Contents
+## 📋 Tabla de contenidos
 
-- [Overview](#-overview)
-- [Architecture](#-architecture)
-- [Features](#-features)
-- [Modules](#-modules)
-- [Quick Start](#-quick-start)
-- [Usage Examples](#-usage-examples)
-- [Web Dashboard](#-web-dashboard)
-- [Configuration](#-configuration)
+- [Demo](#-demo)
+- [¿Qué es?](#-qué-es)
+- [Módulos](#-módulos)
+- [Instalación](#-instalación)
+- [Uso rápido](#-uso-rápido)
+- [Dashboard web](#-dashboard-web)
+- [Exportación](#-exportación)
+- [Arquitectura](#-arquitectura)
 - [Roadmap](#-roadmap)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [Seguridad y uso responsable](#-seguridad-y-uso-responsable)
+- [Contribuir](#-contribuir)
+- [Licencia](#-licencia)
 
 ---
 
-## 🌐 Overview
+## 🎬 Demo
 
-**Horizon-Intel** is a modular **Open-Source Intelligence (OSINT)** and **Attack Surface Reconnaissance** platform. It automates data collection from public sources — DNS records, certificate transparency logs, web archives, WHOIS, GitHub code search, Google dorking, and NVD/CVE databases — and correlates findings into actionable intelligence.
+> Escaneo real contra `example.com` (módulos DNS, WHOIS, web, endpoints, CDN/WAF, cloud buckets, correlación, grafo, MITRE y chains):
 
-Built from the ground up as a comprehensive recon toolkit, it serves penetration testers, bug bounty hunters, SOC analysts, and security researchers.
+![OSINT EYE en acción](docs/assets/demo.gif)
 
-### Why Horizon-Intel?
+### Salida de la CLI
 
-| Capability | Description |
-|------------|-------------|
-| 🔍 **DNS Reconnaissance** | Subdomain enumeration, permutation, zone walking, takeover detection |
-| 🔐 **Certificate Intelligence** | Certificate transparency log scanning via crt.sh |
-| 🌐 **Web History** | Wayback Machine URL enumeration and content discovery |
-| 🖧 **Network Scanning** | Port scanning via python-nmap |
-| 🕵️ **OSINT Dorking** | GitHub code search + Google dorking automation |
-| 📋 **Vulnerability Lookup** | CVE/NVD database queries via nvdlib |
-| 🧠 **Correlation Engine** | Cross-references findings across all modules |
-| 📊 **Graph Analysis** | Entity relationship mapping and attack surface visualization |
-| 🤖 **AI Integration** | Local LLM analysis via Ollama |
-| 📝 **Reporting** | Markdown and PDF report generation with MITRE ATT&CK mapping |
-| 🌐 **Web Dashboard** | Flask-based interactive dashboard with D3.js visualization |
+| Banner + arranque del escaneo | Resumen ejecutivo |
+|---|---|
+| ![Banner y fases del scan](docs/assets/demo_scan.png) | ![Resumen con risk posture](docs/assets/demo_summary.png) |
 
----
-
-## 🏗 Architecture
-
-```mermaid
-graph LR
-    A[Public Sources] --> B[Data Collectors]
-    B --> C[Normalization Layer]
-    C --> D[Correlation Engine]
-    D --> E[(In-Memory / SQLite Cache)]
-    E --> F[Visualization Layer]
-    F --> G[Reports]
-
-    style A fill:#0d47a1,color:#fff
-    style B fill:#1565c0,color:#fff
-    style C fill:#1976d2,color:#fff
-    style D fill:#1e88e5,color:#fff
-    style E fill:#2196f3,color:#fff
-    style F fill:#42a5f5,color:#fff
-    style G fill:#64b5f6,color:#fff
-```
-
-### Data Flow
-
-```mermaid
-flowchart TD
-    subgraph Sources["🌐 Public Sources"]
-        S1[DNS / WHOIS]
-        S2[Certificate Logs]
-        S3[Wayback Machine]
-        S4[GitHub Search]
-        S5[Google Search]
-        S6[NVD / CVE]
-    end
-
-    subgraph Collectors["📡 Collectors"]
-        C1[DNS Scanner]
-        C2[Cert Scanner]
-        C3[Wayback Scanner]
-        C4[GitHub Dorker]
-        C5[Google Dorker]
-        C6[NVD Lookup]
-    end
-
-    subgraph Processing["⚙️ Processing"]
-        P1[Parser]
-        P2[Deduplicator]
-        P3[Enricher]
-    end
-
-    subgraph Storage["💾 Storage"]
-        DB[(In-Memory)]
-        CA[(SQLite Cache)]
-    end
-
-    subgraph Analysis["📊 Analysis"]
-        A1[Correlation Engine]
-        A2[Graph Analysis]
-        A3[Timeline Builder]
-        A4[LLM Analysis]
-    end
-
-    subgraph Output["📤 Output"]
-        O1[Dashboard]
-        O2[Markdown Reports]
-        O3[PDF Reports]
-        O4[MITRE Mapping]
-    end
-
-    Sources --> Collectors
-    Collectors --> Processing
-    Processing --> Storage
-    Storage --> Analysis
-    Analysis --> Output
-```
-
----
-
-## ✨ Features
-
-### 🔬 Reconnaissance Modules
-- **DNS Enumeration**: A, AAAA, MX, NS, TXT, CNAME, SOA records; subdomain brute-force; certificate transparency (crt.sh); subdomain permutation with takeover detection
-- **Web Intelligence**: Wayback Machine URL history, JavaScript endpoint discovery, technology fingerprinting
-- **Certificate Analysis**: SSL certificate transparency log scanning
-- **Network Scanning**: Port and service discovery via `python-nmap`
-- **WHOIS Lookups**: Domain registration and ownership data
-
-### 🕵️ OSINT Dorking
-- **GitHub Dorking**: Automated code search for API keys, credentials, AWS secrets, private keys, database connection strings, config files
-- **Google Dorking**: Automated search for login pages, admin panels, sensitive files, config files, backup files
-
-### 📋 Vulnerability Intelligence
-- **NVD/CVE Lookup**: Query the National Vulnerability Database for known vulnerabilities affecting discovered services
-
-### 🧠 AI Integration
-- **Ollama Engine**: Local LLM analysis of reconnaissance results for additional insights (fully offline, no cloud dependency)
-
-### 🔗 Correlation & Analysis
-- **Asset Correlator**: Cross-references DNS, certificate, network, and web data to build a unified asset inventory
-- **Graph Builder**: Entity relationship graph with interactive HTML visualization (powered by vis-network)
-- **Scan Diff Engine**: Compare results between targets and generate bounty-style reports
-- **MITRE ATT&CK Mapping**: Maps findings to the MITRE ATT&CK framework
-
-### 📝 Reporting
-- **Markdown Reporter**: Human-readable Markdown reports with sections per module
-- **PDF Reporter**: Professional PDF reports via ReportLab
-- **Bounty Reporter**: Bug-bounty-style formatted reports
-- **Neo4j Export**: Export relationship graph to Cypher queries
-
-### 🌐 Web Dashboard
-- Flask + D3.js interactive dashboard
-- REST API for scan results
-- Subdomain, port, graph, and MITRE visualization
-
----
-
-## 🧩 Modules
-
-| Module | File | Description |
-|--------|------|-------------|
-| **DNS Scanner** | `modules/dns/dns_scanner.py` | DNS record enumeration, subdomain discovery |
-| **Advanced DNS** | `modules/dns/advanced_dns.py` | Zone walking, DNSSEC, AXFR attempts |
-| **Subdomain Permutator** | `modules/dns/subdomain_permutator.py` | Subdomain permutation + takeover detection |
-| **Cert Scanner** | `modules/certs/cert_scanner.py` | Certificate transparency (crt.sh) scanning |
-| **Web Scanner** | `modules/web/web_scanner.py` | Technology fingerprinting, endpoint discovery |
-| **Wayback Scanner** | `modules/web/wayback.py` | Wayback Machine URL history |
-| **Network Scanner** | `modules/network/scanner.py` | Port scanning via python-nmap |
-| **WHOIS Scanner** | `modules/osint/whois.py` | Domain WHOIS lookups |
-| **GitHub Dorker** | `modules/osint/github.py` | GitHub code search dorking |
-| **Google Dorker** | `modules/osint/google.py` | Google search dorking |
-| **Cloud/Email** | `modules/osint/cloud_email.py` | Cloud bucket detection, email enumeration, CDN detection |
-| **CVE Scanner** | `modules/cve/nvd.py` | NVD vulnerability database queries |
-| **AI Engine** | `ai/llm_engine.py` | Ollama local LLM analysis |
-| **Correlation** | `core/correlator.py` | Cross-module asset correlation |
-| **Graph Builder** | `graph/builder.py` | Relationship graph with vis-network |
-| **Scan Diff** | `core/scan_diff.py` | Target comparison and diff reports |
-| **MITRE Mapper** | `reporting/mitre_mapper.py` | MITRE ATT&CK framework mapping |
-| **Monitor** | `core/monitor.py` | Subdomain monitoring and alerting |
-| **Plugins** | `core/plugins.py` | Plugin loading system |
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-```bash
-# Python 3.10+
-python --version  # > 3.10.x
-
-# Optional but recommended: nmap for network scanning
-nmap --version
-```
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/Ruby570bocadito/Horizon-Intel.git
-cd Horizon-Intel
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Run
-
-```bash
-# Basic reconnaissance on a domain
-python osint_eye.py example.com
-
-# Full scan with AI analysis
-python osint_eye.py example.com --depth full --rich
-
-# Scan multiple targets
-python osint_eye.py example.com test.com --stealth
-
-# Launch the web dashboard
-python osint_eye.py example.com --dashboard
-
-# Generate a PDF report
-python osint_eye.py example.com --pdf
-
-# Or with Docker
-docker build -t horizon-intel .
-docker run --rm horizon-intel example.com
-```
-
----
-
-## 💻 Usage Examples
-
-### Basic Domain Reconnaissance
-
-```bash
-# Quick scan with default modules
-python osint_eye.py example.com
-
-# Stealth mode (slower, lower footprint)
-python osint_eye.py example.com --stealth
-
-# In-depth scan with AI module
-python osint_eye.py example.com --depth full --rich
-```
-
-### View Available Modules
+### Catálogo de módulos
 
 ```bash
 python osint_eye.py --modules
 ```
 
-### Compare Two Targets
+![Catálogo de módulos](docs/assets/demo_modules.png)
+
+### Dashboard web y grafo interactivo
+
+| Dashboard Flask | Grafo de superficie de ataque |
+|---|---|
+| ![Dashboard web](docs/assets/demo_dashboard.png) | ![Grafo interactivo](docs/assets/demo_graph.png) |
+
+---
+
+## 🌐 ¿Qué es?
+
+**OSINT EYE** es una plataforma modular de **OSINT** (*Open-Source Intelligence*) y **reconocimiento de superficie de ataque**. Automatiza la recolección desde fuentes públicas — registros DNS, logs de *certificate transparency*, Wayback Machine, WHOIS, búsqueda de código en GitHub, *dorking* en Google y la base NVD/CVE — y **corrrela** todos los hallazgos en inteligencia accionable: puntuación de superficie de ataque, grafo de relaciones, cadenas de ataque potenciales y mapeado a MITRE ATT&CK.
+
+Diseñada para pentesters, bug bounty hunters, analistas SOC e investigadores de seguridad. Sin claves de API, sin costes, sin nube: la IA opcional corre en local con Ollama.
+
+### Por qué OSINT EYE
+
+- **Cero fricción**: `pip install -r requirements.txt` y listo — ninguna API key necesaria para ningún módulo.
+- **Correlación real**: los hallazgos de todos los módulos se cruzan en un inventario unificado de activos con puntuación de riesgo ponderada.
+- **Degradación elegante**: si falta `nmap` o una fuente externa está caída, el módulo se salta con un aviso claro y el escaneo continúa.
+- **Salidas profesionales**: JSON, Markdown, HTML, PDF (ReportLab), CSV, Burp XML, Metasploit JSON, capa MITRE Navigator y grafo HTML interactivo — todo en una sola pasada.
+- **Probado**: 61 tests unitarios que corren **offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
+
+---
+
+## 🧩 Módulos
+
+| Módulo | Descripción |
+|--------|-------------|
+| `dns` | Enumeración DNS (A/AAAA/MX/NS/TXT/CNAME/SOA), SPF/DMARC, fuerza bruta de subdominios |
+| `certs` | Certificate transparency vía crt.sh |
+| `wayback` | Historial de URLs y timeline de snapshots de Wayback Machine |
+| `network` | Escaneo de puertos y servicios vía nmap (opcional, se salta si no está instalado) |
+| `whois` | Datos de registro y propiedad del dominio |
+| `github` | Dorking de código en GitHub: claves API, secrets, configs expuestas |
+| `google` | Dorking en Google: paneles admin, ficheros sensibles, backups |
+| `cve` | Consulta NVD/CVE para los servicios descubiertos |
+| `web` | Fingerprinting de tecnologías HTTP |
+| `endpoints` | Descubrimiento de endpoints JS/HTML + sondeo de ficheros sensibles |
+| `cloud` | Descubrimiento de buckets (S3/GCP/Azure) y exposición pública |
+| `emails` | Enumeración de emails desde WHOIS y fuentes públicas |
+| `permutation` | Generación y resolución de permutaciones de subdominios |
+| `takeover` | Detección de subdomain takeover (CNAMEs colgantes) |
+| `cdn_waf` | Fingerprinting de CDN y WAF |
+| `correlation` | Correlación cruzada de activos + attack surface score |
+| `graph` | Grafo de relaciones con visualización HTML interactiva |
+| `mitre` | Mapeado a MITRE ATT&CK + exportación de capa Navigator |
+| `chains` | Constructor de cadenas de ataque (hipótesis multi-paso) |
+
+---
+
+## 📦 Instalación
+
+**Requisitos**: Python 3.10+ · opcional: `nmap` y `whois` en el PATH para los módulos de red.
 
 ```bash
-python osint_eye.py example.com evil.example.com --diff
+git clone https://github.com/Ruby570bocadito/OSINT-EYE.git
+cd OSINT-EYE
+
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+python osint_eye.py --help
 ```
 
-### Continuous Monitoring
+**Docker** (incluye nmap y whois):
 
 ```bash
-# Monitor subdomains of a domain
-python osint_eye.py example.com --monitor --monitor-interval 3600
+docker build -t osint-eye .
+docker run --rm -v "$PWD/output:/app/output" osint-eye example.com --no-ai
 ```
 
-### Web Dashboard
+**IA local opcional** (sin claves, todo offline):
 
 ```bash
-# Scan and launch dashboard
-python osint_eye.py example.com --dashboard
-
-# Then visit: http://localhost:5000
-```
-
-### Generate Reports
-
-```bash
-# Markdown report
-python osint_eye.py example.com -o report.md
-
-# PDF report
-python osint_eye.py example.com --pdf
-
-# Export full results as JSON
-python osint_eye.py example.com -o results.json
-```
-
-### Export to Neo4j
-
-```bash
-python osint_eye.py example.com --export-cypher results.cypher
-```
-
-### AI-Powered Analysis (requires Ollama)
-
-```bash
-# Install Ollama: https://ollama.ai
+# https://ollama.ai
 ollama pull llama3.2
+python osint_eye.py example.com --agent   # genera un playbook de análisis IA
+```
 
-# Run with AI analysis
+---
+
+## 🚀 Uso rápido
+
+```bash
+# Escaneo completo (4 fases concurrentes)
+python osint_eye.py example.com
+
+# Solo módulos concretos
+python osint_eye.py example.com --modules dns certs wayback cloud graph mitre
+
+# Ver el catálogo de módulos
+python osint_eye.py --modules
+
+# Modo sigiloso (menos peticiones, sin dorking)
+python osint_eye.py example.com --stealth
+
+# Escaneo rápido
+python osint_eye.py example.com --depth quick
+
+# Profundidad completa con endpoints, buckets, emails, takeover y chains
+python osint_eye.py example.com --depth full
+
+# Múltiples objetivos + diff entre ellos
+python osint_eye.py target1.com target2.com --diff
+
+# Todo lo exportable + informe PDF ejecutivo
+python osint_eye.py example.com -o output/mi_scan --pdf
+
+# Playbook IA (requiere Ollama en local)
 python osint_eye.py example.com --agent
 
-# Disable AI if desired
-python osint_eye.py example.com --no-ai
-```
+# Monitor daemon: alerta por webhook cuando aparece superficie nueva
+python osint_eye.py example.com --monitor --monitor-interval 3600 \
+    --webhook https://hooks.slack.com/services/xxx
 
-### Webhook Alerts
-
-```bash
-python osint_eye.py example.com --monitor --webhook https://hooks.slack.com/services/xxx
-```
-
----
-
-## 🌐 Web Dashboard
-
-Horizon-Intel includes a Flask + D3.js-based web dashboard for interactive visualization of scan results.
-
-```bash
-# Method 1: Scan and launch dashboard together
+# Dashboard web tras el escaneo
 python osint_eye.py example.com --dashboard
 
-# Method 2: Load existing results into dashboard
-python ui/dashboard.py results.json
+# Sin argumentos: asistente interactivo
+python osint_eye.py
 ```
 
-Then open **http://localhost:5000** in your browser.
+<details>
+<summary><b>Referencia completa de flags</b></summary>
 
-The dashboard provides:
-- Scan summary with statistics
-- Subdomain list with source attribution
-- Open ports and services table
-- Interactive relationship graph
-- MITRE ATT&CK mapping visualization
+| Flag | Descripción |
+|------|-------------|
+| `targets` | Dominio(s) o IP(s) objetivo (posicional; vacío = asistente) |
+| `--modules ...` | Ejecuta solo los módulos indicados; sin valores muestra el catálogo |
+| `--depth quick\|normal\|deep\|full` | Profundidad del escaneo (default: `normal`) |
+| `--stealth` | Modo sigiloso: menos peticiones y sin dorking |
+| `-o, --output BASE` | Base de nombre para las exportaciones |
+| `--pdf` | Informe PDF ejecutivo |
+| `--rich` | Volcado completo de resultados con tablas Rich |
+| `--diff` | Compara resultados entre múltiples objetivos |
+| `--dashboard` | Lanza el dashboard web al terminar |
+| `--monitor` | Daemon de monitorización continua |
+| `--monitor-interval N` | Segundos entre ciclos del monitor (default: 3600) |
+| `--webhook URL` | Webhook Discord/Slack para alertas del monitor |
+| `--agent` | Playbook de análisis con IA local (Ollama) |
+| `--no-ai` | Desactiva el módulo IA |
+| `--no-cache` | Desactiva la caché SQLite de resultados |
+| `--plugin-dir DIR` | Carga y ejecuta plugins propios |
+| `--export-cypher FILE` | Exporta el grafo a Cypher (Neo4j) |
+| `--profile default\|deep\|stealth` | Perfil de configuración predefinido |
 
-### REST API Endpoints
+</details>
 
-Once the dashboard is running, you can query results programmatically:
+---
+
+## 🌐 Dashboard web
 
 ```bash
-# List all scans
-curl http://localhost:5000/api/scans
+# Escanear y abrir dashboard
+python osint_eye.py example.com --dashboard
 
-# Get scan details
-curl http://localhost:5000/api/scan/example.com
+# O cargar resultados previos
+python ui/dashboard.py output/mi_scan.json
+# → http://127.0.0.1:5000
+```
 
-# Get discovered subdomains
-curl http://localhost:5000/api/scan/example.com/subdomains
+Incluye KPIs del escaneo, grafo de superficie interactivo, puertos/servicios, técnicas MITRE con severidad y cadenas de ataque ordenadas por riesgo. API REST disponible en `/api/scans`, `/api/scan/<target>`, `/api/scan/<target>/summary`, `/ports`, `/graph`, `/mitre`, `/chains`.
 
-# Get open ports
-curl http://localhost:5000/api/scan/example.com/ports
+---
 
-# Get relationship graph
-curl http://localhost:5000/api/scan/example.com/graph
+## 📤 Exportación
 
-# Get MITRE ATT&CK mapping
-curl http://localhost:5000/api/scan/example.com/mitre
+Una pasada con `-o` genera: **JSON** (resultados completos), **Markdown**, **HTML**, **PDF**, **CSV** por tipo de activo, **Burp XML**, **Metasploit JSON**, **MITRE Navigator layer**, **informe bounty** y **grafo HTML interactivo** (autónomo, sin CDN).
+
+```bash
+python osint_eye.py example.com -o output/recon_demo --pdf
 ```
 
 ---
 
-## ⚙️ Configuration
+## 🏗 Arquitectura
 
-Horizon-Intel is configured via CLI flags and a setup wizard. Run the wizard to customize your scan profile:
-
-```bash
-python osint_eye.py --wizard
+```mermaid
+flowchart LR
+    subgraph Collectors["📡 Colectores"]
+        M1[dns · certs · wayback]
+        M2[network · web · endpoints]
+        M3[github · google · cloud · emails]
+    end
+    subgraph Core["⚙️ Núcleo"]
+        C[Asset Correlator]
+        S[SQLite Cache]
+        P[Plugin System]
+    end
+    subgraph Analysis["📊 Análisis"]
+        A1[Attack Surface Score]
+        A2[Graph Builder]
+        A3[MITRE Mapper]
+        A4[Attack Chains]
+        A5[AI Engine · Ollama]
+    end
+    subgraph Output["📤 Salida"]
+        O1[Rich CLI]
+        O2[Dashboard Flask]
+        O3[PDF · MD · HTML · CSV]
+        O4[Burp · MSF · Navigator]
+    end
+    Collectors --> Core --> Analysis --> Output
 ```
 
-### Key CLI Options
-
-| Flag | Description |
-|------|-------------|
-| `targets` | Target domain(s) or IP(s) (positional argument) |
-| `--stealth` | Enable stealth mode (lower request rate) |
-| `--no-ai` | Disable AI analysis module |
-| `--no-cache` | Disable SQLite result caching |
-| `--output -o` | Output file path (JSON/MD auto-detected) |
-| `--depth` | Scan depth (`quick`, `normal`, `full`) |
-| `--diff` | Show comparison between multiple targets |
-| `--rich` | Use Rich TUI output format |
-| `--dashboard` | Launch web dashboard after scan |
-| `--monitor` | Enable continuous monitoring mode |
-| `--monitor-interval` | Monitoring interval in seconds |
-| `--webhook` | Webhook URL for alerts |
-| `--agent` | Enable AI agent analysis mode |
-| `--export-cypher` | Export graph to Neo4j Cypher file |
-| `--pdf` | Generate PDF report |
-| `--modules` | List all available modules |
+```
+osint_eye.py            # Orquestador: fases, CLI, exportación
+├── modules/            # Colectores por fuente (dns, certs, web, network, osint, cve)
+├── core/               # Correlator, caché SQLite, monitor, plugins, diff, async engine
+├── graph/              # Grafo NetworkX + export pyvis/Neo4j
+├── reporting/          # PDF, Markdown, HTML, CSV, Burp, MSF, MITRE
+├── ui/                 # Rich CLI, wizard, TUI Textual, dashboard Flask
+├── ai/                 # Motor IA local (Ollama)
+└── tests/              # 61 tests offline (pytest)
+```
 
 ---
 
 ## 🗺 Roadmap
 
-- [x] Core DNS and web reconnaissance (v1.0)
-- [x] GitHub and Google dorking engines (v1.5)
-- [x] Web dashboard with graph visualization (v2.0)
-- [x] PDF and MITRE ATT&CK reporting (v2.0)
-- [x] Correlation engine and scan diff (v2.0)
-- [x] AI integration via Ollama (v2.0)
-- [ ] Integration with Shodan / Censys APIs
-- [ ] Real-time alerting system with notifications
-- [ ] Historical scan trend analysis
-- [ ] Plugin marketplace
-- [ ] Masscan integration for faster network scanning
+- [x] Núcleo DNS/web/certificados (v1.0)
+- [x] Motores de dorking GitHub/Google (v1.5)
+- [x] Correlación, grafo, diff y bounty reports (v2.0)
+- [x] Dashboard Flask + exportadores (v2.0)
+- [x] IA local vía Ollama (v2.0)
+- [x] **v2.1**: CLI renovada, score ponderado con buckets/takeovers, monitor daemon estable, tests offline, CI multi-versión, Docker non-root
+- [ ] Integración Shodan / Censys (con clave propia)
+- [ ] Alertas push (Telegram/Discord nativo)
+- [ ] Análisis de tendencias entre escaneos históricos
+- [ ] Marketplace de plugins de la comunidad
 
 ---
 
-## 🤝 Contributing
+## ⚠️ Seguridad y uso responsable
 
-Contributions are what make the open source community amazing! Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Esta herramienta está pensada para **reconocimiento OSINT pasivo/semipasivo sobre activos propios o con autorización explícita** (bug bounty con scope, auditorías contratadas, laboratorios). Los módulos de red realizan peticiones activas — úsalos solo dentro del alcance autorizado. El equipo no se hace responsable del mal uso.
 
 ---
 
-## 📄 License
+## 🤝 Contribuir
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+1. Fork del proyecto
+2. Rama de feature (`git checkout -b feature/AmazingFeature`)
+3. Commit (`git commit -m 'Add some AmazingFeature'`)
+4. Push (`git push origin feature/AmazingFeature`)
+5. Abre un Pull Request
+
+Los PRs con tests (offline) y sin dependencias nuevas pesadas tienen prioridad.
 
 ---
 
-<p align="center">
-  <b>Horizon-Intel</b> — Open-Source Intelligence & Attack Surface Reconnaissance Platform
-  <br>
-  <a href="https://github.com/Ruby570bocadito/Horizon-Intel">GitHub</a>
-  ·
-  <a href="https://github.com/Ruby570bocadito/Horizon-Intel/issues">Report Bug</a>
-  ·
-  <a href="https://github.com/Ruby570bocadito/Horizon-Intel/issues">Request Feature</a>
-</p>
+## 📄 Licencia
 
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:001529,100:0d47a1&height=120&section=footer&text=—%20Open%20Source%20Intelligence%20for%20the%20Modern%20Era%20—&fontSize=18&fontColor=fff&animation=fadeIn" width="100%" />
-</p>
+Distribuido bajo licencia **MIT**. Ver [`LICENSE`](LICENSE).
+
+---
+
+<div align="center">
+
+**OSINT EYE** — *Open-Source Intelligence for the Modern Era*
+
+[🐛 Reportar bug](https://github.com/Ruby570bocadito/OSINT-EYE/issues) · [💡 Pedir feature](https://github.com/Ruby570bocadito/OSINT-EYE/issues) · [📖 CHANGELOG](CHANGELOG.md)
+
+</div>

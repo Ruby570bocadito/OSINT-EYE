@@ -1,16 +1,41 @@
-"""OSINT EYE - Advanced DNS Algorithms (DNSSEC, Reverse DNS, VHost)"""
+"""OSINT EYE - Advanced DNS Algorithms (DNSSEC, Reverse DNS, VHost)
 
-import dns.resolver
-import dns.query
-import dns.name
-import dns.reversename
-import dns.dnssec
-import dns.rdatatype
+Also hosts the TLS analyzer, HTTP security-headers auditor, JS endpoint
+discovery and parameter fuzzing helpers used by the recon pipeline.
+
+Contract consumed by osint_eye.py:
+    TLSAnalyzer().analyze(host) -> dict with "host", "protocols",
+    "certificate"
+    SecurityHeadersAuditor().audit(url) -> dict with "url", "score",
+    "grade", "missing_headers"
+
+All network steps are best-effort: failures are captured in the result
+dict ("error" key) instead of propagating to the caller.
+"""
+
+import re
 import socket
 import asyncio
-import aiohttp
-from typing import List, Dict, Set, Optional, Tuple
-from collections import defaultdict
+from typing import List, Dict, Optional
+from urllib.parse import urljoin, urlparse
+
+import dns.resolver
+import dns.reversename
+import requests
+
+try:  # aiohttp is only needed by the async helper classes below.
+    import aiohttp
+except ImportError:  # pragma: no cover - optional dependency
+    aiohttp = None  # type: ignore[assignment]
+
+
+def _require_aiohttp() -> None:
+    """Raise a clear, actionable error if aiohttp is not installed."""
+    if aiohttp is None:
+        raise ImportError(
+            "aiohttp is required for this feature - install it with: "
+            "pip install aiohttp"
+        )
 
 
 class DNSSECWalker:
@@ -143,32 +168,43 @@ class ReverseDNSEnumerator:
 
         base = ".".join(parts[:3])
         ips = [f"{base}.{i}" for i in range(1, 255)]
-
-        loop = asyncio.get_event_loop()
-        semaphore = asyncio.Semaphore(max_concurrent)
+        max_concurrent = max(1, min(max_concurrent, 254))
 
         async def lookup(ip):
-            async with semaphore:
-                ptr = await loop.run_in_executor(None, self.reverse_lookup, ip)
-                if ptr:
-                    return {"ip": ip, "ptr": ptr}
-                return None
+            ptr = await asyncio.to_thread(self.reverse_lookup, ip)
+            if ptr:
+                return {"ip": ip, "ptr": ptr}
+            return None
 
         async def run():
-            tasks = [lookup(ip) for ip in ips]
+            semaphore = asyncio.Semaphore(max_concurrent)
+
+            async def bounded(ip):
+                async with semaphore:
+                    return await lookup(ip)
+
+            tasks = [bounded(ip) for ip in ips]
             results = await asyncio.gather(*tasks)
             return [r for r in results if r is not None]
 
-        return loop.run_until_complete(run())
+        # asyncio.run creates (and cleanly closes) a fresh event loop,
+        # unlike the deprecated asyncio.get_event_loop() pattern.
+        return asyncio.run(run())
 
 
 class VirtualHostBruteforcer:
-    """Discover virtual hosts on a web server"""
+    """Discover virtual hosts on a web server.
+
+    The aiohttp session is created per ``bruteforce()`` call (and closed
+    afterwards) instead of at construction time: creating a session in
+    ``__init__`` binds it to no event loop and leaks it when unused.
+    """
 
     def __init__(self, timeout: int = 5, threads: int = 50):
         self.timeout = timeout
-        self.threads = threads
-        self.session = aiohttp.ClientSession()
+        # Bound the concurrency; vhost probing is I/O bound.
+        self.threads = max(1, min(threads, 100))
+        self.session = None
 
         self.vhost_prefixes = [
             "www",
@@ -255,6 +291,7 @@ class VirtualHostBruteforcer:
         self, ip: str, domain: str = None, port: int = 80
     ) -> List[Dict]:
         """Bruteforce virtual hosts on an IP"""
+        _require_aiohttp()
         hostnames = list(self.vhost_prefixes)
 
         if domain:
@@ -267,20 +304,25 @@ class VirtualHostBruteforcer:
             async with semaphore:
                 return await self.check_vhost(ip, hostname, port)
 
-        tasks = [check(h) for h in hostnames]
-        results = await asyncio.gather(*tasks)
-
-        await self.session.close()
+        async with aiohttp.ClientSession() as session:
+            self.session = session
+            tasks = [check(h) for h in hostnames]
+            results = await asyncio.gather(*tasks)
+            self.session = None
 
         return [r for r in results if r is not None]
 
 
 class JavaScriptEndpointDiscovery:
-    """Extract endpoints and secrets from JavaScript files"""
+    """Extract endpoints and secrets from JavaScript files.
+
+    The aiohttp session is created per ``scan()`` call and closed when
+    the scan finishes (no leaked session when the object is never used).
+    """
 
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.session = aiohttp.ClientSession()
+        self.session = None
 
         self.js_patterns = {
             "api_endpoints": [
@@ -329,23 +371,23 @@ class JavaScriptEndpointDiscovery:
             ) as resp:
                 html = await resp.text()
 
-                import re
-
                 scripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html)
                 for src in scripts:
-                    if src.endswith(".js"):
+                    # Ignore query/fragment when checking the extension.
+                    path_only = urlparse(src).path
+                    if path_only.endswith(".js"):
                         if src.startswith("//"):
                             js_urls.append(f"https:{src}")
                         elif src.startswith("/"):
-                            from urllib.parse import urljoin
-
                             js_urls.append(urljoin(base_url, src))
-                        else:
+                        elif src.startswith("http"):
                             js_urls.append(src)
+                        else:
+                            js_urls.append(urljoin(base_url, src))
         except Exception:
             pass
 
-        return js_urls
+        return list(dict.fromkeys(js_urls))
 
     async def analyze_js(self, js_url: str) -> Dict:
         """Analyze a JavaScript file for endpoints and secrets"""
@@ -363,8 +405,6 @@ class JavaScriptEndpointDiscovery:
                 js_url, timeout=aiohttp.ClientTimeout(total=self.timeout)
             ) as resp:
                 content = await resp.text()
-
-                import re
 
                 for category, patterns in self.js_patterns.items():
                     for pattern in patterns:
@@ -385,21 +425,25 @@ class JavaScriptEndpointDiscovery:
         return result
 
     async def scan(self, base_url: str) -> Dict:
-        """Full JavaScript analysis"""
-        js_urls = await self.fetch_js_files(base_url)
+        """Full JavaScript analysis (session lives for this scan only)."""
+        _require_aiohttp()
 
-        results = {
-            "base_url": base_url,
-            "js_files_found": len(js_urls),
-            "js_files": js_urls,
-            "findings": [],
-        }
+        async with aiohttp.ClientSession() as session:
+            self.session = session
+            js_urls = await self.fetch_js_files(base_url)
 
-        for url in js_urls[:20]:
-            analysis = await self.analyze_js(url)
-            results["findings"].append(analysis)
+            results = {
+                "base_url": base_url,
+                "js_files_found": len(js_urls),
+                "js_files": js_urls,
+                "findings": [],
+            }
 
-        await self.session.close()
+            for url in js_urls[:20]:
+                analysis = await self.analyze_js(url)
+                results["findings"].append(analysis)
+
+            self.session = None
 
         return results
 
@@ -545,6 +589,12 @@ class SecurityHeadersAuditor:
             "X-AspNetMvc-Version": "Reveals ASP.NET MVC version",
         }
 
+    @staticmethod
+    def _parse_max_age(hsts_value: str) -> Optional[int]:
+        """Extract max-age from an HSTS header value (None if malformed)."""
+        m = re.search(r"max-age\s*=\s*(\d+)", hsts_value, re.IGNORECASE)
+        return int(m.group(1)) if m else None
+
     def audit(self, url: str) -> Dict:
         """Audit security headers of a URL"""
         result = {
@@ -578,8 +628,8 @@ class SecurityHeadersAuditor:
             if "Strict-Transport-Security" in headers:
                 hsts = headers["Strict-Transport-Security"]
                 if "max-age" in hsts.lower():
-                    max_age = int(hsts.split("=")[1].split(";")[0].strip())
-                    if max_age < 31536000:
+                    max_age = self._parse_max_age(hsts)
+                    if max_age is not None and max_age < 31536000:
                         result["misconfigured_headers"].append(
                             {
                                 "header": "Strict-Transport-Security",
@@ -783,7 +833,7 @@ class ParameterDiscovery:
 
     async def test_parameter(self, url: str, param: str) -> Optional[Dict]:
         """Test if a parameter affects the response"""
-        import aiohttp
+        _require_aiohttp()
 
         test_values = ["1", "test", "'\"", "<script>alert(1)</script>"]
 
