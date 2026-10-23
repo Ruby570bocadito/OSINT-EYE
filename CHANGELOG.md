@@ -104,6 +104,10 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Matriz CI con Windows/macOS (ci-matrix-os)**: el job de tests corre ahora en ubuntu (3.10/3.11/3.12),
+  macOS 3.12 (blocking) y Windows 3.12 (experimental, `continue-on-error` hasta una ronda en verde);
+  en Windows se excluyen los dos e2e `pty` (únicos usos de `pty` en tests/) y el paso `apt` queda
+  solo en Linux; expansión de matriz verificada offline (5 combos, sin duplicados).
 - **Sitio de documentación (docs-sitio)**: `docs/` reorganizado y ampliado en inglés (coherente con el
   README) — `docs/index.md` (hub con mapa de la documentación y tabla de los 12 módulos),
   `docs/architecture.md` (capas, flujo de datos por fases, contrato de resultados, guards de seguridad),
