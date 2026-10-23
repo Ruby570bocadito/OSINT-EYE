@@ -21,6 +21,7 @@ from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
 from core.correlator import AssetCorrelator
+from core.logging_config import parse_level, setup_logging
 from core.schema import SCHEMA_VERSION, new_results, validate_results
 from core.session_cache import ScanCache, SessionManager
 from core.scan_diff import ScanDiff, AttackChainBuilder, BountyReporter
@@ -895,6 +896,17 @@ Examples:
         "--export-cypher", help="Export Graph to a Neo4j compatible .cypher data dump"
     )
     parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Log level of core/graph/reporting: DEBUG, INFO, WARNING, ERROR, "
+        "CRITICAL (default: INFO). Console output of the UI stays on Rich.",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="Append library logs to this file (console keeps receiving them)",
+    )
+    parser.add_argument(
         "--pdf", action="store_true", help="Generate an executive PDF report after scan"
     )
     parser.add_argument(
@@ -941,6 +953,14 @@ Examples:
     else:
         args = parser.parse_args()
         interactive_mode = False
+
+    # Configure the library logger before any scan/monitor work runs, so
+    # every core/graph/reporting message honours --log-level/--log-file.
+    try:
+        log_level = parse_level(args.log_level)
+    except ValueError as exc:
+        parser.error(str(exc))
+    setup_logging(log_level, args.log_file)
 
     # `--modules` without a value prints the module catalog and exits.
     if getattr(args, "modules", None) is not None and len(args.modules) == 0:
