@@ -7,6 +7,25 @@ on:
     branches: [main, master]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff sanity check (E9)
+        # Puerta mínima que hoy pasa a 0. El ruleset completo (pyflakes, isort,
+        # pyupgrade, bugbear) lo introduce PUL-2 en (PUL-2) ruff-config; cuando
+        # el repo esté a 0 avisos se sube el nivel aquí.
+        run: ruff check --select E9 --no-fix .
+
   tests:
     runs-on: ubuntu-latest
     strategy:
@@ -39,6 +58,42 @@ jobs:
         run: pytest -q tests/ -x
         env:
           PYTHONPATH: ${{ github.workspace }}
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Offline tests with coverage
+        run: >
+          pytest -q tests/
+          --cov=core --cov=modules --cov=graph --cov=reporting --cov=ui --cov=ai --cov=osint_eye
+          --cov-report=term-missing --cov-report=xml
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload coverage.xml artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
 
   docker:
     runs-on: ubuntu-latest
