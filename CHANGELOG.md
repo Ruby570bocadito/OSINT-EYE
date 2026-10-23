@@ -64,6 +64,11 @@ Reglas del equipo (PROTOCOLO §3):
   los candidatos cuya única respuesta es el set de IPs wildcard se descartan (con contador
   `wildcard.skipped`) en vez de reportar miles de falsos positivos; detalle en
   `results["modules"]["dns"]["wildcard"]` (confianza high/medium, IPs de la huella).
+- **Auditoría de email security (`modules/dns/email_security.py`)**: junto a SPF/DMARC comprueba DKIM
+  (18 selectores comunes), MTA-STS, TLS-RPT, BIMI y presencia de MX, y produce una puntuación de
+  spoofing 0-100 explicable (desglose por componente con deducciones y recomendaciones accionables) en
+  `results["modules"]["dns"]["email_security"]` (modo `full`); cada consulta DNS degrada a "no
+  encontrado" sin romper el escaneo.
 - **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
   alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
   exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.

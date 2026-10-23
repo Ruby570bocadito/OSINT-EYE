@@ -25,6 +25,7 @@ import dns.zone
 
 from modules.dns.passive_sources import PassiveSubdomainEnumerator
 from modules.dns.wildcard import WildcardDetector
+from modules.dns.email_security import EmailSecurityAuditor
 
 
 class DNSResolver:
@@ -557,6 +558,8 @@ class DNSScanner:
         # Wildcard detection runs before bruteforce/permutations so that
         # wildcard answers are filtered instead of reported (opt-out flag).
         self.wildcard_detector = WildcardDetector() if wildcard else None
+        # Email anti-spoofing audit (DKIM/MTA-STS/TLS-RPT/BIMI + score).
+        self.email_auditor = EmailSecurityAuditor(resolver=self.resolver)
 
     def scan(self, domain: str, scan_type: str = "basic") -> Dict:
         """Perform a DNS scan; each step degrades independently on error."""
@@ -643,6 +646,20 @@ class DNSScanner:
                         "error": str(e),
                     }
                     print(f"[!] Passive enumeration failed for {domain}: {e}")
+
+            print(f"[*] Auditing email security (DKIM/MTA-STS/TLS-RPT/BIMI)...")
+            try:
+                results["email_security"] = self.email_auditor.audit(
+                    domain, spf=results.get("spf"), dmarc=results.get("dmarc")
+                )
+            except Exception as e:
+                results["email_security"] = {
+                    "domain": domain,
+                    "spoofing_score": 0,
+                    "risk": "unknown",
+                    "error": str(e),
+                }
+                print(f"[!] Email security audit failed for {domain}: {e}")
 
         return results
 
