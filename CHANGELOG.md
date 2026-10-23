@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Añadido
+- **Empaquetado estándar**: `pyproject.toml` con metadatos completos, dependencias en paridad con `requirements.txt`, extras (`[ui]`, `[pdf]`, `[dev]`), entry point `osint-eye` y `pip install -e .` verificado desde cero.
+
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
   ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
