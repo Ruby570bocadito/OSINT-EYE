@@ -49,6 +49,12 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Tema claro en el dashboard**: el dashboard sigue `prefers-color-scheme` — paleta clara completa
+  (tokens redefinidos en `@media (prefers-color-scheme: light)`, `color-scheme` coherente) con el
+  oscuro como estado por defecto intacto; el topbar deja su rgba fijo por `--topbar-bg`, el anillo
+  del timeline usaba una variable inexistente (`--panel-bg`) que caía siempre a oscuro y ahora usa
+  `--surface`, y el export SVG/PNG del grafo lee los tokens computados del tema activo (con
+  fallback oscuro). Sin toggle, sin recursos externos.
 - **ASN y netblocks de la organización (`asn-ip-ranges`)**: resuelve el target a IP y enumera el ASN
   de origen, el titular y todos los prefijos anunciados vía RIPEstat (API pública sin clave), más el
   objeto de red RDAP (nombre, país, rango start/end, tipo) vía rdap.org; cada fuente degrada de forma
