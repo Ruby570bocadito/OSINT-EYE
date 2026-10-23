@@ -46,3 +46,33 @@ Actualizado: 2026-10-24 · Ronda 5 de v2.2 · **Semáforo: 🟢 VERDE** (767 tes
 ## Propuestas para el roadmap
 
 - (ninguna nueva esta ronda; las activas ya incorporadas)
+
+---
+
+## Ronda 6 — media profesional del README (petición directa del propietario)
+
+**Pedido**: «el header ese horroroso sigue, no hay vídeo ni imágenes, no es nada profesional».
+
+**Entregado (f4df703 en main)**:
+- Banner propio diseñado a medida (`docs/img/banner.png`, 3200×1000, Playwright+CSS): ojo-radar,
+  chips honestos (20 modules / no API keys / local AI / SARIF-PDF-graph), cero servicios externos.
+- GIF demo (`docs/img/demo-cli.gif`, 7.5 s, 3.3 MB): escaneo REAL de mozilla.org capturado con
+  `FORCE_COLOR=1`, animado (typing + streaming con scroll simulado por ventana de clip, paleta
+  ffmpeg). Lecciones: el pty de `script` cuelga el scan; `white-space:pre` duplica la altura con
+  nodos de texto `\n` entre divs (juntar sin newlines); medir geometría viva, nunca estimarla.
+- Capturas retina reales del dashboard: overview (KPI 456 + grafo galaxia 466n/464e), attack
+  paths, findings explorer (458 assets), technologies.
+- **2 fixes de producto** descubiertos al capturar: KPI "Subdomains" solo leía dns.subdomains
+  (ahora dns+certs+permutation deduplicadas, `_subdomain_count`) y `_ingest_certs` dejaba los CT
+  subs sin conectar al hub (ahora arista has_subdomain; 9→464 aristas en mozilla.org). Tests de
+  regresión en test_ui_dashboard.py y test_core_graph.py.
+- README.md reescrito desde 0 (banner local, GIF, galería, badge 863 tests, tls_audit en la
+  tabla de módulos); README.es.md con el mismo banner; CHANGELOG con las 3 entradas de fixes.
+
+**Estado**: suite 1060 en verde (absorbí 2 rondas de pushes de la flota durante el merge; 2
+conflictos resueltos conservando ambos lados: CHANGELOG y helpers de dashboard). main==master
+al final de la ronda. La versión del banner es v2.1 (pyproject 2.1.1, honesto).
+
+**Riesgos/peticiones**: GIF 3.3 MB es aceptable pero podría optimizarse a <2 MB si el repo crece;
+el flujo de captura queda documentado en /home/z/my-project/scripts/ (capture_dashboard.py,
+make_demo_gif.py, render_banner.py) para regenerar assets cuando cambie la UI.
