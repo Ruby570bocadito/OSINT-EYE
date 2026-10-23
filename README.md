@@ -12,100 +12,35 @@
 
 </div>
 
-<h3 align="center">Recon automatizado desde fuentes públicas · 100% gratuito · IA local vía Ollama</h3>
+<h3 align="center">Automated recon from public sources · 100% free · Local AI via Ollama</h3>
+
+> 🇬🇧 Canonical README (written from scratch). Spanish version kept as a reference: [`README.es.md`](README.es.md).
 
 ---
 
-## 📋 Tabla de contenidos
+## What is OSINT EYE?
 
-- [Demo](#-demo)
-- [¿Qué es?](#-qué-es)
-- [Módulos](#-módulos)
-- [Instalación](#-instalación)
-- [Uso rápido](#-uso-rápido)
-- [Dashboard web](#-dashboard-web)
-- [Exportación](#-exportación)
-- [Arquitectura](#-arquitectura)
-- [Roadmap](#-roadmap)
-- [Seguridad y uso responsable](#-seguridad-y-uso-responsable)
-- [Contribuir](#-contribuir)
-- [Licencia](#-licencia)
+**OSINT EYE** is a modular **OSINT** (*Open-Source Intelligence*) and **attack-surface reconnaissance** platform. It collects from public sources — DNS records, *certificate transparency* logs, the Wayback Machine, WHOIS, GitHub code search, Google dorks and the NVD/CVE database — then **correlates** everything into actionable intelligence: a weighted attack-surface score, a relationship graph, potential multi-step attack chains, MITRE ATT&CK mapping and canonical findings exportable as SARIF.
 
----
+Built for pentesters, bug-bounty hunters, SOC analysts and security researchers. No API keys, no cost, no cloud: the optional AI runs locally with Ollama.
 
-## 🎬 Demo
+**Every claim below is checkable**: flags against `python osint_eye.py --help`, the module list against `--modules`, the test count against the suite, and the export list against an actual `-o` run.
 
-> Escaneo real contra `example.com` (módulos DNS, WHOIS, web, endpoints, CDN/WAF, cloud buckets, correlación, grafo, MITRE y chains):
+### Highlights
 
-![OSINT EYE en acción](docs/assets/demo.gif)
-
-### Salida de la CLI
-
-| Banner + arranque del escaneo | Resumen ejecutivo |
-|---|---|
-| ![Banner y fases del scan](docs/assets/demo_scan.png) | ![Resumen con risk posture](docs/assets/demo_summary.png) |
-
-### Catálogo de módulos
-
-```bash
-python osint_eye.py --modules
-```
-
-![Catálogo de módulos](docs/assets/demo_modules.png)
-
-### Dashboard web y grafo interactivo
-
-| Dashboard Flask | Grafo de superficie de ataque |
-|---|---|
-| ![Dashboard web](docs/assets/demo_dashboard.png) | ![Grafo interactivo](docs/assets/demo_graph.png) |
+- **Zero friction** — `pip install -r requirements.txt` and go; no API key for any module.
+- **19 collector & analysis modules** — run them all, or pick exactly what you need with `--modules`.
+- **Authorization scope** — `--scope FILE` / `--exclude` gates every active probe; anything out of scope is skipped *and recorded*.
+- **CI-ready** — `--fail-on low|medium|high` turns the worst severity into an exit code your pipeline can gate on.
+- **Professional outputs** — JSON, Markdown, HTML, PDF, CSV, Burp XML, Metasploit JSON, MITRE Navigator, SARIF 2.1 and a self-contained HTML graph, all in one pass.
+- **Real logging** — `core/`, `graph/` and `reporting/` log through the `osint_eye` tree (`--log-level`, `--log-file`); Rich stays the only user-facing output.
+- **Tested** — 687 offline tests and CI on GitHub Actions against Python 3.10/3.11/3.12.
 
 ---
 
-## 🌐 ¿Qué es?
+## Quickstart
 
-**OSINT EYE** es una plataforma modular de **OSINT** (*Open-Source Intelligence*) y **reconocimiento de superficie de ataque**. Automatiza la recolección desde fuentes públicas — registros DNS, logs de *certificate transparency*, Wayback Machine, WHOIS, búsqueda de código en GitHub, *dorking* en Google y la base NVD/CVE — y **corrrela** todos los hallazgos en inteligencia accionable: puntuación de superficie de ataque, grafo de relaciones, cadenas de ataque potenciales y mapeado a MITRE ATT&CK.
-
-Diseñada para pentesters, bug bounty hunters, analistas SOC e investigadores de seguridad. Sin claves de API, sin costes, sin nube: la IA opcional corre en local con Ollama.
-
-### Por qué OSINT EYE
-
-- **Cero fricción**: `pip install -r requirements.txt` y listo — ninguna API key necesaria para ningún módulo.
-- **Correlación real**: los hallazgos de todos los módulos se cruzan en un inventario unificado de activos con puntuación de riesgo ponderada.
-- **Degradación elegante**: si falta `nmap` o una fuente externa está caída, el módulo se salta con un aviso claro y el escaneo continúa.
-- **Salidas profesionales**: JSON, Markdown, HTML, PDF (ReportLab), CSV, Burp XML, Metasploit JSON, capa MITRE Navigator, SARIF 2.1 y grafo HTML interactivo — todo en una sola pasada.
-- **Probado**: 687 tests que corren **100% offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
-
----
-
-## 🧩 Módulos
-
-| Módulo | Descripción |
-|--------|-------------|
-| `dns` | Enumeración DNS (A/AAAA/MX/NS/TXT/CNAME/SOA), SPF/DMARC, auditoría email security (DKIM, MTA-STS, TLS-RPT, BIMI) con puntuación de spoofing, subdominios por fuerza bruta + fuentes pasivas (HackerTarget, OTX, Anubis, RapidDNS, CertSpotter) con detección de wildcard y permutaciones |
-| `certs` | Certificate transparency vía crt.sh |
-| `wayback` | Historial de URLs y timeline de snapshots de Wayback Machine |
-| `network` | Escaneo de puertos y servicios vía nmap (opcional, se salta si no está instalado) |
-| `whois` | Datos de registro y propiedad del dominio |
-| `github` | Dorking de código en GitHub: claves API, secrets, configs expuestas |
-| `google` | Dorking en Google: paneles admin, ficheros sensibles, backups |
-| `cve` | Consulta NVD/CVE para los servicios descubiertos |
-| `web` | Fingerprinting de tecnologías HTTP |
-| `endpoints` | Descubrimiento de endpoints JS/HTML + sondeo de ficheros sensibles |
-| `cloud` | Descubrimiento de buckets (S3/GCP/Azure) y exposición pública |
-| `emails` | Enumeración de emails desde WHOIS y fuentes públicas |
-| `permutation` | Generación y resolución de permutaciones de subdominios |
-| `takeover` | Detección de subdomain takeover (CNAMEs colgantes) |
-| `cdn_waf` | Fingerprinting de CDN y WAF |
-| `correlation` | Correlación cruzada de activos + attack surface score |
-| `graph` | Grafo de relaciones con visualización HTML interactiva |
-| `mitre` | Mapeado a MITRE ATT&CK + exportación de capa Navigator |
-| `chains` | Constructor de cadenas de ataque (hipótesis multi-paso) |
-
----
-
-## 📦 Instalación
-
-**Requisitos**: Python 3.10+ · opcional: `nmap` y `whois` en el PATH para los módulos de red.
+**Requirements**: Python 3.10+ · optional: `nmap` and `whois` binaries on PATH for the network modules.
 
 ```bash
 git clone https://github.com/Ruby570bocadito/OSINT-EYE.git
@@ -118,204 +53,314 @@ pip install -r requirements.txt
 python osint_eye.py --help
 ```
 
-**Docker** (incluye nmap y whois):
+Editable install with the standard entry point:
+
+```bash
+pip install -e .                # extras: [ui] (flask/textual), [pdf] (reportlab), [dev] (pytest/ruff)
+osint-eye --help
+```
+
+**Docker** (bundles nmap and whois):
 
 ```bash
 docker build -t osint-eye .
 docker run --rm -v "$PWD/output:/app/output" osint-eye example.com --no-ai
 ```
 
-**IA local opcional** (sin claves, todo offline):
+**Local AI (optional, fully offline):**
 
 ```bash
 # https://ollama.ai
 ollama pull llama3.2
-python osint_eye.py example.com --agent   # genera un playbook de análisis IA
+python osint_eye.py example.com --agent   # generates an actionable playbook
 ```
 
 ---
 
-## 🚀 Uso rápido
+## First scans
 
 ```bash
-# Escaneo completo (4 fases concurrentes)
+# Full scan (4 concurrent phases)
 python osint_eye.py example.com
 
-# Solo módulos concretos
+# Only specific modules, in this order
 python osint_eye.py example.com --modules dns certs wayback cloud graph mitre
 
-# Ver el catálogo de módulos
+# Catalog of every module
 python osint_eye.py --modules
 
-# Modo sigiloso (menos peticiones, sin dorking)
+# Stealth mode (fewer requests, no dorking)
 python osint_eye.py example.com --stealth
 
-# Escaneo rápido
-python osint_eye.py example.com --depth quick
+# Depth presets
+python osint_eye.py example.com --depth quick     # phase 1 + web + analysis
+python osint_eye.py example.com --depth full      # everything, including endpoints/buckets/takeover
 
-# Profundidad completa con endpoints, buckets, emails, takeover y chains
-python osint_eye.py example.com --depth full
-
-# Múltiples objetivos + diff entre ellos
+# Multiple targets + diff between them
 python osint_eye.py target1.com target2.com --diff
 
-# Scope de autorización + exclusiones: nada fuera de scope se toca
+# Authorization scope + exclusions: nothing out of scope is touched
 python osint_eye.py example.com --scope scope.txt --exclude sub.example.com --exclude 10.0.0.0/8
 
-# Modo CI: exit 1 si la peor severidad alcanza el umbral
+# CI mode: exit 1 when the worst severity reaches the threshold
 python osint_eye.py example.com --fail-on medium
 
-# Todo lo exportable + informe PDF ejecutivo
-python osint_eye.py example.com -o output/mi_scan --pdf
+# Everything exportable + executive PDF report
+python osint_eye.py example.com -o output/my_scan --pdf
 
-# Playbook IA (requiere Ollama en local)
-python osint_eye.py example.com --agent
-
-# Monitor daemon: alerta por webhook cuando aparece superficie nueva
+# Monitor daemon: webhook alert whenever new surface appears
 python osint_eye.py example.com --monitor --monitor-interval 3600 \
     --webhook https://hooks.slack.com/services/xxx
 
-# Dashboard web tras el escaneo
+# Web dashboard after the scan
 python osint_eye.py example.com --dashboard
 
-# Sin argumentos: asistente interactivo
+# No arguments: interactive wizard (asks scope, asks for explicit authorization)
 python osint_eye.py
 ```
 
-<details>
-<summary><b>Referencia completa de flags</b></summary>
+### Exit codes (CI)
 
-| Flag | Descripción |
-|------|-------------|
-| `targets` | Dominio(s) o IP(s) objetivo (posicional; vacío = asistente) |
-| `--modules ...` | Ejecuta solo los módulos indicados; sin valores muestra el catálogo |
-| `--depth quick\|normal\|deep\|full` | Profundidad del escaneo (default: `normal`) |
-| `--stealth` | Modo sigiloso: menos peticiones y sin dorking |
-| `-o, --output BASE` | Base de nombre para las exportaciones |
-| `--pdf` | Informe PDF ejecutivo |
-| `--rich` | Volcado completo de resultados con tablas Rich |
-| `--diff` | Compara resultados entre múltiples objetivos |
-| `--dashboard` | Lanza el dashboard web al terminar |
-| `--monitor` | Daemon de monitorización continua |
-| `--monitor-interval N` | Segundos entre ciclos del monitor (default: 3600) |
-| `--webhook URL` | Webhook Discord/Slack para alertas del monitor |
-| `--agent` | Playbook de análisis con IA local (Ollama) |
-| `--no-ai` | Desactiva el módulo IA |
-| `--no-cache` | Desactiva la caché SQLite de resultados |
-| `--plugin-dir DIR` | Carga y ejecuta plugins propios |
-| `--export-cypher FILE` | Exporta el grafo a Cypher (Neo4j) |
-| `--profile default\|deep\|stealth` | Perfil de configuración predefinido |
-| `--log-level LEVEL` | Nivel de log de core/graph/reporting (DEBUG–CRITICAL, default `INFO`); Rich sigue siendo la salida de usuario |
-| `--log-file FILE` | Añade los logs de librería a este fichero (modo append) |
-| `--scope FILE` | Scope de autorización: un dominio, wildcard, IP o CIDR por línea (`#` comentarios); lo fuera de scope se salta y queda registrado |
-| `--exclude ITEM` | Excluye dominio/IP/CIDR del escaneo (repetible; siempre gana a `--scope`) |
-| `--fail-on low\|medium\|high` | Modo CI: exit 1 cuando la peor severidad iguala o supera el umbral (`high` falla también con critical) |
-
-**Exit codes (CI)**: `0` escaneo dentro del umbral · `1` umbral `--fail-on` superado · `2` error de uso · `3` ningún target escaneado (todo fuera de scope).
-
-</details>
+| Code | Meaning |
+|------|---------|
+| `0` | Scan finished under the `--fail-on` threshold |
+| `1` | `--fail-on` threshold reached or exceeded (`high` also fails on critical) |
+| `2` | Usage error (bad arguments, invalid scope file…) |
+| `3` | No target scanned (everything outside scope) |
 
 ---
 
-## 🌐 Dashboard web
+## Authorization scope
 
-```bash
-# Escanear y abrir dashboard
-python osint_eye.py example.com --dashboard
+Nothing outside the declared scope is ever touched:
 
-# O cargar resultados previos
-python ui/dashboard.py output/mi_scan.json
-# → http://127.0.0.1:5000
+```text
+# scope.txt — one pattern per line (# comments)
+example.com
+*.example.com
+192.0.2.0/24
 ```
 
-Interfaz minimalista y oscura con KPIs del escaneo, grafo de superficie interactivo (layout de fuerzas propio, sin CDN — 100% offline), puertos/servicios, tecnologías, explorador de hallazgos con búsqueda y filtros por severidad/tipo/módulo, técnicas MITRE con severidad, cadenas de ataque ordenadas por riesgo, selector multiescaneo con vista diff y exportación JSON/CSV/MD del escaneo abierto. Todo el contenido se renderiza vía `textContent` (a prueba de inyección desde los datos del escaneo) y la API REST es defensiva: nunca devuelve 500 con datos malformados.
-
-API REST: `/api/scans` y `/api/scan/<target>` con `/summary`, `/assets`, `/diff`, `/export`, `/subdomains`, `/ports`, `/graph`, `/mitre` y `/chains`.
+- Patterns: domains, wildcard domains (`*.example.com`), IPv4/IPv6 addresses and CIDR ranges.
+- `--exclude` entries **always win** over `--scope`.
+- Targets and candidates rejected by scope (permutations, takeover probes) are recorded in `results["scope"]["discarded"]` with target, module, reason and timestamp.
+- An invalid scope file is a clean usage error before any scan starts.
+- The interactive wizard asks for scope/exclusions and requires explicit authorization before running active modules.
 
 ---
 
-## 📤 Exportación
+## Modules
 
-Una pasada con `-o` genera: **JSON** (resultados completos), **Markdown**, **HTML**, **PDF**, **CSV** por tipo de activo, **Burp XML**, **Metasploit JSON**, **MITRE Navigator layer**, **SARIF 2.1** (listo para GitHub Code Scanning), **informe bounty** y **grafo HTML interactivo** (autónomo, sin CDN).
+| Module | What it does |
+|--------|--------------|
+| `dns` | DNS enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA), SPF/DMARC, email-security audit (DKIM, MTA-STS, TLS-RPT, BIMI) with an explicable spoofing score, subdomain bruteforce + 5 passive sources (HackerTarget, AlienVault OTX, Anubis, RapidDNS, CertSpotter), wildcard detection and permutations |
+| `certs` | Certificate transparency via crt.sh |
+| `wayback` | Wayback Machine URL history and snapshot timeline |
+| `network` | Port & service scanning via nmap (optional; skipped with a notice if absent) |
+| `whois` | Domain registration and ownership data |
+| `github` | GitHub code dorking: API keys, secrets, exposed configs |
+| `google` | Google dorking: admin panels, sensitive files, backups |
+| `cve` | NVD/CVE lookup for discovered services |
+| `web` | HTTP technology fingerprinting |
+| `endpoints` | JS/HTML endpoint discovery + sensitive-file probing |
+| `cloud` | Bucket discovery (S3/GCP/Azure) and public exposure |
+| `emails` | Email enumeration from WHOIS and public sources |
+| `permutation` | Subdomain permutation generation and resolution |
+| `takeover` | Dangling-CNAME subdomain takeover detection |
+| `cdn_waf` | CDN and WAF fingerprinting |
+| `correlation` | Cross-asset correlation + attack-surface score |
+| `graph` | Relationship graph with interactive HTML visualization |
+| `mitre` | MITRE ATT&CK mapping + Navigator layer export |
+| `chains` | Multi-step attack-chain hypotheses |
+
+All collectors share one HTTP client (`modules/_http.py`) with sane timeouts, exponential backoff on transient errors, a configurable User-Agent, per-host rate limiting and optional proxy support.
+
+---
+
+## Exports
+
+A single run with `-o BASE` produces:
+
+| File | Content |
+|------|---------|
+| `BASE.json` | Complete scan results (versioned schema, `results.schema_version`) |
+| `BASE.md` / `BASE.html` / `BASE.pdf` | Human-readable reports (PDF = executive ReportLab report) |
+| `BASE.sarif` | SARIF 2.1 findings (takeover, public buckets, secrets, CVEs, sensitive files) for GitHub Code Scanning |
+| `BASE_subdomains.csv` / `BASE_ports.csv` / `BASE_emails.csv` / `BASE_cves.csv` | Per-asset CSVs |
+| `BASE_mitre.json` / `BASE_navigator.json` | MITRE mapping / Navigator layer |
+| `BASE_graph.html` | Self-contained interactive graph (inline JS, no CDN) |
+| `BASE_burp.xml` / `BASE_msf.json` | Burp Suite XML / Metasploit JSON |
+| `bounty_report_<target>.md` | Bug-bounty oriented summary |
 
 ```bash
 python osint_eye.py example.com -o output/recon_demo --pdf
 ```
 
+Which formats get written is also configurable from a TOML file (`[exports].formats`) — see below.
+
 ---
 
-## 🏗 Arquitectura
+## Configuration file (TOML)
+
+```bash
+python osint_eye.py example.com --config osint_eye.toml
+python osint_eye.py example.com --config osint_eye.toml --profile deep
+```
+
+If `osint_eye.toml` exists in the current directory it is loaded by default:
+
+```toml
+[scan]
+depth = "normal"            # quick | normal | deep | full
+stealth = false
+no_ai = false
+no_cache = false
+modules = ["dns", "certs"]
+
+[timeouts]
+monitor_interval = 3600
+
+[scope]
+includes = ["example.com"]  # same syntax as --scope
+excludes = ["10.0.0.0/8"]
+
+[exports]
+formats = ["json", "sarif"] # subset of the export catalogue
+
+[profiles.deep]
+[profiles.deep.scan]
+depth = "full"
+```
+
+Precedence: CLI flags > selected profile > file. Unknown sections or keys are rejected at load time. Uses stdlib `tomllib` (Python 3.11+; on 3.10 everything else works, TOML is simply unavailable).
+
+---
+
+## Web dashboard
+
+```bash
+python osint_eye.py example.com --dashboard
+# or load a previous scan:
+python ui/dashboard.py output/my_scan.json   # → http://127.0.0.1:5000
+```
+
+Dark, minimalist UI that listens only on `127.0.0.1` and renders 100% offline (no CDN). Includes KPIs, an interactive attack-surface graph, a findings explorer with full-text search and severity/type/module filters, a multi-scan selector with a diff view, and one-click JSON/CSV/MD export of the open scan. All content is rendered via `textContent` (injection-proof) and the REST API never returns a 500 on malformed data.
+
+REST API: `/api/scans` and `/api/scan/<target>` with `/summary`, `/assets`, `/diff`, `/export`, `/subdomains`, `/ports`, `/graph`, `/mitre` and `/chains`.
+
+| Dashboard (dark) | Graph view | CLI progress |
+|---|---|---|
+| ![Dashboard](docs/assets/dashboard-dark.png) | ![Graph](docs/assets/graph-view.png) | ![CLI](docs/assets/cli-progress.png) |
+
+> Screenshots of the current UI are being regenerated with offline fixtures (`demo-assets` task). Until they land, the paths above are placeholders.
+
+---
+
+## Monitoring, plugins & AI
+
+**Monitor daemon** — `--monitor` keeps scanning on an interval, baselines known subdomains on the first cycle and alerts only on new surface. `--webhook` posts `{"text": ...}` (Discord/Slack-compatible). `Ctrl+C` stops gracefully; the cache (`~/.osint_eye/`) feeds the diffs.
+
+**Plugins** — drop your own in a directory and load them with `--plugin-dir ./plugins`:
+
+```python
+# my_plugin.py
+class PluginTemplate:
+    name = "my_plugin"
+    author = "me"                      # anything but "built-in"
+
+    async def run(self, target: str) -> dict:
+        return {"finding": "example"}
+```
+
+Broken plugins are reported and skipped — they never abort a scan.
+
+**Local AI** — with Ollama installed, `--agent` turns findings into an actionable playbook; everything talks only to `http://localhost:11434`. Without Ollama, the module degrades to `{"status": "unavailable"}` in milliseconds and the scan continues. `--no-ai` disables it entirely.
+
+---
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Collectors["📡 Colectores"]
+    subgraph Collectors["📡 Collectors"]
         M1[dns · certs · wayback]
         M2[network · web · endpoints]
         M3[github · google · cloud · emails]
     end
-    subgraph Core["⚙️ Núcleo"]
+    subgraph Core["⚙️ Core"]
         C[Asset Correlator]
-        S[SQLite Cache]
+        F[Findings Extractor]
+        S[Scope Gate]
         P[Plugin System]
+        D[SQLite Cache]
     end
-    subgraph Analysis["📊 Análisis"]
+    subgraph Analysis["📊 Analysis"]
         A1[Attack Surface Score]
         A2[Graph Builder]
         A3[MITRE Mapper]
         A4[Attack Chains]
         A5[AI Engine · Ollama]
     end
-    subgraph Output["📤 Salida"]
+    subgraph Output["📤 Output"]
         O1[Rich CLI]
         O2[Dashboard Flask]
         O3[PDF · MD · HTML · CSV]
-        O4[Burp · MSF · Navigator]
+        O4[Burp · MSF · Navigator · SARIF]
     end
     Collectors --> Core --> Analysis --> Output
 ```
 
-```
-osint_eye.py            # Orquestador: fases, CLI, exportación
-├── modules/            # Colectores por fuente (dns, certs, web, network, osint, cve)
-├── core/               # Correlador, schema, scope, findings, caché SQLite, monitor, plugins, diff
-├── graph/              # Grafo NetworkX + export pyvis/Neo4j
+```text
+osint_eye.py            # Orchestrator: phases, CLI, exports
+├── modules/            # Collectors per source (dns, certs, web, network, osint, cve)
+├── core/               # Correlator, schema, scope, findings, SQLite cache, monitor, plugins, diff
+├── graph/              # NetworkX graph + pyvis/Neo4j export
 ├── reporting/          # PDF, Markdown, HTML, CSV, Burp, MSF, MITRE, SARIF
-├── ui/                 # Rich CLI, wizard, TUI Textual, dashboard Flask
-├── ai/                 # Motor IA local (Ollama)
-└── tests/              # Suite offline por zona (pytest)
+├── ui/                 # Rich CLI, wizard, Textual TUI, Flask dashboard
+├── ai/                 # Local AI engine (Ollama)
+└── tests/              # Offline test suite, one file per zone (pytest)
 ```
 
----
+### Environment variables
 
-## 🗺 Roadmap
-
-Fase actual: **v2.2 — «Fiable y extensible»** — contrato de datos estable (`results`), logging real, scope seguro, salidas para CI y README fiel.
-
-El plan completo (prioridades ALTA, fase v2.3 «Inteligencia», banco de ideas y tareas por agente) vive en [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md). El histórico de releases, en el [CHANGELOG](CHANGELOG.md).
-
----
-
-## ⚠️ Seguridad y uso responsable
-
-Esta herramienta está pensada para **reconocimiento OSINT pasivo/semipasivo sobre activos propios o con autorización explícita** (bug bounty con scope, auditorías contratadas, laboratorios). Los módulos de red realizan peticiones activas — úsalos solo dentro del alcance autorizado. El equipo no se hace responsable del mal uso.
+| Variable | Effect |
+|----------|--------|
+| `OSINT_EYE_HTTP_TIMEOUT` | Shared HTTP client timeout in seconds (float; default 10) |
+| `OSINT_EYE_RATE_LIMIT` | Per-host:port rate limit in seconds between requests (float; 0 = off) |
+| `OSINT_EYE_USER_AGENT` | Custom User-Agent (default `OSINT-EYE/…`) |
+| `OSINT_EYE_PROXY` | Optional proxy for all collector traffic |
+| `NVD_API_KEY` | Optional NVD key: higher rate limit, 0.7 s pacing |
+| `NO_COLOR` | Disable CLI colors (standard NO_COLOR) |
 
 ---
 
-## 🤝 Contribuir
+## Testing & CI
 
-1. Fork del proyecto
-2. Rama de feature (`git checkout -b feature/AmazingFeature`)
+- **687 offline tests** — no network, no nmap, no Ollama; fixtures and monkeypatching only. Run with `PYTHONPATH=. pytest -q tests/`.
+- **CI** (`.github/workflows/ci.yml`): ruff lint gate, pytest matrix on Python 3.10/3.11/3.12, coverage job (pytest-cov, Codecov) and a Docker build + smoke test.
+- Compile check: `python -m compileall -q osint_eye.py core graph ai modules ui reporting tests`.
+
+---
+
+## Security & responsible use
+
+This tool is intended for **passive/semi-passive OSINT reconnaissance on assets you own or are explicitly authorized to test** (in-scope bug bounty, contracted audits, labs). The network modules perform active requests — use them only within your authorized scope. The team is not responsible for misuse.
+
+## Roadmap & contributing
+
+The live plan (priorities, phase v2.3 «Intelligence», idea bank and per-agent tasks) lives in [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md); release history in the [CHANGELOG](CHANGELOG.md). Extended CLI reference (Spanish): [`docs/USAGE.md`](docs/USAGE.md).
+
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
 3. Commit (`git commit -m 'Add some AmazingFeature'`)
 4. Push (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+5. Open a Pull Request
 
-Los PRs con tests (offline) y sin dependencias nuevas pesadas tienen prioridad.
+PRs with offline tests and no heavy new dependencies get priority.
 
----
+## License
 
-## 📄 Licencia
-
-Distribuido bajo licencia **MIT**. Ver [`LICENSE`](LICENSE).
+Distributed under the MIT license. See [`LICENSE`](LICENSE).
 
 ---
 
@@ -323,6 +368,6 @@ Distribuido bajo licencia **MIT**. Ver [`LICENSE`](LICENSE).
 
 **OSINT EYE** — *Open-Source Intelligence for the Modern Era*
 
-[🐛 Reportar bug](https://github.com/Ruby570bocadito/OSINT-EYE/issues) · [💡 Pedir feature](https://github.com/Ruby570bocadito/OSINT-EYE/issues) · [📖 CHANGELOG](CHANGELOG.md)
+[🐛 Report a bug](https://github.com/Ruby570bocadito/OSINT-EYE/issues) · [💡 Request a feature](https://github.com/Ruby570bocadito/OSINT-EYE/issues) · [📖 CHANGELOG](CHANGELOG.md)
 
 </div>

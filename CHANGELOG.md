@@ -121,6 +121,7 @@ Reglas del equipo (PROTOCOLO §3):
   (import directo en `modules/_http.py`) — installs más ligeros y contrato honesto.
 
 ### Documentación
+- README canónico reescrito en inglés desde cero (19 módulos, exit codes de CI, SARIF, scope/autorización, TOML, dashboard, monitor, plugins, suite offline); el README en español se conserva como `README.es.md` con enlaces cruzados.
 - README fiel: badges de versión (2.1.1) y de tests sincronizados con el recuento real de la suite, árbol actualizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
 - docs/USAGE.md sincronizada con la CLI real: scope y autorización, modo CI con exit codes,
   logging de librería, configuración TOML, dashboard y variables de entorno `OSINT_EYE_*`.
