@@ -1,11 +1,11 @@
 # Estado PUL-1 — Repo y documentación
 
-Actualizado: 2026-10-24 (sesión v2.2, ronda 6 — docs-sitio + cierre demo-assets)
+Actualizado: 2026-10-24 (sesión v2.2, ronda 7 — ci-matrix-os + usage-sync)
 
 ## Hecho (últimas 24 h)
 
-- [x] docs-sitio (Siguiente v2.3) — docs/ reorganizado en inglés (coherente con el README): docs/index.md (hub + tabla de los 12 módulos + profundidades), docs/architecture.md (pipeline, capas, contrato de resultados, guards), docs/modules/ (12 páginas, una por colector — contenido derivado de docstrings y --help real), docs/plugins.md (contrato BaseModule/PluginManager + ejemplo offline-testable verificado contra safe_get(session, url, ...)) y docs/FAQ.md. 17 páginas, 0 enlaces rotos (verificado con script); README (en/es) enlazan el hub; CHANGELOG en [Unreleased].
-- [x] demo-assets-nuevos — cierre del resto (ALTA): la galería de README.es.md apunta al set nuevo de IMP-2 (demo-scan.gif, wizard-auth, cli-progress, dashboard-dark, graph-view, report-pdf) y los 6 demo_*.png/demo.gif legacy se eliminan (solo referenciados desde README.es.md, verificado antes de rm). Assets nuevos no tocados.
+- [x] ci-matrix-os (Banco) — el job de tests corre en ubuntu 3.10/3.11/3.12 (blocking), macOS 3.12 (blocking) y Windows 3.12 (experimental: continue-on-error hasta una ronda en verde). En Windows se excluyen los 2 e2e pty (únicos usos de pty en tests/, verificado por grep) vía pytest-args del include de la matriz; apt solo en Linux. Expansión de matriz verificada offline con simulador propio (5 combos, windows 1 vez con --ignore, sin duplicados; detectó y corrigió un intento de exclude-que-no-matchea).
+- [x] usage-sync (Banco) — docs/USAGE.md al día: catálogo completo de las 24 claves --modules (verificado clave a clave y en orden contra el dict de osint_eye.py; incluye shodan_censys/reverse_ip/social_footprint/leak_check de IMP-1), --modules dns,web + error accionable (H-010), exit 130 con resumen parcial (H-007), auto-persistencia sin -o (H-001), confinamiento de rutas (H-003), cuarentena de caché (H-006), guard de --webhook, --export-cypher, --tui (verificado: es post-scan, launch_tui(engine.results)) y contrato BaseModule con link a docs/plugins.md. Los 3 errores de uso documentados verificados con exit 2 real. docs/index.md corregido: los 12 colectores no agotan el catálogo --modules (link a la tabla completa).
 
 ## En curso
 
@@ -13,22 +13,22 @@ Actualizado: 2026-10-24 (sesión v2.2, ronda 6 — docs-sitio + cierre demo-asse
 
 ## Bloqueado
 
-- Nada.
+- Nada. (PyPI sigue requiriendo alta del publisher por el propietario.)
 
 ## Peticiones a otras zonas
 
-- DIR: tachar docs-sitio y demo-assets-nuevos del ROADMAP (pyproject, version-unica, pre-commit-hooks y release-auto siguen pendientes de tachado de rondas anteriores).
-- IMP-2: tema-claro activo en ui/dashboard_template.html — ojo: el export SVG/PNG del grafo y dashboard-dark.png; si el tema cambia algo visual relevante, avisar para regenerar capturas (las actuales muestran el tema oscuro por defecto, siguen válidas).
-- TEST: los enlaces de assets de README.es.md ya apuntan al set nuevo; si detectáis cualquier captura desactualizada, abierto a regenerarla.
+- DIR: tachar del ROADMAP (acumulado): pyproject, version-unica, pre-commit-hooks, release-auto, demo-assets-nuevos, docs-sitio, ci-matrix-os, usage-sync — las 8 entregadas y verificadas localmente; readme-en ya está marcada en texto.
+- TEST: la pata Windows de CI es experimental 1 ronda (continue-on-error); si en esta ronda sale verde, propongo promocionarla a blocking en la siguiente. macOS ya es blocking.
+- IMP-1: documenté vuestras 4 claves nuevas (shodan_censys, reverse_ip, social_footprint, leak_check) en USAGE a partir del catálogo del motor; si alguna descripción no encaja con el comportamiento real, decídmelo y la ajusto.
 
 ## Propuestas para el roadmap
 
-- [ ] (PUL-1) usage-en — (4ª vez) traducción fiel de docs/USAGE.md a docs/USAGE.en.md; con docs-sitio en inglés, USAGE es la última página grande en español — docs/
-- [ ] (PUL-1) docs-link-lint — job/script de CI que valide los enlaces internos de docs/ y README (el que usé para verificar docs-sitio: ~20 líneas, offline) para que los enlaces no se pudran — .github/, docs/
-- [ ] (PUL-1) pypi-publish — (reiterada) job de publish a PyPI en release.yml con trusted publishing (requiere alta del publisher por el propietario) — .github/
-- [ ] (PUL-1) changelog-compare-links — enlaces de comparación al pie del CHANGELOG ([2.1.1]: .../compare/v2.1.0...v2.1.1) — CHANGELOG.md
+- [ ] (PUL-1) usage-en — (5ª vez) traducción fiel de docs/USAGE.md a docs/USAGE.en.md; con el sitio de docs en inglés es la última página grande en español — docs/
+- [ ] (PUL-1) docs-link-lint — job/script de CI que valide enlaces internos de docs/ y READMEs (el verificador que uso desde docs-sitio; ~30 líneas, offline) — .github/, docs/
+- [ ] (PUL-1) pypi-publish — (reiterada) publish a PyPI en release.yml con trusted publishing (requiere alta del propietario en pypi.org) — .github/
+- [ ] (PUL-1) changelog-compare-links — enlaces de comparación al pie del CHANGELOG — CHANGELOG.md
 
 ## Notas de transparencia
 
-- Suite en 1000 tests al cerrar (974 al empezar la ronda); 2 push rechazados por carrera con la flota, ambos con delta entrante solo-metadata: rebase + delta-check y validación previa en pie, sin re-ejecutar la suite.
-- docs-sitio en inglés por coherencia con la directiva del propietario (readme-en-desde-cero); USAGE.md sigue en español y enlazado.
+- Suite en 1056 tests al cerrar; 2 push rechazados por carrera (delta entrante solo metadata ambas veces: claim de IMP-1 y de PUL-2), resueltos con rebase + delta-check sin re-ejecutar la suite.
+- El verificador de matriz está en .agent-tmp/... no: scripts locales fuera del repo; la validación quedó documentada en el propio ci.yml y en CHANGELOG.
