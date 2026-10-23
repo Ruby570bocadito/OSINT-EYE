@@ -6,6 +6,8 @@ have a limited glyph set but generation never crashes) and long tables that
 span multiple pages (headers repeat on every page).
 """
 
+from core.logging_config import get_logger
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -23,6 +25,8 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
 from typing import Dict, List
+
+logger = get_logger(__name__)
 
 
 def _d(value) -> Dict:
@@ -174,7 +178,7 @@ class PDFReporter:
         story = self._build_story(results)
         doc.build(story, onFirstPage=self._page_footer, onLaterPages=self._page_footer)
 
-        print(f"[+] PDF report saved to: {filename}")
+        logger.info("PDF report saved to: %s", filename)
         return filename
 
     @staticmethod

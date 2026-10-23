@@ -1,8 +1,11 @@
 """OSINT EYE - Markdown Report Generator"""
 
 import json
+from core.logging_config import get_logger
 from datetime import datetime
 from typing import Dict, List
+
+logger = get_logger(__name__)
 
 
 def _d(value) -> Dict:
@@ -52,7 +55,7 @@ class MarkdownReporter:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(report)
 
-        print(f"[+] Report saved to: {output_file}")
+        logger.info("Report saved to: %s", output_file)
         return output_file
 
     def _modules(self) -> Dict:
