@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.1.1-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-519%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-687%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![Coverage](https://img.shields.io/codecov/c/github/Ruby570bocadito/OSINT-EYE?style=for-the-badge&logo=codecov&logoColor=white)](https://app.codecov.io/gh/Ruby570bocadito/OSINT-EYE)
 [![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
 
@@ -73,7 +73,7 @@ Diseñada para pentesters, bug bounty hunters, analistas SOC e investigadores de
 - **Correlación real**: los hallazgos de todos los módulos se cruzan en un inventario unificado de activos con puntuación de riesgo ponderada.
 - **Degradación elegante**: si falta `nmap` o una fuente externa está caída, el módulo se salta con un aviso claro y el escaneo continúa.
 - **Salidas profesionales**: JSON, Markdown, HTML, PDF (ReportLab), CSV, Burp XML, Metasploit JSON, capa MITRE Navigator, SARIF 2.1 y grafo HTML interactivo — todo en una sola pasada.
-- **Probado**: 519 tests que corren **100% offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
+- **Probado**: 687 tests que corren **100% offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
 
 ---
 
