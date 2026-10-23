@@ -738,6 +738,16 @@ class WebScanner:
         print("[*] Scanning for sensitive data...")
         results["sensitive_data"] = self.sensitive_detector.scan_url(target)
 
+        # Security headers audit (CORS, cookies, severities): degrades to
+        # an error entry so the rest of the web results always survive.
+        print("[*] Auditing security headers...")
+        try:
+            from modules.web.headers_audit import SecurityHeadersAuditor
+
+            results["headers_audit"] = SecurityHeadersAuditor().audit(target)
+        except Exception as e:
+            results["headers_audit"] = {"url": target, "error": str(e)}
+
         return results
 
 

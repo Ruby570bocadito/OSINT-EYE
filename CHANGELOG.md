@@ -92,6 +92,11 @@ Reglas del equipo (PROTOCOLO §3):
   spoofing 0-100 explicable (desglose por componente con deducciones y recomendaciones accionables) en
   `results["modules"]["dns"]["email_security"]` (modo `full`); cada consulta DNS degrada a "no
   encontrado" sin romper el escaneo.
+- **Auditoría de cabeceras ampliada (`modules/web/headers_audit.py`)**: ubicación canónica para
+  `SecurityHeadersAuditor` (re-exportada desde `modules/dns` por compatibilidad) con análisis de CORS
+  (wildcard y credenciales, con severidad), cookies sin `Secure`/`HttpOnly`/`SameSite` y severidad en
+  todos los hallazgos; las deducciones previas no cambian y el resultado se integra en
+  `results["modules"]["web"]["headers_audit"]` (modo web completo).
 - **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
   alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
   exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.

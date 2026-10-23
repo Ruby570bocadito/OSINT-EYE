@@ -7,6 +7,7 @@ from .web_scanner import (
     TechDetector,
     WebScanner,
 )
+from .headers_audit import SecurityHeadersAuditor
 
 __all__ = [
     "WaybackMachine",
@@ -15,4 +16,5 @@ __all__ = [
     "EndpointDiscovery",
     "SensitiveDataDetector",
     "WebScanner",
+    "SecurityHeadersAuditor",
 ]
