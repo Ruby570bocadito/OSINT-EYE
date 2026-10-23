@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.1.1-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-687%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-706%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![Coverage](https://img.shields.io/codecov/c/github/Ruby570bocadito/OSINT-EYE?style=for-the-badge&logo=codecov&logoColor=white)](https://app.codecov.io/gh/Ruby570bocadito/OSINT-EYE)
 [![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
 
@@ -34,7 +34,7 @@ Built for pentesters, bug-bounty hunters, SOC analysts and security researchers.
 - **CI-ready** — `--fail-on low|medium|high` turns the worst severity into an exit code your pipeline can gate on.
 - **Professional outputs** — JSON, Markdown, HTML, PDF, CSV, Burp XML, Metasploit JSON, MITRE Navigator, SARIF 2.1 and a self-contained HTML graph, all in one pass.
 - **Real logging** — `core/`, `graph/` and `reporting/` log through the `osint_eye` tree (`--log-level`, `--log-file`); Rich stays the only user-facing output.
-- **Tested** — 687 offline tests and CI on GitHub Actions against Python 3.10/3.11/3.12.
+- **Tested** — 706 offline tests and CI on GitHub Actions against Python 3.10/3.11/3.12.
 
 ---
 
@@ -336,7 +336,7 @@ osint_eye.py            # Orchestrator: phases, CLI, exports
 
 ## Testing & CI
 
-- **687 offline tests** — no network, no nmap, no Ollama; fixtures and monkeypatching only. Run with `PYTHONPATH=. pytest -q tests/`.
+- **706 offline tests** — no network, no nmap, no Ollama; fixtures and monkeypatching only. Run with `PYTHONPATH=. pytest -q tests/`.
 - **CI** (`.github/workflows/ci.yml`): ruff lint gate, pytest matrix on Python 3.10/3.11/3.12, coverage job (pytest-cov, Codecov) and a Docker build + smoke test.
 - Compile check: `python -m compileall -q osint_eye.py core graph ai modules ui reporting tests`.
 

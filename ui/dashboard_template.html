@@ -167,6 +167,23 @@
   /* ---------- graph ---------- */
   #graph-box { height: 420px; position: relative; }
   #graph-box svg { width: 100%; height: 100%; display: block; }
+  .g-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 8px 0 10px;
+  }
+  .g-toolbar input[type="search"] {
+    flex: 1 1 160px; min-width: 140px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 5px 10px; font-size: 12.5px;
+  }
+  .g-toolbar input[type="search"]:focus { outline: none; border-color: var(--accent); }
+  .g-toolbar button, .g-chip {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    color: var(--muted); font-size: 11.5px; padding: 3px 10px; cursor: pointer;
+  }
+  .g-toolbar button:hover, .g-chip:hover { color: var(--text); border-color: var(--border-strong); }
+  .g-chip.on { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+  .g-toolbar button.active { color: var(--warn); border-color: var(--warn); }
   .g-edge { stroke: var(--border-strong); stroke-opacity: .8; }
   .g-node { cursor: grab; }
   .g-node:active { cursor: grabbing; }
@@ -340,6 +357,12 @@
     <section class="grid">
       <div class="panel span-2">
         <div class="panel-h"><h2>Attack Surface Graph</h2><span class="meta" id="graph-meta"></span></div>
+        <div class="g-toolbar">
+          <input type="search" id="g-search" placeholder="Find node…" autocomplete="off" spellcheck="false">
+          <button type="button" id="g-paths" title="Highlight attack paths from the target to risk nodes">Attack paths</button>
+          <button type="button" id="g-export-svg">SVG</button>
+          <button type="button" id="g-export-png">PNG</button>
+        </div>
         <div id="graph-box">
           <div class="g-legend" id="graph-legend"></div>
         </div>
@@ -849,6 +872,141 @@ const NODE_COLORS = {
   cve: "#E5484D", related: "#5A5F6C", unknown: "#5A5F6C",
 };
 
+/* Advanced graph state (grafo-avanzado): shared by the toolbar handlers. */
+const graphState = {
+  nodes: [], edges: [], svg: null, adjacency: [],
+  hiddenTypes: new Set(), search: "", pathsOn: false, pathEls: new Set(),
+};
+
+function gHubIndex(nodes, degree) {
+  // The scan target itself: first 'domain' node, else the highest degree.
+  let hub = nodes.findIndex((n) => String(n.type || "").toLowerCase() === "domain");
+  if (hub < 0) {
+    let best = 0;
+    degree.forEach((d, i) => { if (d > degree[best]) best = i; });
+    hub = best;
+  }
+  return hub;
+}
+
+function gRiskTypes(nodes) {
+  const types = new Set(nodes.map((n) => String(n.type || "").toLowerCase()));
+  const risk = ["cve", "bucket"].filter((t) => types.has(t));
+  if (!risk.length && types.has("port")) risk.push("port");
+  return risk;
+}
+
+function gAttackPathSet(nodes, adjacency, hub, riskTypes) {
+  // BFS from the hub; returns the Set of node indexes + edge keys on any
+  // shortest hub→risk-node path (classic attack-path highlight).
+  const onPath = new Set();
+  if (hub < 0 || hub >= nodes.length || !riskTypes.length) return onPath;
+  const prev = new Array(nodes.length).fill(-2);
+  const prevEdge = new Array(nodes.length).fill(null);
+  prev[hub] = -1;
+  const queue = [hub];
+  while (queue.length) {
+    const u = queue.shift();
+    for (const { to, key } of adjacency[u] || []) {
+      if (prev[to] === -2) {
+        prev[to] = u;
+        prevEdge[to] = key;
+        queue.push(to);
+      }
+    }
+  }
+  nodes.forEach((n, i) => {
+    if (!riskTypes.includes(String(n.type || "").toLowerCase())) return;
+    if (prev[i] === -2) return;  // unreachable from the hub
+    let cur = i;
+    while (cur !== -1) {
+      onPath.add("n" + cur);
+      const key = prevEdge[cur];
+      if (key) onPath.add(key);
+      cur = prev[cur];
+    }
+  });
+  return onPath;
+}
+
+function gApplyFilters() {
+  const st = graphState;
+  if (!st.svg) return;
+  const q = st.search.trim().toLowerCase();
+  const riskTypes = gRiskTypes(st.nodes);
+  const degree = new Array(st.nodes.length).fill(0);
+  st.edges.forEach((e) => { degree[e._s]++; degree[e._t]++; });
+  const hub = gHubIndex(st.nodes, degree);
+  const onPath = st.pathsOn
+    ? gAttackPathSet(st.nodes, st.adjacency, hub, riskTypes)
+    : null;
+
+  st.pathEls.forEach((elm) => elm.removeAttribute("stroke"));
+  st.pathEls.clear();
+
+  st.nodes.forEach((n, i) => {
+    const type = String(n.type || "unknown").toLowerCase();
+    const label = String(n.label || n.id || "");
+    const hidden = st.hiddenTypes.has(type);
+    const match = !q || label.toLowerCase().includes(q);
+    const dimmed = hidden || (q && !match) || (onPath && !onPath.has("n" + i));
+    n._g.setAttribute("opacity", dimmed ? "0.12" : "1");
+    if (onPath && onPath.has("n" + i)) {
+      const c = n._g.querySelector("circle");
+      if (c) { c.setAttribute("stroke", "#F5A623"); c.setAttribute("stroke-width", "2"); st.pathEls.add(c); }
+    }
+  });
+  st.edges.forEach((e, i) => {
+    const key = "e" + i;
+    if (onPath && onPath.has(key)) {
+      e._line.setAttribute("stroke", "#F5A623");
+      e._line.setAttribute("stroke-opacity", "1");
+      e._line.setAttribute("stroke-width", "2");
+      st.pathEls.add(e._line);
+    } else {
+      e._line.removeAttribute("stroke");
+      e._line.setAttribute("stroke-opacity", onPath ? "0.08" : "0.8");
+    }
+  });
+}
+
+function gDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function gExportSvg() {
+  if (!graphState.svg) return;
+  const clone = graphState.svg.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const blob = new Blob([new XMLSerializer().serializeToString(clone)],
+                        { type: "image/svg+xml" });
+  gDownload(blob, "osint_eye_graph.svg");
+}
+
+function gExportPng() {
+  if (!graphState.svg) return;
+  const clone = graphState.svg.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const src = "data:image/svg+xml;charset=utf-8," +
+    encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = graphState.svg.clientWidth || 800;
+    canvas.height = graphState.svg.clientHeight || 420;
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => { if (blob) gDownload(blob, "osint_eye_graph.png"); }, "image/png");
+  };
+  img.src = src;
+}
+
 async function renderGraph(target) {
   const box = $("graph-box");
   const meta = $("graph-meta");
@@ -872,10 +1030,25 @@ async function renderGraph(target) {
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  // Inline styles so a serialized SVG (PNG/SVG export) keeps its look
+  // without the page CSS — and without any external resource.
+  const gstyle = document.createElementNS("http://www.w3.org/2000/svg", "style");
+  gstyle.textContent =
+    ".g-edge{stroke:#3A3F4C;stroke-opacity:.8}" +
+    ".g-label{fill:#8B91A0;font-size:10.5px;font-family:ui-monospace,Menlo,monospace}";
+  svg.appendChild(gstyle);
   const edgeG = document.createElementNS("http://www.w3.org/2000/svg", "g");
   const nodeG = document.createElementNS("http://www.w3.org/2000/svg", "g");
   svg.appendChild(edgeG); svg.appendChild(nodeG);
   box.appendChild(svg);
+
+  graphState.nodes = nodes;
+  graphState.svg = svg;
+  graphState.hiddenTypes = new Set();
+  graphState.search = "";
+  graphState.pathsOn = false;
+  $("g-paths").classList.remove("active");
+  $("g-search").value = "";
 
   // deterministic initial positions (ring)
   nodes.forEach((n, i) => {
@@ -898,6 +1071,14 @@ async function renderGraph(target) {
   // degree per node (drives which labels stay visible on dense graphs)
   const degree = new Array(nodes.length).fill(0);
   lines.forEach((e) => { degree[e._s]++; degree[e._t]++; });
+
+  // graphState.adjacency for attack-path BFS (grafo-avanzado)
+  graphState.edges = lines;
+  graphState.adjacency = nodes.map(() => []);
+  lines.forEach((e, i) => {
+    graphState.adjacency[e._s].push({ to: e._t, key: "e" + i });
+    graphState.adjacency[e._t].push({ to: e._s, key: "e" + i });
+  });
 
   const circles = nodes.map((n) => {
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -939,16 +1120,19 @@ async function renderGraph(target) {
     return g;
   });
 
-  // legend (unique node types present)
+  // legend = type filter chips (grafo-avanzado)
   clear(legend);
   const types = [...new Set(nodes.map((n) => String(n.type || "unknown").toLowerCase()))];
-  types.slice(0, 6).forEach((t) => {
-    const item = el("span");
-    const dot = el("i");
-    dot.style.background = NODE_COLORS[t] || NODE_COLORS.unknown;
-    item.appendChild(dot);
-    item.appendChild(document.createTextNode(t));
-    legend.appendChild(item);
+  types.slice(0, 8).forEach((t) => {
+    const chip = el("button", "g-chip on", t);
+    chip.type = "button";
+    chip.addEventListener("click", () => {
+      if (graphState.hiddenTypes.has(t)) graphState.hiddenTypes.delete(t);
+      else graphState.hiddenTypes.add(t);
+      chip.classList.toggle("on", !graphState.hiddenTypes.has(t));
+      gApplyFilters();
+    });
+    legend.appendChild(chip);
   });
 
   // simple force simulation
@@ -1125,6 +1309,20 @@ async function pollTick() {
   // Soft reload: loadTargets(keepTarget) preserves the user's selection.
   await loadTargets(currentTarget);
 }
+
+(function wireGraphToolbar() {
+  $("g-search").addEventListener("input", (ev) => {
+    graphState.search = ev.target.value || "";
+    gApplyFilters();
+  });
+  $("g-paths").addEventListener("click", (ev) => {
+    graphState.pathsOn = !graphState.pathsOn;
+    ev.target.classList.toggle("active", graphState.pathsOn);
+    gApplyFilters();
+  });
+  $("g-export-svg").addEventListener("click", gExportSvg);
+  $("g-export-png").addEventListener("click", gExportPng);
+})();
 
 loadTargets();
 initLiveRefresh();
