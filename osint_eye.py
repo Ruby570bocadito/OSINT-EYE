@@ -25,6 +25,7 @@ from modules.network.reverse_ip import ReverseIPVHostScanner
 from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.shodan_censys import ShodanCensysCollector
 from modules.osint.social_footprint import SocialFootprintScanner
+from modules.osint.leak_check import LeakChecker
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
 from core import __version__
@@ -291,6 +292,7 @@ class OSINTEye:
         self.cve_scanner = CVEScanner()
         self.host_intel = ShodanCensysCollector()
         self.social_scanner = SocialFootprintScanner()
+        self.leak_checker = LeakChecker()
         self.correlator = AssetCorrelator()
         self.graph_builder = GraphBuilder()
         self.graph_analyzer = None
@@ -429,6 +431,17 @@ class OSINTEye:
         self.results["modules"]["social_footprint"] = result
         found = result.get("summary", {}).get("platforms_found", []) or []
         self._print(f"  Accounts found: {', '.join(found) if found else 'none'}")
+
+    def run_leak_check(self):
+        self._print("Checking public breach metadata...")
+        result = self._safe_run(
+            "leak_check", self.leak_checker.scan, self.target, scope=self.scope
+        )
+        self.results["modules"]["leak_check"] = result
+        summary = result.get("summary", {})
+        self._print(
+            f"  Domain breaches: {summary.get('exact_domain_breaches', 0)} | Name mentions: {summary.get('name_mentions', 0)}"
+        )
 
     def run_wayback(self):
         self._print("Running Wayback Machine...")
@@ -995,6 +1008,7 @@ def scan_targets(targets: list, args):
                     "shodan_censys": engine.run_shodan_censys,
                     "reverse_ip": engine.run_reverse_ip,
                     "social_footprint": engine.run_social_footprint,
+                    "leak_check": engine.run_leak_check,
                     "wayback": engine.run_wayback,
                     "network": engine.run_network,
                     "whois": engine.run_whois,
@@ -1183,6 +1197,7 @@ MODULE_CATALOG = {
     "shodan_censys": "Host intelligence from Shodan/Censys/FOFA (optional keys via OSINT_EYE_* env vars; skipped without them)",
     "reverse_ip": "Reverse-IP neighbours (public keyless source, intelligence only) + virtual host discovery via Host-header probing of the target IP",
     "social_footprint": "Organisation accounts on GitHub/GitLab/Docker Hub/npm/PyPI via public keyless APIs (name derived from the domain)",
+    "leak_check": "Public breach catalogue check (metadata only, no credentials): exact domain breaches + organisation-name mentions",
     "wayback": "Wayback Machine URL history and snapshot timeline",
     "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
     "whois": "Domain registration and ownership data",

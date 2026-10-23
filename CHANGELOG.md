@@ -10,6 +10,12 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Módulo `leak_check`**: comprobación del dominio/organización contra el catálogo público de
+  brechas de HIBP sin API key (solo metadatos: título, dominio afectado, fecha, clases de datos,
+  registros; nunca credenciales). Dos capas: coincidencia exacta de dominio (campo `Domain` de la
+  brecha) y mención heurística del nombre de la organización en título/descripción (se reporta como
+  heurística). El catálogo se pide una vez por escaneo y degrada (429/403/red → error con motivo).
+  Disponible vía `--modules leak_check`.
 - **Módulo `social_footprint`**: cuentas de la organización en GitHub, GitLab, Docker Hub, npm y PyPI
   usando solo APIs públicas sin clave (nombre de cuenta derivado del dominio, o pasado
   explícitamente); perfil, repos/proyectos recientes y paquetes del scope. Cada plataforma degrada
