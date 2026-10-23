@@ -9,7 +9,43 @@ Reglas del equipo (PROTOCOLO §3):
 
 ## [Unreleased]
 
+### Añadido
+- **Módulo `leak_check`**: comprobación del dominio/organización contra el catálogo público de
+  brechas de HIBP sin API key (solo metadatos: título, dominio afectado, fecha, clases de datos,
+  registros; nunca credenciales). Dos capas: coincidencia exacta de dominio (campo `Domain` de la
+  brecha) y mención heurística del nombre de la organización en título/descripción (se reporta como
+  heurística). El catálogo se pide una vez por escaneo y degrada (429/403/red → error con motivo).
+  Disponible vía `--modules leak_check`.
+- **Módulo `social_footprint`**: cuentas de la organización en GitHub, GitLab, Docker Hub, npm y PyPI
+  usando solo APIs públicas sin clave (nombre de cuenta derivado del dominio, o pasado
+  explícitamente); perfil, repos/proyectos recientes y paquetes del scope. Cada plataforma degrada
+  por separado (404 → no encontrada, rate limit/red → error con motivo); respuestas malformadas se
+  toleran. Disponible vía `--modules social_footprint`.
+- **Módulo `reverse_ip`**: vecinos en la misma IP (fuente pública sin clave, solo inteligencia: nunca
+  se contacta a los vecinos) + descubrimiento de virtual hosts sondando la IP del objetivo con
+  cabeceras `Host:` derivadas del dominio (wordlist `data/wordlists/vhosts.txt`) o pasadas
+  explícitamente; una respuesta distinta a la baseline (status/Server/título/longitud) revela el
+  vhost. Scope-aware: candidatos derivados fuera de scope se descartan con auditoría. Disponible
+  vía `--modules reverse_ip`.
+- **Módulo `shodan_censys`**: inteligencia de hosts desde Shodan/Censys/FOFA, totalmente opcional
+  (claves del usuario vía `OSINT_EYE_SHODAN_KEY`, `OSINT_EYE_CENSYS_API_ID/SECRET`,
+  `OSINT_EYE_FOFA_EMAIL/KEY`): sin clave cada proveedor se marca `skipped` y el escaneo sigue;
+  con clave fusiona IPs/puertos/servicios/subdominios en `results["modules"]["shodan_censys"]`.
+  Disponible vía `--modules shodan_censys` (o en el catálogo `--modules`).
+
+### Cambiado
+- **README.es.md**: la galería Demo apunta al nuevo set de capturas regeneradas con fixtures 100 % offline
+  (`demo-scan.gif`, `wizard-auth`, `cli-progress`, `dashboard-dark`, `graph-view`, `report-pdf`); los
+  `demo_*.png`/`demo.gif` legacy (solo referenciados desde README.es.md) se eliminan del repo.
+
 ### Corregido
+- **fix-h014 (CRÍTICO, wizard)**: el flujo interactivo completo era un no-op — el wizard recolectaba
+  las 11 respuestas + el gate de autorización, imprimía los args construidos y `main()` caía al
+  `return 0` sin llamar a `scan_targets()`. Ahora el camino interactivo ejecuta el mismo contrato que
+  la CLI directa: `scan_targets()` + `decide_exit_code()` (el banner sigue reservado a la CLI; el
+  wizard ya imprime el suyo). Regresión e2e con pty real (`tests/e2e/test_e2e_wizard_scan_pty.py`):
+  el wizard completo produce fases de escaneo, JSON exportado y exit code del contrato. La ruta de
+  cancelación (H-012) no se toca: sigue asignada a IMP-3.
 - **Dashboard**: el contador y el panel de tecnologías vuelven a reflejar el escaneo (el doble
   envoltorio `_as_dict()` en `get_summary()` convertía la lista de tecnologías detectadas en un
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
@@ -20,8 +56,44 @@ Reglas del equipo (PROTOCOLO §3):
   dominio (`has_subdomain`) en `_ingest_certs()` — antes quedaban como islas huérfanas y el grafo
   interactivo se degradaba a un anillo de nodos sueltos (466 nodos / 9 aristas en un caso real;
   ahora 464 aristas).
+- **Dashboard (normalizador único)**: `_tech_names()` unifica summary y `_collect_assets` — aceptan
+  todas las formas en la naturaleza (lista directa, wrapper dict/lista y el payload real de
+  web_scanner con url/status_code, cuyas claves ya no se filtran como nombres); un dict de
+  metadatos sin la clave `technologies` sigue devolviendo vacío (contrato de la regresión SEG).
+  El TUI hereda el fix al reutilizar `_collect_assets`.
 
 ### Seguridad
+- **fix-h011 (DKIM p= vacío)**: la auditoría email-security ya no da por protegido un dominio cuyo
+  registro DKIM publica `p=` vacío (clave revocada, RFC 6376 §3.6.1.1): esos selectores quedan en
+  `dkim.revoked` con su motivo (`revoked`/`malformed`), no cuentan como evidencia, el score aplica
+  la deducción por ausencia de DKIM (-15) y se sugiere republicar una clave válida.
+- **fix-h002 (validación de targets CLI)**: la CLI normaliza targets sucios en vez de dejarlos llegar
+  a los motores: `HTTPS://Example.COM` → `https://example.com`, `https://example.com/ruta` y
+  `example.com/path?x=1` → `example.com` (se conservan scheme y host:port para el módulo web y los
+  fixtures loopback), espacios/puntos finales fuera, host en minúsculas. Lo no explicable
+  (`not_a_domain!!`, `*.example.com`, puerto inválido) se rechaza con usage error accionable (exit 2)
+  usando las reglas del wizard (dominio/IP/CIDR, wildcards a scope).
+- **fix-h010 (módulos con comas)**: `--modules dns,web` ya funciona (la forma natural de listar): el
+  flag acepta comas y espacios a la vez, recorta espacios, descarta fragmentos vacíos y deduplica.
+  Un nombre desconocido produce un error corto y accionable (lista de módulos válidos + hint
+  `--modules dns,web`) en lugar del volcado de ~40 líneas de usage que dejaba `choices=[...]`.
+- **fix-h008 (PDF duplicado)**: `-o base --pdf` ya no genera dos PDFs. Si 'pdf' está entre los
+  formatos de exportación, la rama `--pdf` no renderiza (export_all produce `base.pdf`); si no está,
+  la rama deriva la ruta de la base `-o` (sufijo saneado por target en multi-target). Sin `-o` se
+  mantiene el nombre por defecto en CWD.
+- **fix-h001 (persistencia)**: el quickstart del README ya deja fichero reutilizable: sin `--output`,
+  cada escaneo auto-guarda `osint_eye_<target>_<ts>.json` en el directorio actual (misma convención
+  que el PDF por defecto) e imprime dónde quedó y que la caché vive en `~/.osint_eye/cache`. La rama
+  `--dashboard` reutiliza ese fichero en vez de generar un duplicado con otro timestamp.
+- **fix-h007 (Ctrl+C)**: interrumpir un escaneo ya no termina en traceback crudo: el bucle de targets
+  captura `KeyboardInterrupt`, reúne los resultados parciales (targets completados + el en vuelo) en
+  `ScanInterrupted`, imprime mensaje de aborto con el resumen por target y sale con código propio
+  `130` (convención POSIX 128+SIGINT), documentado junto al resto de exit codes.
+- **fix-h006 (cache corrupta)**: una `scan_cache.db` corrupta ya no crashea el escaneo con
+  `sqlite3.DatabaseError: file is not a database`: `ScanCache` detecta el fallo al inicializar,
+  pone el fichero en cuarentena (`<db>.corrupt`, con timestamp si el nombre está ocupado — nunca se
+  destruye), avisa al operador por el logger de osint_eye y recrea una caché vacía; el escaneo
+  continúa sin datos previos.
 - **fix-h004 (escape injection)**: los targets y las rutas de salida suministradas por el usuario se
   neutralizan antes de llegar al terminal — `_neutralize_console_text()` elimina los bytes de control
   (ESC/OSC/DEL) en la entrada de `scan_targets`, en `OSINTEye.__init__` (target y results heredan la
@@ -39,6 +111,60 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **USAGE sincronizado (usage-sync)**: docs/USAGE.md al día con la CLI actual — catálogo completo de las
+  24 claves `--modules` (incl. shodan_censys/reverse_ip/social_footprint/leak_check de IMP-1 y los pasos
+  correlation/graph/mitre/chains), `--modules dns,web` con comas + error accionable (H-010), exit code 130
+  con resumen parcial (H-007), auto-persistencia sin `-o` (H-001) y confinamiento de rutas (H-003),
+  cuarentena de caché corrupta (H-006), guard de `--webhook`, `--export-cypher`, `--tui` y el contrato
+  `BaseModule` (enlaza docs/plugins.md). Ejemplos verificados offline (exit 2 real en los 3 errores de uso
+  documentados); docs/index.md corregido (los 12 colectores no agotan el catálogo).
+- **Matriz CI con Windows/macOS (ci-matrix-os)**: el job de tests corre ahora en ubuntu (3.10/3.11/3.12),
+  macOS 3.12 (blocking) y Windows 3.12 (experimental, `continue-on-error` hasta una ronda en verde);
+  en Windows se excluyen los dos e2e `pty` (únicos usos de `pty` en tests/) y el paso `apt` queda
+  solo en Linux; expansión de matriz verificada offline (5 combos, sin duplicados).
+- **Sitio de documentación (docs-sitio)**: `docs/` reorganizado y ampliado en inglés (coherente con el
+  README) — `docs/index.md` (hub con mapa de la documentación y tabla de los 12 módulos),
+  `docs/architecture.md` (capas, flujo de datos por fases, contrato de resultados, guards de seguridad),
+  `docs/modules/` (12 páginas, una por colector: qué recolecta, claves del resultado, degradación),
+  `docs/plugins.md` (contrato BaseModule/PluginManager con ejemplo offline-testable) y `docs/FAQ.md`.
+  El README enlaza el hub; todo el contenido derivado del código actual (docstrings, `--help` real,
+  `core/schema.py`).
+- **Quickstart en el dashboard vacío/demo (dashboard-vacio-guiado)**: cuando el dashboard no tiene
+  escaneos o solo muestra datos demo, un panel «No scan data yet» ofrece los 3 comandos exactos del
+  CLI con botón de copiado (`--dashboard`, `--dashboard --monitor`, `--rich`); se oculta en cuanto
+  hay datos reales. Solo textContent/addEventListener (compatible CSP), sin recursos externos,
+  funciona en ambos temas.
+- **Tema claro en el dashboard**: el dashboard sigue `prefers-color-scheme` — paleta clara completa
+  (tokens redefinidos en `@media (prefers-color-scheme: light)`, `color-scheme` coherente) con el
+  oscuro como estado por defecto intacto; el topbar deja su rgba fijo por `--topbar-bg`, el anillo
+  del timeline usaba una variable inexistente (`--panel-bg`) que caía siempre a oscuro y ahora usa
+  `--surface`, y el export SVG/PNG del grafo lee los tokens computados del tema activo (con
+  fallback oscuro). Sin toggle, sin recursos externos.
+- **ASN y netblocks de la organización (`asn-ip-ranges`)**: resuelve el target a IP y enumera el ASN
+  de origen, el titular y todos los prefijos anunciados vía RIPEstat (API pública sin clave), más el
+  objeto de red RDAP (nombre, país, rango start/end, tipo) vía rdap.org; cada fuente degrada de forma
+  independiente y los prefijos se reportan como inteligencia (nunca se sondean). Respeta el scope y
+  degrada sin red (`modules/network/asn.py`).
+- **Hash de favicon para pivotar (`favicon-hash`)**: descarga el icono del objetivo (primero el
+  `<link rel="icon">` declarado, con fallback a `/favicon.ico`) y calcula el hash favicon estándar
+  de los motores de búsqueda de activos — MurmurHash3 x86_32 firmado sobre el base64, implementado
+  en Python puro (cero dependencias nuevas, paridad con la librería de referencia verificada) —
+  junto a md5/sha256, tamaño y content-type; las respuestas que no son imagen (por content-type o
+  magic bytes) se reportan pero nunca se hashean. Respeta el scope y degrada sin red
+  (`modules/web/favicon_hash.py`).
+- **TUI completa (`--tui`)**: la TUI Textual es navegable de verdad — pestañas Overview / Assets /
+  DNS / Network / Findings (atajos 1-5), tabla de activos con la vista canónica del dashboard y
+  filtro en vivo (`ctrl+f`), y ficha modal por activo (módulos que lo reportan, severidad por
+  módulo y evidencia) abierta con Enter y cerrada con esc/q; footer con los atajos. Cableada como
+  `--tui` tras el escaneo (mismo patrón que `--dashboard`); 100 % offline y degradación grácil sin
+  el extra ui.
+- **Secretos y endpoints en ficheros JS (`js-secrets`)**: descarga los .js del objetivo (tope 20
+  ficheros / 2 MB) y extrae claves AWS/Google/GitHub/Slack, JWT, cabeceras Bearer, claves Firebase,
+  contraseñas hardcodeadas, claves privadas y endpoints (absolutos y `/api|/rest|/graphql`), más un
+  pase de entropía de Shannon para tokens sin patrón conocido; verificación de falsos positivos
+  (ejemplos de documentación, plantillas `${...}`/`process.env`, líneas comentadas y cadenas de
+  baja diversidad se descartan) con confianza y línea de origen por hallazgo. Respeta el scope y
+  degrada sin red (`modules/web/js_secrets.py`).
 - **Benchmarks offline reproducibles (`tests/bench/`)**: runner standalone (`python tests/bench/bench_runner.py`,
   sin dependencias nuevas, sin red, no se recolecta por pytest) que mide 8 casos de core sobre datos
   sintéticos — `Scope.allows()`/`filter_targets()`, ingest y consultas del `AssetCorrelator`,
@@ -52,6 +178,14 @@ Reglas del equipo (PROTOCOLO §3):
   firma SHA-1) y cadena verificada contra el almacén del sistema; hallazgos explicables con
   severidad, score 0-100 y nota A-F. Solo stdlib (`ssl`/`socket`), degradación grácil sin conexión
   y respetando el scope (`modules/certs/tls_audit.py`).
+- **Capturas demo reales de la UI actual (docs/assets/)**: `dashboard-dark.png` (dashboard con el
+  fixture cargado: grafo, filtros del explorer, timeline), `cli-progress.png` (tracker real de
+  progreso-por-módulo), `wizard-auth.png` (gate de autorización del wizard), `report-pdf.png`
+  (primera página del PDF), `graph-view.png` (grafo de superficie), y demo animada
+  `demo-scan.gif`/`demo-scan.mp4` (14 s: CLI → navegación del dashboard). Todo generado 100 %
+  offline contra 127.0.0.1 con fixture example.com (dashboard Flask local + navegador headless,
+  wizard real abortado en el gate de autorización, PDF con reporting/pdf_reporter); sustituirá a
+  los assets antiguos cuando PUL-1 los cablee en los README.
 - **Grafo avanzado**: la leyenda del grafo es ahora una barra de filtros por tipo de nodo (chips
   que atenúan lo excluido), búsqueda de nodos con resaltado, botón «Attack paths» que ilumina los
   caminos más cortos del target hacia los nodos de riesgo (CVEs/buckets, fallback puertos) vía BFS,
@@ -172,11 +306,21 @@ Reglas del equipo (PROTOCOLO §3):
 - **Makefile de desarrollo**: atajos `make help/install/test/coverage/lint/docker/clean` que
   reflejan los comandos del protocolo y del CI (venv, suite offline, ruff, build + smoke test de la
   imagen), para onboarding de un solo comando.
+- **Hooks de pre-commit**: `.pre-commit-config.yaml` con ruff (misma puerta E9 que el CI), fixer de
+  EOF y de espacios finales; activación opcional con `pip install pre-commit && pre-commit install`
+  (documentado en CONTRIBUTING.md; `pre-commit` añadido al extra `[dev]`).
 - **Badges dinámicos de tests y versión**: un job de CI regenera `.github/badges/tests.json` y
   `version.json` en cada push a `main` (endpoint JSON de shields.io servido desde el propio repo);
   los badges del README dejan de derivarse a mano (fin del desfase tipo «706 vs 767»).
+- **Release automático**: al pushear un tag `vX.Y.Z` (que debe coincidir con `__version__` de
+  `core/__init__.py`) el workflow `.github/workflows/release.yml` construye sdist/wheel, publica la
+  imagen en GHCR con el build-arg de versión y abre el GitHub Release con las notas extraídas de la
+  sección correspondiente del CHANGELOG (fallo limpio si la sección no existe).
 
 ### Cambiado
+- **Fuente única de versión**: `core/__init__.py` define `__version__` (2.1.1); el banner de la CLI
+  lo importa (antes decía "v2.1" fijo), `pyproject.toml` lo deriva vía `setuptools.dynamic` y el job
+  de badges del CI lo lee de ahí — la versión ya no puede divergir entre banner, paquete y badges.
 - **Dependencias depuradas**: se eliminan `nvdlib`, `waybackpy`, `beautifulsoup4` y `lxml`
   (cero imports en producto, verificado con venv limpio y suite completa) y se declara `urllib3`
   (import directo en `modules/_http.py`) — installs más ligeros y contrato honesto.

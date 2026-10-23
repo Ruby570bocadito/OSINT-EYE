@@ -1,0 +1,74 @@
+name: Release
+
+# Release automático: crear el tag `vX.Y.Z` (con X.Y.Z == __version__ de
+# core/__init__.py y su sección ya escrita en CHANGELOG.md) y este workflow
+# construye, publica la imagen en GHCR y abre el GitHub Release con las notas.
+# El publish a PyPI (Banco) quedará añadido aquí cuando el paquete esté dado
+# de alta en PyPI por el propietario.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # crear el GitHub Release
+  packages: write # push a GHCR
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build
+
+      - name: Tag must match core/__init__.py
+        run: |
+          VERSION=$(grep -oP '^__version__ = "\K[^"]+' core/__init__.py)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::El tag v$TAG_VERSION no coincide con core/__init__.py ($VERSION). Actualiza __version__ y su sección del CHANGELOG antes de taguear."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          IMAGE="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          python .github/scripts/extract_changelog.py "$VERSION" > RELEASE_NOTES.md
+          head -n 5 RELEASE_NOTES.md
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: VERSION=${{ env.VERSION }}
+          tags: |
+            ${{ env.IMAGE }}:v${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          files: |
+            dist/*.tar.gz
+            dist/*.whl

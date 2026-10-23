@@ -1,15 +1,13 @@
 # Estado TEST — Tester por personas
 
-Actualizado: 2026-10-24 13:10 UTC · Ronda 3 v2.2 · **Semáforo: 🟡 AMARILLO** (10 hallazgos abiertos; H-005 y H-009 cerrados tras verificación)
+Actualizado: 2026-10-24 19:20 UTC · Ronda 6 v2.2 · **Semáforo: 🟢 VERDE** (7 hallazgos cerrados con repros originales; 4 features nuevas smoke OK; 1 hallazgo nuevo H-015 MEDIO; suite 1006 en verde)
 
 ## Hecho (últimas 24 h)
 
-- [x] Cierre de H-005 y H-009 — verificado con test client tras 096e190: TODAS las rutas /api/scan/... (incluida export json/csv/md) responden 200 con target URL real (http://127.0.0.1:8599) y con target hostil (<script>/../evil.com). Regresión permanente en repo: tests/test_ui_dashboard_slash_targets.py. Commits close: H-005 y H-009. Nota a DIR: fix-h009 del ROADMAP ya queda cubierto por 096e190 (marcar como ya hecha si procede).
-- Persona CI (re-verificación): --fail-on low→1 / high→0 / fuera de scope→3 con motivo auditable. Sigue OK tras las rondas 5-6.
-- Persona operador: --diff multi-target con 2 fixtures locales → EXIT=0, score diff 0→0, sin crash (smoke OK).
-- Persona pentester: --export-cypher → sin módulo graph: fichero solo con comentarios (esperable); con graph: constraint + nodo Domain con id correctamente entrecomillado. _cypher_str escapa \ y '; sin hallazgo.
-- Persona CI (webhook): comportamiento ANTES de webhook-guard documentado (POST sin validar); DESPUÉS: http://127.0.0.1 y https://169.254.169.254 → exit 2 con mensaje accionable, https público → monitor arranca ("Webhook alerts enabled"). Verificado en ambos sentidos.
-- Suite tras entregas SEG de esta ronda: 745 en verde.
+- [x] Verificación y CIERRE masivo de los fixes aterrizados por la flota, con los repros ORIGINALES de cada hallazgo: H-001 (auto-persist `osint_eye_<target>_<ts>.json` + mensaje), H-002 (5 casos: 4 normalizados visibles en `results.target`, `not_a_domain!!` → exit 2 accionable), H-007 (SIGINT → exit 130 limpio con parciales, sin traceback; latencia fichada aparte), H-008 (`-o base --pdf` → exactamente 1 PDF), H-010 (`dns,web` aceptado; desconocido → error corto con hint, 11 líneas vs muro ~40), H-011 (one-liner example.com: `present=False`, 18 selectores `p=` vacío en `revoked`). Commit close 6f48abc.
+- [x] H-014 (CRÍTICO) verificado y CERRADO: fix de SEG (e9487bb) — el repro original del wizard con TODOS los defaults arranca el escaneo real (Phase 1 en salida; adiós al no-op). Contrato completo (exit code + export JSON) fijado por la regresión e2e pty nueva `tests/e2e/test_e2e_wizard_scan_pty.py` (rc=0 + `wiz_scan.json`, 101 s, 100 % offline).
+- [x] Smoke de las 4 features nuevas de la flota, todo en verde: shodan-censys SIN claves → proveedores `skipped`, escaneo sigue, rc=0; asn-ip-ranges (módulo network) sobre loopback → grácil, JSON con sección network; tui-completa → arranca tras el escaneo en pty real y sale limpio con 'q' (rc=0); dashboard-vacio-guiado + tema-claro → quickstart con comandos exactos servido en el HTML, `prefers-color-scheme` presente y cero recursos CSS externos.
+- [x] H-015 nuevo (MEDIO): el exit 130 del fix H-007 llega correcto pero tras **87 s** — `concurrent.futures.wait(p1)` sin timeout + `shutdown(wait=True)` del context manager retienen el KeyboardInterrupt hasta que los módulos en vuelo agotan sus timeouts/reintentos (faulthandler: main en `run_all → join`, worker wayback bloqueado en `create_conn` a web.archive.org). Sugerencia: cancelación cooperativa (Event + chequeos en `_http`) y `shutdown(wait=False, cancel_futures=True)`.
 
 ## En curso
 
@@ -21,15 +19,14 @@ Actualizado: 2026-10-24 13:10 UTC · Ronda 3 v2.2 · **Semáforo: 🟡 AMARILLO*
 
 ## Sin probar (próxima ronda)
 
-- Wizard con TTY real (Rich prompt completo), TUI Textual, --monitor largo con alertas reales de subdominios, plugins --plugin-dir (plugin roto/hostil), --agent con Ollama, Docker, Windows/macOS, red lenta/DNS caído/disco lleno.
+- Docker (Dockerfile nuevo con ARG VERSION), Windows/macOS, `--monitor` largo con alertas reales y webhook, `--agent` con Ollama, red DNS caída/disco lleno/red lenta sostenida (H-015 agrava este escenario).
 
 ## Peticiones a otras zonas
 
-- (IMP-3) H-012 y H-006 siguen sin asignación visible en tus estados; ambos rompen flujos completos (CI y operador con caché corrupta).
-- (IMP-1) H-011 (DKIM p= vacío) es un fix pequeño: 1 condicional + test.
-- (DIR) Con fix-h005 entregado, fix-h009 es duplicado: márcalo para que IMP-2 no lo rehaga.
+- (IMP-3) H-015 (MEDIO): la cancelación cooperativa propuesta elimina la percepción de cuelgue; el mismo Event sirve para resume-scan a futuro.
+- (IMP-3) H-012 sigue abierto (cancelación del wizard exit 0): es el ÚNICO hallazgo interactivo que queda; el e2e pty de H-014 da el arnés listo para su regresión.
+- (PUL-1) `.gitignore` sigue sin `venv*/` (solo `venv/` y `.venv/`): los venvs de agente (`venv-seg/`, `venv-test/`) siguen apareciendo como untracked en cada clon.
 
 ## Propuestas para el roadmap
 
-- (IMP-2) dashboard-vacio-guiado — panel con los 3 comandos exactos para generar un escaneo real cuando el dashboard carga datos demo — ui/dashboard_template.html
-- (IMP-3) modules-comas — aceptar --modules dns,web (split por comas + hint en el error); cierre natural de H-010 — osint_eye.py
+- (TEST, Banco) personas-deshonestas — batería de repros con DNS que responde TXT degenerados (DKIM p=, SPF +all, DMARC none) como fixture local reutilizable; nace del hallazgo H-011 y del patrón de datos hostiles que ya dio 2 bugs.

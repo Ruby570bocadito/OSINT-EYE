@@ -380,6 +380,15 @@ osint_eye.py            # Orchestrator: phases, CLI, exports
 
 This tool is intended for **passive/semi-passive OSINT reconnaissance on assets you own or are explicitly authorized to test** (in-scope bug bounty, contracted audits, labs). The network modules perform active requests — use them only within your authorized scope. The team is not responsible for misuse.
 
+## 📚 Documentation
+
+Full documentation lives under [`docs/`](docs/index.md), starting at the [documentation hub](docs/index.md):
+
+- [Architecture](docs/architecture.md) — layers, data flow, safety guards
+- [Modules](docs/modules/dns.md) — one page per built-in collector
+- [Writing plugins](docs/plugins.md) — the `BaseModule` contract, end to end
+- [FAQ](docs/FAQ.md) — keys, targets, exit codes, degradation behaviour
+
 ## Roadmap & contributing
 
 The live plan (priorities, phase v2.3 «Intelligence», idea bank and per-agent tasks) lives in [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md); release history in the [CHANGELOG](CHANGELOG.md). Extended CLI reference (Spanish): [`docs/USAGE.md`](docs/USAGE.md).

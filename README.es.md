@@ -37,15 +37,15 @@
 
 ## 🎬 Demo
 
-> Escaneo real contra `example.com` (módulos DNS, WHOIS, web, endpoints, CDN/WAF, cloud buckets, correlación, grafo, MITRE y chains):
+> Capturas de la UI actual, regeneradas con fixtures 100 % offline (loopback y `example.com`, sin datos de terceros). Vídeo del escaneo completo: [`demo-scan.mp4`](docs/assets/demo-scan.mp4).
 
-![OSINT EYE en acción](docs/assets/demo.gif)
+![OSINT EYE en acción](docs/assets/demo-scan.gif)
 
 ### Salida de la CLI
 
-| Banner + arranque del escaneo | Resumen ejecutivo |
+| Banner + wizard con check de autorización | Progreso por módulo y resumen |
 |---|---|
-| ![Banner y fases del scan](docs/assets/demo_scan.png) | ![Resumen con risk posture](docs/assets/demo_summary.png) |
+| ![Banner y wizard de configuración](docs/assets/wizard-auth.png) | ![Tabla de progreso por módulo en la Rich CLI](docs/assets/cli-progress.png) |
 
 ### Catálogo de módulos
 
@@ -53,13 +53,15 @@
 python osint_eye.py --modules
 ```
 
-![Catálogo de módulos](docs/assets/demo_modules.png)
-
 ### Dashboard web y grafo interactivo
 
-| Dashboard Flask | Grafo de superficie de ataque |
+| Dashboard Flask (tema oscuro, escaneo cargado) | Grafo de superficie de ataque |
 |---|---|
-| ![Dashboard web](docs/assets/demo_dashboard.png) | ![Grafo interactivo](docs/assets/demo_graph.png) |
+| ![Dashboard web](docs/assets/dashboard-dark.png) | ![Grafo interactivo](docs/assets/graph-view.png) |
+
+### Informe PDF
+
+![Portada del informe PDF generado para example.com](docs/assets/report-pdf.png)
 
 ---
 
@@ -293,7 +295,7 @@ osint_eye.py            # Orquestador: fases, CLI, exportación
 
 Fase actual: **v2.2 — «Fiable y extensible»** — contrato de datos estable (`results`), logging real, scope seguro, salidas para CI y README fiel.
 
-El plan completo (prioridades ALTA, fase v2.3 «Inteligencia», banco de ideas y tareas por agente) vive en [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md). El histórico de releases, en el [CHANGELOG](CHANGELOG.md).
+El plan completo (prioridades ALTA, fase v2.3 «Inteligencia», banco de ideas y tareas por agente) vive en [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md). El histórico de releases, en el [CHANGELOG](CHANGELOG.md). Documentación completa: [`docs/index.md`](docs/index.md) — arquitectura, módulos (una página por módulo), plugins y FAQ.
 
 ---
 

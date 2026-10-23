@@ -1,11 +1,13 @@
-"""OSINT EYE v2.1 - Main Entry Point with Async, Cache & Multi-Target"""
+"""OSINT EYE - Main Entry Point with Async, Cache & Multi-Target"""
 
 import argparse
 import sys
 import json
 import asyncio
+import ipaddress
 import re
 from typing import Optional
+from urllib.parse import urlsplit
 from datetime import datetime
 from pathlib import Path
 
@@ -19,9 +21,14 @@ from modules.certs.tls_audit import TLSAuditor
 from modules.web import WaybackScanner
 from modules.web.web_scanner import WebScanner, EndpointDiscovery
 from modules.network import NetworkScanner
+from modules.network.reverse_ip import ReverseIPVHostScanner
 from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
+from modules.osint.shodan_censys import ShodanCensysCollector
+from modules.osint.social_footprint import SocialFootprintScanner
+from modules.osint.leak_check import LeakChecker
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
+from core import __version__
 from core.correlator import AssetCorrelator
 from core.config import (
     VALID_EXPORT_FORMATS as _EXPORT_FORMATS,
@@ -96,6 +103,103 @@ def _validate_output_path(value: str, flag: str = "--output") -> str:
     return str(value)
 
 
+def _normalize_cli_target(token: str):
+    """Normalize one CLI target, or explain why it is unusable (H-002).
+
+    Returns ``(target, None)`` on success or ``(None, reason)``. Dirty
+    inputs used to reach the engines untouched — ``HTTPS://Example.COM``
+    or ``example.com/path?x=1`` made the DNS module query garbage and the
+    JSON store the raw token, so the operator believed something was
+    scanned when nothing resolved.
+
+    Normalization: surrounding whitespace and trailing dots/slashes go
+    away; ``scheme://host[:port]/path`` keeps scheme and host:port (the
+    web module needs the scheme, loopback fixtures need the port) and
+    loses path/query; scheme-less tokens with a path keep their host.
+    The final host is validated with the wizard's rules (bare domains,
+    IPv4/IPv6, CIDR; wildcards belong in scope/exclusions).
+    """
+    from ui.wizard import InteractiveWizard as _Wizard
+
+    raw = str(token).strip()
+    if not raw:
+        return None, "empty target"
+
+    if "://" in raw:
+        try:
+            parts = urlsplit(raw)
+        except ValueError:
+            return None, f"{raw!r} is not a valid URL"
+        host = parts.hostname
+        if not host:
+            return None, f"{raw!r} has no host in the URL"
+        ok, reason = _Wizard._validate_target(host)
+        if not ok:
+            return None, reason
+        # IPv6 netloc keeps its brackets ([::1]:8080), like the input form
+        if ":" in host:
+            netloc = f"[{host}]" if parts.port is None else f"[{host}]:{parts.port}"
+        else:
+            netloc = host if parts.port is None else f"{host}:{parts.port}"
+        return f"{parts.scheme.lower()}://{netloc}", None
+
+    t = raw.rstrip(".").rstrip("/")
+    if not t:
+        return None, f"{raw!r} has no host"
+
+    # CIDR first: a slash is only legitimate between an IP and its prefix
+    if "/" in t:
+        head = t.split("/", 1)[0]
+        try:
+            ipaddress.ip_address(head)
+        except ValueError:
+            head = None  # pathful domain token, not CIDR-shaped
+        if head is not None:
+            try:
+                ipaddress.ip_network(t, strict=False)
+                return t, None
+            except ValueError:
+                return None, (
+                    f"{raw!r} is not a valid CIDR (e.g. 192.0.2.0/24); pass a "
+                    f"bare domain, IP or CIDR"
+                )
+
+    try:
+        ipaddress.ip_address(t)
+        return t, None  # bare IPv4/IPv6
+    except ValueError:
+        pass
+
+    # scheme-less token with a path/query: keep the host part
+    head = t.split("/", 1)[0].split("?", 1)[0]
+    if "@" in head:
+        head = head.rsplit("@", 1)[-1]
+    if head.startswith("[") and "]" in head:
+        host = head[1 : head.index("]")]
+        rest = head[head.index("]") + 1 :]
+    else:
+        host, _, rest = head.partition(":")
+    if not host:
+        return None, f"{raw!r} has no host"
+    if rest and (not rest.isdigit() or not 1 <= int(rest) <= 65535):
+        return None, f"{raw!r} has an invalid port {rest!r}"
+    host = host.lower()  # visible normalization: hosts are case-insensitive
+    ok, reason = _Wizard._validate_target(host)
+    if not ok:
+        return None, reason
+    return (f"{host}:{rest}" if rest else host), None
+
+
+def _split_modules_token(value: str) -> list:
+    """Split one --modules argv token on commas (H-010, TEST).
+
+    ``--modules dns,web`` is the natural way to write a list; the type
+    hook splits it per token so both ``dns web`` and ``dns,web`` work.
+    Empty fragments (trailing/double commas) are dropped.
+    """
+    return [m for m in (part.strip() for part in str(value).split(",")) if m]
+
+
 def _pdf_output_name(target: str) -> str:
     """Default PDF filename for a target (sanitized, CWD-relative)."""
     return (
@@ -124,6 +228,20 @@ def _print_monitor_panel(console, targets: list, interval: int, webhook_url):
             border_style="cyan",
         )
     )
+
+
+class ScanInterrupted(Exception):
+    """The operator aborted the scan (Ctrl+C, H-007).
+
+    Carries the results collected so far (completed targets plus the
+    in-flight one, whose partial data lives in ``engine.results``) so
+    ``main()`` can report what was gathered and exit with the dedicated
+    interrupt code instead of a raw traceback.
+    """
+
+    def __init__(self, partial_results: dict):
+        super().__init__("scan interrupted by user")
+        self.partial_results = partial_results or {}
 
 
 class OSINTEye:
@@ -164,6 +282,7 @@ class OSINTEye:
         self.web_scanner = WebScanner()
         self.endpoint_discovery = EndpointDiscovery()
         self.network_scanner = NetworkScanner()
+        self.reverse_ip_scanner = ReverseIPVHostScanner()
         self.whois_scanner = WhoisScanner()
         self.github_scanner = GitHubScanner()
         self.google_scanner = GoogleScanner()
@@ -171,6 +290,9 @@ class OSINTEye:
         self.email_enumerator = EmailEnumerator()
         self.cdn_detector = CDNDetector()
         self.cve_scanner = CVEScanner()
+        self.host_intel = ShodanCensysCollector()
+        self.social_scanner = SocialFootprintScanner()
+        self.leak_checker = LeakChecker()
         self.correlator = AssetCorrelator()
         self.graph_builder = GraphBuilder()
         self.graph_analyzer = None
@@ -282,6 +404,44 @@ class OSINTEye:
         self.results["modules"]["tls_audit"] = result
         grade = result.get("grade") or "n/a"
         self._print(f"  TLS grade {grade} (score {result.get('score')})")
+
+    def run_shodan_censys(self):
+        self._print("Querying host intelligence (Shodan/Censys/FOFA)...")
+        result = self._safe_run("shodan_censys", self.host_intel.scan, self.target)
+        self.results["modules"]["shodan_censys"] = result
+        used = ", ".join(result.get("summary", {}).get("providers_used", [])) or "none (set keys via OSINT_EYE_* env)"
+        self._print(f"  Providers used: {used}")
+
+    def run_reverse_ip(self):
+        self._print("Reverse IP neighbours + virtual hosts...")
+        result = self._safe_run(
+            "reverse_ip", self.reverse_ip_scanner.scan, self.target, scope=self.scope
+        )
+        self.results["modules"]["reverse_ip"] = result
+        summary = result.get("summary", {})
+        self._print(
+            f"  Neighbours: {summary.get('neighbors', 0)} | Virtual hosts: {summary.get('vhosts_found', 0)}"
+        )
+
+    def run_social_footprint(self):
+        self._print("Searching organisation footprint (GitHub/GitLab/Docker Hub/npm/PyPI)...")
+        result = self._safe_run(
+            "social_footprint", self.social_scanner.scan, self.target, scope=self.scope
+        )
+        self.results["modules"]["social_footprint"] = result
+        found = result.get("summary", {}).get("platforms_found", []) or []
+        self._print(f"  Accounts found: {', '.join(found) if found else 'none'}")
+
+    def run_leak_check(self):
+        self._print("Checking public breach metadata...")
+        result = self._safe_run(
+            "leak_check", self.leak_checker.scan, self.target, scope=self.scope
+        )
+        self.results["modules"]["leak_check"] = result
+        summary = result.get("summary", {})
+        self._print(
+            f"  Domain breaches: {summary.get('exact_domain_breaches', 0)} | Name mentions: {summary.get('name_mentions', 0)}"
+        )
 
     def run_wayback(self):
         self._print("Running Wayback Machine...")
@@ -802,154 +962,231 @@ def scan_targets(targets: list, args):
             console.print("\n  [bold green]✔  Monitor stopped gracefully.[/bold green]")
         return {}
 
-    for target in targets:
-        scope = getattr(args, "scope_obj", None)
-        if scope is not None and not scope.allows(target):
-            scope.discard(target, "cli")
-            print(
-                f"[!] {target} fuera de scope ({scope.reason(target)}) - target omitido"
-            )
-            continue
-
-        # Rich header for each target
-        from ui.rich_cli import RichCLI as _RCli
-
-        _cli = _RCli()
-        _cli.print_scan_header(target, args.depth, getattr(args, "stealth", False))
-
-        engine = OSINTEye(
-            target,
-            stealth=args.stealth,
-            ai=not args.no_ai,
-            depth=args.depth,
-            cache=not args.no_cache,
-            scope=getattr(args, "scope_obj", None),
-        )
-
-        if args.modules:
-            module_map = {
-                "dns": engine.run_dns,
-                "certs": engine.run_certs,
-                "tls_audit": engine.run_tls_audit,
-                "wayback": engine.run_wayback,
-                "network": engine.run_network,
-                "whois": engine.run_whois,
-                "github": engine.run_github,
-                "google": engine.run_google,
-                "cve": engine.run_cve,
-                "web": engine.run_web,
-                "endpoints": engine.run_endpoints,
-                "cloud": engine.run_cloud_buckets,
-                "emails": engine.run_emails,
-                "permutation": engine.run_permutation,
-                "takeover": engine.run_takeover_check,
-                "cdn_waf": engine.run_cdn_waf,
-                "correlation": engine.run_correlation,
-                "graph": engine.run_graph,
-                "mitre": engine.run_mitre,
-                "chains": engine.run_attack_chains,
-            }
-            tracker = instrument_engine(engine)
-            tracker.start_live()
-            for module in args.modules:
-                if module in module_map:
-                    module_map[module]()
-            if not args.no_ai:
-                engine.run_ai()
-            tracker.stop_live()
-        else:
-            engine.run_all()
-
-        if getattr(args, "plugin_dir", None):
-            engine.run_plugins(args.plugin_dir)
-
-        if getattr(args, "agent", False) and getattr(engine, "ai_engine", None):
-            engine._print("[*] Generating AI Red Team Playbook...")
-            playbook_res = engine.ai_engine.generate_redteam_playbook(engine.results)
-            playbook_md = playbook_res.get("playbook", "")
-            engine.results["agent_playbook"] = playbook_md
-            print("\n" + "=" * 60 + "\nAI AGENT PLAYBOOK\n" + "=" * 60)
-            print(playbook_md)
-            print("=" * 60 + "\n")
-
-        engine.print_summary()
-
-        if args.rich:
-            from ui.rich_cli import RichCLI
-
-            cli = RichCLI()
-            cli.print_full_results(engine.results)
-
-        if getattr(args, "pdf", False):
-            try:
-                # Sanitized: a URL-like target used to produce a filename
-                # containing "/" and crash PDF generation (FileNotFoundError).
-                pdf_path = _pdf_output_name(target)
-                engine._print(f"[*] Generating Executive PDF Report -> {pdf_path}...")
-                engine.pdf_reporter.generate(engine.results, pdf_path)
-                print(f"[+] PDF Report saved: {pdf_path}")
-            except Exception as e:
-                print(f"[!] PDF generation failed: {e}")
-
-        if args.output:
-            output = (
-                args.output
-                if len(targets) == 1
-                else f"{args.output}_{_sanitize_filename(target)}"
-            )
-            exports = engine.export_all(
-                output, formats=getattr(args, "export_formats", None)
-            )
-            print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
-
-        if getattr(args, "export_cypher", None):
-            from graph.neo4j_exporter import Neo4jExporter
-
-            cypher_file = (
-                args.export_cypher
-                if len(targets) == 1
-                else f"{args.export_cypher}_{_sanitize_filename(target)}"
-            )
-            print(f"[*] Exporting Neo4j Cypher to {cypher_file}...")
-            exporter = Neo4jExporter(
-                engine.results.get("graph", {"nodes": [], "edges": []})
-            )
-            exporter.export_file(cypher_file)
-            print(f"[*] Cypher export complete: {cypher_file}")
-
-        if args.dashboard and len(targets) == 1:
-            from ui.dashboard import load_scan_results, start_dashboard
-
-            # Persist the scan JSON first so the dashboard always has real
-            # data to load, then hand the exact path over.
-            if args.output:
-                dash_json = (
-                    args.output
-                    if args.output.endswith(".json")
-                    else args.output + ".json"
+    # H-007 (TEST): Ctrl+C used to end the scan as a raw
+    # KeyboardInterrupt traceback (e.g. inside sock.connect). The loop
+    # below folds whatever was collected (completed targets plus the
+    # in-flight one) into ScanInterrupted for main() to report cleanly.
+    target = None
+    engine = None
+    try:
+        for target in targets:
+            engine = None  # reset per iteration: no stale engine misattribution
+            scope = getattr(args, "scope_obj", None)
+            if scope is not None and not scope.allows(target):
+                scope.discard(target, "cli")
+                print(
+                    f"[!] {target} fuera de scope ({scope.reason(target)}) - target omitido"
                 )
+                continue
+
+            # Rich header for each target
+            from ui.rich_cli import RichCLI as _RCli
+
+            _cli = _RCli()
+            _cli.print_scan_header(target, args.depth, getattr(args, "stealth", False))
+
+            engine = OSINTEye(
+                target,
+                stealth=args.stealth,
+                ai=not args.no_ai,
+                depth=args.depth,
+                cache=not args.no_cache,
+                scope=getattr(args, "scope_obj", None),
+            )
+
+            if args.modules:
+                # Instrument FIRST, then build the dispatch map: module_map
+                # captures bound methods, so mapping before instrument_engine()
+                # would call the unwrapped originals and the live "Module
+                # Progress" table would stay "pending" for the whole scan.
+                tracker = instrument_engine(engine)
+                tracker.start_live()
+                module_map = {
+                    "dns": engine.run_dns,
+                    "certs": engine.run_certs,
+                    "tls_audit": engine.run_tls_audit,
+                    "shodan_censys": engine.run_shodan_censys,
+                    "reverse_ip": engine.run_reverse_ip,
+                    "social_footprint": engine.run_social_footprint,
+                    "leak_check": engine.run_leak_check,
+                    "wayback": engine.run_wayback,
+                    "network": engine.run_network,
+                    "whois": engine.run_whois,
+                    "github": engine.run_github,
+                    "google": engine.run_google,
+                    "cve": engine.run_cve,
+                    "web": engine.run_web,
+                    "endpoints": engine.run_endpoints,
+                    "cloud": engine.run_cloud_buckets,
+                    "emails": engine.run_emails,
+                    "permutation": engine.run_permutation,
+                    "takeover": engine.run_takeover_check,
+                    "cdn_waf": engine.run_cdn_waf,
+                    "correlation": engine.run_correlation,
+                    "graph": engine.run_graph,
+                    "mitre": engine.run_mitre,
+                    "chains": engine.run_attack_chains,
+                }
+                for module in args.modules:
+                    if module in module_map:
+                        module_map[module]()
+                if not args.no_ai:
+                    engine.run_ai()
+                tracker.stop_live()
             else:
-                dash_json = (
+                engine.run_all()
+
+            if getattr(args, "plugin_dir", None):
+                engine.run_plugins(args.plugin_dir)
+
+            if getattr(args, "agent", False) and getattr(engine, "ai_engine", None):
+                engine._print("[*] Generating AI Red Team Playbook...")
+                playbook_res = engine.ai_engine.generate_redteam_playbook(engine.results)
+                playbook_md = playbook_res.get("playbook", "")
+                engine.results["agent_playbook"] = playbook_md
+                print("\n" + "=" * 60 + "\nAI AGENT PLAYBOOK\n" + "=" * 60)
+                print(playbook_md)
+                print("=" * 60 + "\n")
+
+            engine.print_summary()
+
+            if args.rich:
+                from ui.rich_cli import RichCLI
+
+                cli = RichCLI()
+                cli.print_full_results(engine.results)
+
+            if getattr(args, "pdf", False):
+                # H-008 (TEST): with -o, the default-named PDF in the CWD was
+                # an unexpected duplicate. When 'pdf' is among the export
+                # formats, export_all() renders <base>.pdf and this branch
+                # stays out of the way; otherwise the path derives from the
+                # -o base (suffixed per target on multi-target runs).
+                formats = getattr(args, "export_formats", None)
+                pdf_in_exports = bool(args.output) and (
+                    formats is None or "pdf" in (formats or [])
+                )
+                if not pdf_in_exports:
+                    try:
+                        # Sanitized: a URL-like target used to produce a filename
+                        # containing "/" and crash PDF generation (FileNotFoundError).
+                        if args.output:
+                            base = (
+                                args.output
+                                if len(targets) == 1
+                                else f"{args.output}_{_sanitize_filename(target)}"
+                            )
+                            pdf_path = base if base.endswith(".pdf") else base + ".pdf"
+                        else:
+                            pdf_path = _pdf_output_name(target)
+                        engine._print(
+                            f"[*] Generating Executive PDF Report -> {pdf_path}..."
+                        )
+                        engine.pdf_reporter.generate(engine.results, pdf_path)
+                        print(f"[+] PDF Report saved: {pdf_path}")
+                    except Exception as e:
+                        print(f"[!] PDF generation failed: {e}")
+
+            auto_saved_json = None
+            if args.output:
+                output = (
+                    args.output
+                    if len(targets) == 1
+                    else f"{args.output}_{_sanitize_filename(target)}"
+                )
+                exports = engine.export_all(
+                    output, formats=getattr(args, "export_formats", None)
+                )
+                print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
+            else:
+                # H-001 (TEST): the README quickstart left the user with no
+                # reusable file at all. Persist a default JSON (same CWD
+                # convention as the default PDF) and say where things live.
+                default_json = (
                     f"osint_eye_{_sanitize_filename(target)}_"
                     f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                 )
-            if not Path(dash_json).exists():
-                Path(dash_json).parent.mkdir(parents=True, exist_ok=True)
-                with open(dash_json, "w") as f:
-                    json.dump(engine.results, f, indent=2, default=str)
-            load_scan_results(dash_json)
-            start_dashboard()
+                try:
+                    with open(default_json, "w") as f:
+                        json.dump(engine.results, f, indent=2, default=str)
+                except OSError as exc:
+                    print(f"[!] Could not auto-save results: {exc}")
+                else:
+                    auto_saved_json = default_json
+                    cache_hint = (
+                        "cached in ~/.osint_eye/cache"
+                        if engine.use_cache
+                        else "cache disabled"
+                    )
+                    print(
+                        f"[+] Results saved to {default_json} ({cache_hint}; "
+                        f"export more formats with -o)"
+                    )
 
-        if args.diff and len(targets) > 1:
-            prev_target = targets[targets.index(target) - 1]
-            if prev_target in all_results:
-                diff = ScanDiff()
-                diff.compare(all_results[prev_target], engine.results)
-                print(f"\n[Diff vs {prev_target}]")
-                print(diff.get_summary())
+            if getattr(args, "export_cypher", None):
+                from graph.neo4j_exporter import Neo4jExporter
 
-        all_results[target] = engine.results
+                cypher_file = (
+                    args.export_cypher
+                    if len(targets) == 1
+                    else f"{args.export_cypher}_{_sanitize_filename(target)}"
+                )
+                print(f"[*] Exporting Neo4j Cypher to {cypher_file}...")
+                exporter = Neo4jExporter(
+                    engine.results.get("graph", {"nodes": [], "edges": []})
+                )
+                exporter.export_file(cypher_file)
+                print(f"[*] Cypher export complete: {cypher_file}")
 
+            if args.dashboard and len(targets) == 1:
+                from ui.dashboard import load_scan_results, start_dashboard
+
+                # Persist the scan JSON first so the dashboard always has real
+                # data to load, then hand the exact path over. The auto-saved
+                # default from H-001 is reused when present (no duplicate).
+                if args.output:
+                    dash_json = (
+                        args.output
+                        if args.output.endswith(".json")
+                        else args.output + ".json"
+                    )
+                elif auto_saved_json:
+                    dash_json = auto_saved_json
+                else:
+                    dash_json = (
+                        f"osint_eye_{_sanitize_filename(target)}_"
+                        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                    )
+                if not Path(dash_json).exists():
+                    Path(dash_json).parent.mkdir(parents=True, exist_ok=True)
+                    with open(dash_json, "w") as f:
+                        json.dump(engine.results, f, indent=2, default=str)
+                load_scan_results(dash_json)
+                start_dashboard()
+
+            if getattr(args, "tui", False) and len(targets) == 1:
+                from ui.tui_app import launch_tui
+
+                launch_tui(engine.results)
+
+            if args.diff and len(targets) > 1:
+                prev_target = targets[targets.index(target) - 1]
+                if prev_target in all_results:
+                    diff = ScanDiff()
+                    diff.compare(all_results[prev_target], engine.results)
+                    print(f"\n[Diff vs {prev_target}]")
+                    print(diff.get_summary())
+
+            all_results[target] = engine.results
+
+    except KeyboardInterrupt:
+        # The in-flight target's partial results live in engine.results;
+        # completed ones are already in all_results. engine is reset to
+        # None at the top of every iteration, so a hit during the scan
+        # header of target N+1 never misattributes target N's engine.
+        if target is not None and engine is not None and target not in all_results:
+            all_results[target] = engine.results
+        raise ScanInterrupted(all_results)
     return all_results
 
 
@@ -957,6 +1194,10 @@ MODULE_CATALOG = {
     "dns": "DNS record enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA) + subdomain brute-force",
     "certs": "Certificate transparency (crt.sh) subdomain discovery",
     "tls_audit": "TLS protocol versions, weak ciphers, certificate expiry and chain (stdlib ssl)",
+    "shodan_censys": "Host intelligence from Shodan/Censys/FOFA (optional keys via OSINT_EYE_* env vars; skipped without them)",
+    "reverse_ip": "Reverse-IP neighbours (public keyless source, intelligence only) + virtual host discovery via Host-header probing of the target IP",
+    "social_footprint": "Organisation accounts on GitHub/GitLab/Docker Hub/npm/PyPI via public keyless APIs (name derived from the domain)",
+    "leak_check": "Public breach catalogue check (metadata only, no credentials): exact domain breaches + organisation-name mentions",
     "wayback": "Wayback Machine URL history and snapshot timeline",
     "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
     "whois": "Domain registration and ownership data",
@@ -991,15 +1232,17 @@ def _positive_int(value: str) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 # CI exit codes (--fail-on)
 #
-#   0  scan finished under the requested threshold (or no --fail-on given)
-#   1  --fail-on threshold reached or exceeded by the worst finding severity
-#   2  usage error (argparse convention)
-#   3  nothing was scanned (all targets outside the authorized scope)
+#   0   scan finished under the requested threshold (or no --fail-on given)
+#   1   --fail-on threshold reached or exceeded by the worst finding severity
+#   2   usage error (argparse convention)
+#   3   nothing was scanned (all targets outside the authorized scope)
+#   130 scan interrupted by the operator (Ctrl+C, POSIX 128+SIGINT)
 # ─────────────────────────────────────────────────────────────────────────────
 EXIT_OK = 0
 EXIT_FAIL_ON = 1
 EXIT_USAGE = 2
 EXIT_NOTHING_SCANNED = 3
+EXIT_INTERRUPTED = 130
 
 SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 FAIL_ON_CHOICES = ("low", "medium", "high")
@@ -1128,7 +1371,7 @@ def _print_module_catalog():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="OSINT EYE v2.1 - AI-Powered Attack Surface Intelligence",
+        description=f"OSINT EYE v{__version__} - AI-Powered Attack Surface Intelligence",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1166,6 +1409,10 @@ Exit codes (CI):
     parser.add_argument("--rich", action="store_true", help="Use Rich CLI output")
     parser.add_argument(
         "--dashboard", action="store_true", help="Launch web dashboard after scan"
+    )
+    parser.add_argument(
+        "--tui", action="store_true",
+        help="Explore the results in the interactive Textual TUI after scan",
     )
     parser.add_argument(
         "--profile", help="Use a named [profiles.<name>] section from the "
@@ -1241,29 +1488,9 @@ Exit codes (CI):
     parser.add_argument(
         "--modules",
         nargs="*",
-        choices=[
-            "dns",
-            "certs",
-            "tls_audit",
-            "wayback",
-            "network",
-            "whois",
-            "github",
-            "google",
-            "cve",
-            "web",
-            "endpoints",
-            "cloud",
-            "emails",
-            "permutation",
-            "takeover",
-            "cdn_waf",
-            "correlation",
-            "graph",
-            "mitre",
-            "chains",
-        ],
-        help="Specific modules",
+        type=_split_modules_token,
+        help="Modules to run, comma or space separated (e.g. dns,web). "
+        "Without values, prints the module catalog",
     )
 
     if len(sys.argv) == 1:
@@ -1303,6 +1530,44 @@ Exit codes (CI):
             except OutputPathError as exc:
                 parser.error(str(exc))
             setattr(args, attr, value)
+
+    # H-010 (TEST): --modules dns,web is the natural list form; the type
+    # hook splits commas per token, here the per-token lists are flattened
+    # and unknown names rejected with a short, actionable error (the old
+    # choices=[...] dumped ~40 lines of usage instead).
+    if getattr(args, "modules", None):
+        flat = [m for part in args.modules for m in part]
+        args.modules = list(dict.fromkeys(flat))
+        unknown = [m for m in args.modules if m not in MODULE_CATALOG]
+        if unknown:
+            parser.error(
+                f"unknown module(s): {', '.join(unknown)}; valid modules: "
+                f"{', '.join(MODULE_CATALOG)} (separate them with commas or "
+                f"spaces: --modules dns,web)"
+            )
+
+    # H-002 (TEST): dirty targets used to reach the engines untouched and
+    # produce silent empty results. Normalize what is explainable (URL
+    # netloc, paths, whitespace, case) and reject the rest with an
+    # actionable usage error before any scanning happens.
+    if getattr(args, "targets", None):
+        normalized, invalid = [], []
+        for token in args.targets:
+            clean, reason = _normalize_cli_target(token)
+            if reason:
+                invalid.append((token, reason))
+            else:
+                normalized.append(clean)
+        if invalid:
+            detail = "; ".join(f"{t!r}: {reason}" for t, reason in invalid[:5])
+            if len(invalid) > 5:
+                detail += f"; ... and {len(invalid) - 5} more"
+            parser.error(
+                f"invalid target(s) — {detail}. Pass bare domains, IPs or "
+                f"CIDRs (e.g. example.com, 192.0.2.1, 192.0.2.0/24); a URL "
+                f"is accepted but only its host is scanned"
+            )
+        args.targets = normalized
 
     # Configure the library logger before any scan/monitor work runs, so
     # every core/graph/reporting message honours --log-level/--log-file.
@@ -1378,13 +1643,40 @@ Exit codes (CI):
 
     # Print the banner once for every non-interactive run (scan or monitor).
     # Monitor mode's daemon loop lives entirely inside scan_targets().
-    if not interactive_mode:
-        from ui.rich_cli import RichCLI as _RCli
+    # H-014 (TEST, CRÍTICO): with interactive_mode=True the flow used to
+    # fall through to `return 0` without ever calling scan_targets() — the
+    # wizard collected 11 answers + the authorization gate, printed the
+    # built args and exited as a no-op. The wizard already prints its own
+    # banner (start() → print_banner()), so the banner stays reserved for
+    # the non-interactive path; the scan itself now runs on BOTH paths so
+    # main() honours the same decide_exit_code() contract for CI.
+    from ui.rich_cli import RichCLI as _RCli
 
+    if not interactive_mode:
         _RCli().print_banner()
+    try:
         all_results = scan_targets(args.targets, args)
-        return decide_exit_code(all_results, args)
-    return 0
+    except ScanInterrupted as interrupted:
+        # H-007 (TEST): clean abort — report what was collected, render
+        # the per-target summary of the partials and exit with the
+        # dedicated interrupt code instead of a raw traceback.
+        partials = interrupted.partial_results
+        names = ", ".join(partials.keys()) or "none"
+        print(f"\n[x] Scan interrupted by user (Ctrl+C); partial results for: {names}")
+        summary_cli = _RCli()
+        for result in partials.values():
+            if isinstance(result, dict):
+                try:
+                    summary_cli.print_summary(result)
+                except Exception as exc:
+                    print(f"[!] Partial summary unavailable: {exc}")
+        print(
+            f"[i] Interrupted scans exit with code {EXIT_INTERRUPTED} "
+            f"(128+SIGINT). Re-run with -o to export results as they "
+            f"are collected."
+        )
+        return EXIT_INTERRUPTED
+    return decide_exit_code(all_results, args)
 
 
 if __name__ == "__main__":

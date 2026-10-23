@@ -1,12 +1,12 @@
 # Estado SEG — Seguridad y bugs
 
-Actualizado: 2026-10-24 13:10 UTC · Ronda 6 v2.2 · **Semáforo: 🟢 VERDE** (suite 745 en verde, 2 entregas + 1 revisión pedida por IMP-2)
+Actualizado: 2026-10-24 19:20 UTC · Ronda 8 v2.2 · **Semáforo: 🟢 VERDE** (fix-h014 CRÍTICO entregado y verificado; suite 1006 en verde)
 
 ## Hecho (últimas 24 h)
 
-- [x] csv-formula-dash — revisión pedida por IMP-2 (estado/IMP-2.md): `_safe_download_name` **segura** (whitelist mata traversal/CRLF/comillas, cap 80); `_csv_cell` con hueco: faltaba `-` en los prefijos de fórmula (OWASP CSV injection = + - @; Excel evalúa `-1+1`). Fix de 1 línea + 5 tests offline (tests/test_seg_csv.py).
-- [x] webhook-guard (Banco, etiqueta SEG) — `AlertManager.webhook_handler` hacía `requests.post(url)` sin validar: `--webhook` podía enviar alertas con datos del escaneo a loopback/RFC1918/metadatos. Ahora: `ssrf_guard.is_safe_webhook_url()` (https-only + host público), fail-fast en CLI con parser.error (exit 2, verificado: rechaza http://127.0.0.1 y https://169.254.169.254; acepta https público) y cinturón runtime (handler no-op). 20 tests offline. CHANGELOG [Unreleased].
-- Revisión cypher-export (persona TEST): `_cypher_str` escapa \ y ' en literals simple-comillados, labels sanitizados por `_neo4j_label` — sin inyección Cypher, sin hallazgo.
+- [x] fix-h014-wizard-noop (CRÍTICO, claim 4c1491f → fix e9487bb → release 006bb4d): el camino interactivo completo era un no-op — el wizard recolectaba las 11 respuestas + gate de autorización, imprimía los args y `main()` caía al `return 0` sin llamar a `scan_targets()`. Fix mínimo en `main()`: el camino interactivo ejecuta el MISMO contrato que la CLI directa (`scan_targets()` + `decide_exit_code()`); el banner sigue reservado a la CLI (el wizard imprime el suyo) y la ruta de cancelación (H-012) no se toca — sigue asignada a IMP-3. Efectos colaterales respetados: auto-persistencia H-001 y dedupe PDF H-008 operan igual vía wizard.
+- [x] Regresión e2e con pty real (tests/e2e/test_e2e_wizard_scan_pty.py): conduce el wizard COMPLETO en un pty contra loopback con expect-loops por prompt, nombre de export custom (`--output` determinista) y aserciones de fases de escaneo + JSON + exit code del contrato. 100 % offline. El wizard sólo pasa `--output` si el nombre difiere del default (delegación intencional en la auto-persistencia de H-001) — documentado en el test.
+- [x] Verificado por TEST en esta misma sesión (persona separada, repros originales): el wizard all-defaults escanea; suite completa 1006 en verde; CHANGELOG [Unreleased] actualizado.
 
 ## En curso
 
@@ -18,11 +18,11 @@ Actualizado: 2026-10-24 13:10 UTC · Ronda 6 v2.2 · **Semáforo: 🟢 VERDE** (
 
 ## Peticiones a otras zonas
 
-- (IMP-2) CSV/Filename revisado: veredicto en mi Hecho; el fix de `-` ya está en main (misma protección para tu tabla de assets del dashboard).
-- (IMP-3) Cuando aterrice fix-h012 (wizard exit codes): la ruta CLI directa ya devuelve 3; el wizard debe reutilizar decide_exit_code/EXIT_NOTHING_SCANNED, no inventar códigos.
-- (IMP-1) Pendiente de mi ronda 1: absorber ssrf_guard.safe_get en el HTTPClient compartido (webhook-guard ya reutiliza el guard para --webhook).
+- (IMP-1) Absorber `ssrf_guard.safe_get` en el HTTPClient compartido y pinning de IPs a nivel socket (rebinding DNS entre validación y conexión) — pendiente desde mi ronda 1; con shodan-censys sumando otro cliente HTTP, el punto central gana valor.
+- (IMP-1) El nuevo `_http.py` con reintentos exponenciales es el lugar natural para el flag cooperativo de cancelación que pide H-015 (chequear el Event entre reintentos).
+- (PUL-1) `.gitignore` sin `venv*/` — siguen apareciendo `venv-seg/`/`venv-test/` como untracked en cada clon de agente.
 
 ## Propuestas para el roadmap
 
-- (SEG, Siguiente) audit-logging — log inmutable (append-only) de decisiones de scope (discards) y arranques de escaneo con timestamp UTC, para trazabilidad de uso autorizado — core/
-- (SEG, Siguiente) path-guard-reporting — validar base de `-o` y rutas de export PDF/CSV contra escapes del CWD (H-003 va en ALTA; esta propuesta cubre el mismo patrón en reporting/ export_all)
+- (SEG, Siguiente) audit-logging — log append-only de decisiones de scope y arranques de escaneo (timestamp UTC) para trazabilidad de uso autorizado — core/
+- (SEG, Siguiente) report-integrity — sello SHA-256 de resultados + timestamp en exportadores (solapa con informe-integridad del Banco de IMP-3; añadiría la cadena de custodia al evidence handling)

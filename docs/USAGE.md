@@ -1,6 +1,6 @@
 # Referencia de uso — OSINT EYE
 
-Guía extendida de la CLI. Para instalación y quickstart ver el [README](../README.md).
+Guía extendida de la CLI. Para instalación y quickstart ver el [README](../README.md). El mapa completo de la documentación (arquitectura, módulos, plugins, FAQ) vive en el [hub de docs](index.md).
 
 ## Profundidades de escaneo
 
@@ -16,12 +16,46 @@ Las fases 1-3 ejecutan sus módulos concurrentemente (pools acotados); la fase 4
 ## Seleccionar módulos
 
 ```bash
-# Ver el catálogo
+# Ver el catálogo (tabla Rich con la descripción de cada clave)
 python osint_eye.py --modules
 
 # Ejecutar solo estos módulos, en este orden
 python osint_eye.py example.com --modules dns certs cloud correlation graph mitre
+
+# Comas y espacios son equivalentes (y se pueden mezclar); se deduplica
+python osint_eye.py example.com --modules dns,web
 ```
+
+Una clave desconocida es un error de uso limpio (exit 2) con mensaje accionable: lista de módulos válidos + hint `--modules dns,web` (nada del volcado de usage de ~40 líneas).
+
+Catálogo completo de claves `--modules` (los 12 colectores built-in más los pasos de motor y análisis):
+
+| Clave | Qué hace |
+|-------|----------|
+| `dns` | Enumeración de registros DNS (A/AAAA/MX/NS/TXT/CNAME/SOA) + bruteforce de subdominios |
+| `certs` | Descubrimiento de subdominios por certificate transparency (crt.sh) |
+| `tls_audit` | Versiones de protocolo TLS, cifrados débiles, caducidad y cadena del certificado (stdlib ssl) |
+| `shodan_censys` | Inteligencia de hosts vía Shodan/Censys/FOFA (claves opcionales por env `OSINT_EYE_*`; se salta sin ellas) |
+| `reverse_ip` | Vecinos por reverse-IP (fuente pública sin clave, solo inteligencia) + virtual hosts por probing del Host-header |
+| `social_footprint` | Cuentas de la organización en GitHub/GitLab/Docker Hub/npm/PyPI vía APIs públicas sin clave |
+| `leak_check` | Catálogo público de brechas (solo metadatos, nunca credenciales): brechas del dominio exacto + menciones del nombre |
+| `wayback` | Histórico de URLs y timeline de snapshots de Wayback Machine |
+| `network` | Descubrimiento de puertos y servicios vía nmap (skip grácil si nmap no está) |
+| `whois` | Datos de registro y propiedad del dominio |
+| `github` | Dorking de código en GitHub para secretos y configs filtrados |
+| `google` | Dorking de Google para paneles, ficheros y backups expuestos |
+| `cve` | Búsqueda NVD/CVE para los servicios descubiertos por network |
+| `web` | Fingerprinting HTTP de tecnologías del target |
+| `endpoints` | Descubrimiento de endpoints JS/HTML + sondeo de ficheros sensibles |
+| `cloud` | Descubrimiento de buckets cloud (S3/GCP/Azure) y exposición pública |
+| `emails` | Enumeración de emails desde WHOIS y fuentes públicas |
+| `permutation` | Generación y resolución de permutaciones de subdominios |
+| `takeover` | Detección de subdomain takeover (fingerprints de CNAME colgantes) |
+| `cdn_waf` | Fingerprinting de CDN y WAF |
+| `correlation` | Correlación entre módulos + attack surface score |
+| `graph` | Grafo de relaciones (export HTML interactivo) |
+| `mitre` | Mapeo a técnicas MITRE ATT&CK + export Navigator |
+| `chains` | Constructor de cadenas de ataque (hipótesis multi-paso) |
 
 Dependencias entre módulos a tener en cuenta:
 - `cve` consume los servicios del módulo `network` (sin network, no hay CVEs que buscar).
@@ -58,6 +92,7 @@ Compara la peor severidad del `attack_surface_score` con el umbral y fija el exi
 | `1` | Umbral `--fail-on` alcanzado o superado (`high` falla también con `critical`) |
 | `2` | Error de uso (argumentos, archivo de scope inválido…) |
 | `3` | Ningún target escaneado (todo fuera de scope) |
+| `130` | Interrumpido por el operador (Ctrl+C; POSIX 128+SIGINT). Reúne los resultados parciales, imprime el resumen de los targets completados y sale limpio — nunca traceback crudo |
 
 ## Configuración TOML (`--config` / `--profile`)
 
@@ -116,25 +151,30 @@ python osint_eye.py example.com --monitor --monitor-interval 300 \
 - `--webhook` envía un mensaje por cada nueva superficie detectada (compatible Discord/Slack: payload `{"text": ...}`).
 - `Ctrl+C` para la parada elegante (el sleep del intervalo es interruptible, no espera el ciclo completo).
 - La caché (`~/.osint_eye/` o `--no-cache`) guarda el histórico para los diffs.
+- El guard de webhook valida la URL antes de arrancar: exige `https` y host público (loopback, IPs privadas y metadatos cloud bloqueados, reutilizando la lógica anti-SSRF) y se re-verifica en runtime — un typo nunca filtra datos del escaneo hacia la red interna.
 
 ## Plugins
 
 ```python
-# mi_plugin.py
-class PluginTemplate:
-    name = "mi_plugin"
-    author = "yo"
+# mi_plugin.py — contrato recomendado: BaseModule (core/plugins.py)
+from core.plugins import BaseModule
 
-    async def run(self, target: str) -> dict:
+class MiPlugin(BaseModule):
+    name = "mi_plugin"          # clave única en el registro
+    description = "Qué recolecta, en una línea"
+    author = "yo"
+    requires_api_key = False
+
+    async def run(self, target: str, **kwargs) -> dict:
         # tu lógica OSINT
-        return {"hallazgo": "ejemplo"}
+        return {"target": target, "hallazgos": ["ejemplo"]}
 ```
 
 ```bash
-python osint_eye.py example.com --plugin-dir ./plugins
+python osint_eye.py example.com --plugin-dir ./plugins --modules mi_plugin
 ```
 
-Requisitos del plugin: clase con `name`, `author` distinto de `"built-in"` y `async def run(target)`. Los plugins rotos se reportan y se omiten sin abortar el escaneo.
+Reglas de carga: todos los `*.py` del directorio (ordenados, se ignoran los que empiezan por `_`); cada subclase de `BaseModule` se instancia y registra; los plugins rotos (sintaxis, imports, falta de `name`/`run`) se reportan con `[!]` y se omiten sin abortar el escaneo. El dict devuelto pasa por `core/schema.py` (los nombres de módulo desconocidos nunca rompen la validación). Contrato completo, reglas del PluginManager y ejemplo offline-testable en [docs/plugins.md](plugins.md).
 
 ## IA local (Ollama)
 
@@ -150,18 +190,25 @@ python osint_eye.py example.com --no-ai      # desactiva el análisis IA
 
 ## Caché y resultados
 
-- Caché SQLite por defecto en `~/.osint_eye/cache/` (`--no-cache` para desactivar).
-- Con `-o BASE` se generan: `BASE.json`, `BASE.md`, `BASE.html`, `BASE.pdf`, `BASE.sarif`, `BASE_subdomains.csv`, `BASE_ports.csv`, `BASE_emails.csv`, `BASE_cves.csv`, `BASE_mitre.json`, `BASE_navigator.json`, `BASE_graph.html`, `BASE_burp.xml`, `BASE_msf.json` y `bounty_report_<target>.md`.
+- Caché SQLite por defecto en `~/.osint_eye/cache/` (`--no-cache` para desactivar). Una caché corrupta no tira el escaneo: se detecta al inicializar, el fichero se pone en cuarentena (`<db>.corrupt`, sin destruirse nunca) y se recrea vacía con un aviso al operador.
+- **Sin `-o`** cada escaneo auto-guarda `osint_eye_<target>_<ts>.json` en el directorio actual (misma convención que el PDF por defecto) e imprime dónde quedó — el quickstart del README ya deja fichero reutilizable, y la rama `--dashboard` reutiliza ese fichero en vez de generar un duplicado con otro timestamp.
+- **`-o BASE`** se genera: `BASE.json`, `BASE.md`, `BASE.html`, `BASE.pdf` (`--pdf`), `BASE.sarif`, `BASE_subdomains.csv`, `BASE_ports.csv`, `BASE_emails.csv`, `BASE_cves.csv`, `BASE_mitre.json`, `BASE_navigator.json`, `BASE_graph.html`, `BASE_burp.xml`, `BASE_msf.json` y `bounty_report_<target>.md`. Si `pdf` está entre los formatos de export, la rama `--pdf` no duplica el render.
+- **Toda ruta de salida suministrada por el usuario** (`-o`, `--export-cypher`, `--log-file`) debe resolver dentro del directorio de trabajo: las que escapan se rechazan con error de uso (exit 2) antes de escanear o escribir nada.
+- `--export-cypher BASE.cypher` vuelca el grafo a un dump compatible con Neo4j (literals escapados, labels sanitizados).
 - El `.sarif` es SARIF 2.1 (takeover, buckets públicos, secretos, CVEs y ficheros sensibles) listo para subir a GitHub Code Scanning.
 - El grafo HTML es autónomo (JS inline): ábrelo sin conexión y sin servidor.
 
-## Dashboard web
+## Dashboard web y TUI
 
 ```bash
-python ui/dashboard.py output/mi_scan.json   # → http://127.0.0.1:5000
+python osint_eye.py example.com --dashboard      # escanea y abre el dashboard
+python ui/dashboard.py output/mi_scan.json       # → http://127.0.0.1:5000
+python osint_eye.py example.com --tui            # escanea y explora en la TUI
 ```
 
 Escucha solo en `127.0.0.1` y funciona 100% offline (sin CDN). Incluye selector multiescaneo con vista diff, explorador de hallazgos con búsqueda y filtros, y exportación JSON/CSV/MD del escaneo abierto vía `GET /api/scan/<target>/export`. Ver la lista completa de endpoints en el [README](../README.md#-dashboard-web).
+
+La **TUI** (`--tui`, Textual) muestra los resultados en pestañas navegables con filtro y ficha por activo, sin salir de la terminal. Ambas interfaces cargan cualquier JSON de resultados con `schema_version` 2.x.
 
 ## Variables de entorno
 

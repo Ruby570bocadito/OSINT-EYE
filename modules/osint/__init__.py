@@ -3,6 +3,7 @@
 from .github import GitHubDorker, GitHubScanner
 from .google import GoogleDorker, GoogleScanner
 from .whois import WhoisLookup, WhoisScanner
+from .shodan_censys import ShodanCensysCollector
 
 __all__ = [
     "WhoisLookup",
@@ -11,4 +12,5 @@ __all__ = [
     "GitHubScanner",
     "GoogleDorker",
     "GoogleScanner",
+    "ShodanCensysCollector",
 ]

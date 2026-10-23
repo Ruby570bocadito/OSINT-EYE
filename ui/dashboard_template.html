@@ -22,9 +22,32 @@
     --critical: #FF5D5D;
     --radius: 12px;
     --radius-sm: 8px;
+    --topbar-bg: rgba(10, 11, 14, 0.88);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #F7F8FA;
+      --surface: #FFFFFF;
+      --surface-2: #F0F2F6;
+      --border: #DDE1E8;
+      --border-strong: #C3CAD5;
+      --text: #1B1E26;
+      --muted: #576073;
+      --faint: #868DA0;
+      --accent: #3A6CDB;
+      --accent-soft: rgba(58, 108, 219, 0.10);
+      --ok: #218A66;
+      --warn: #A96F15;
+      --danger: #C93A3F;
+      --critical: #B32629;
+      --topbar-bg: rgba(255, 255, 255, 0.85);
+    }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { color-scheme: dark; }
+  @media (prefers-color-scheme: light) {
+    html { color-scheme: light; }
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: var(--bg);
@@ -40,7 +63,7 @@
     position: sticky; top: 0; z-index: 10;
     display: flex; align-items: center; gap: 16px;
     padding: 14px 28px;
-    background: rgba(10, 11, 14, 0.88);
+    background: var(--topbar-bg);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
   }
@@ -95,6 +118,34 @@
     padding: 10px 16px; margin-bottom: 20px; font-size: 13px;
   }
   .banner.show { display: flex; }
+
+  /* ---------- quickstart (demo/empty guidance) ---------- */
+  .quickstart {
+    border: 1px dashed var(--border-strong); border-radius: var(--radius);
+    background: var(--surface); padding: 18px 22px; margin-bottom: 20px;
+  }
+  .quickstart .qs-head h2 { font-size: 15px; letter-spacing: .4px; text-transform: uppercase; }
+  .quickstart .qs-head p { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+  .qs-cmd {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px 8px 0; border-top: 1px solid var(--border);
+  }
+  .qs-cmd:first-child { border-top: none; }
+  .qs-cmd code {
+    flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
+    color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 12px; overflow-x: auto; white-space: nowrap;
+  }
+  .qs-cmd .qs-label { width: 150px; flex: none; color: var(--muted); font-size: 12.5px; }
+  .qs-copy {
+    flex: none; font: inherit; font-size: 12px; cursor: pointer;
+    color: var(--accent); background: transparent;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 6px 12px; transition: color .15s, border-color .15s;
+  }
+  .qs-copy:hover { border-color: var(--accent); }
+  .qs-copy.ok { color: var(--ok); border-color: var(--ok); }
 
   .stats {
     display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
@@ -283,7 +334,7 @@
   .tl-event::before {
     content: ""; position: absolute; left: -18px; top: 12px;
     width: 10px; height: 10px; border-radius: 50%;
-    background: var(--accent); border: 2px solid var(--panel-bg, #14161c);
+    background: var(--accent); border: 2px solid var(--surface);
   }
   .tl-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
   .tl-date { font-weight: 700; font-size: 13px; color: var(--text); }
@@ -344,6 +395,14 @@
 
   <main class="wrap">
     <div class="banner" id="banner"></div>
+
+    <section class="quickstart" id="quickstart" hidden>
+      <div class="qs-head">
+        <h2>No scan data yet</h2>
+        <p>This is demo data. Run a real scan and the dashboard will show it — pick one:</p>
+      </div>
+      <div id="qs-commands"></div>
+    </section>
 
     <section class="stats">
       <div class="stat"><div class="v" id="s-subs">0</div><div class="k">Subdomains</div></div>
@@ -455,6 +514,55 @@ async function getJSON(url) {
   }
 }
 
+/* ---------- quickstart (demo/empty guidance) ---------- */
+const QUICKSTART_COMMANDS = [
+  { label: "Scan + dashboard", cmd: "python osint_eye.py example.com --dashboard" },
+  { label: "Live monitoring", cmd: "python osint_eye.py example.com --dashboard --monitor" },
+  { label: "Terminal only", cmd: "python osint_eye.py example.com --rich" },
+];
+
+function renderQuickstart() {
+  const host = $("qs-commands");
+  clear(host);
+  QUICKSTART_COMMANDS.forEach(({ label, cmd }) => {
+    const row = el("div", "qs-cmd");
+    const lab = el("span", "qs-label", label);
+    const code = el("code", null, cmd);
+    const btn = el("button", "qs-copy", "Copy");
+    btn.type = "button";
+    btn.addEventListener("click", async () => {
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(cmd);
+        ok = true;
+      } catch (_e) {
+        ok = false;
+      }
+      btn.textContent = ok ? "Copied ✓" : "Copy failed";
+      btn.classList.toggle("ok", ok);
+      setTimeout(() => {
+        btn.textContent = "Copy";
+        btn.classList.remove("ok");
+      }, 1400);
+    });
+    row.appendChild(lab);
+    row.appendChild(code);
+    row.appendChild(btn);
+    host.appendChild(row);
+  });
+  $("quickstart").hidden = false;
+}
+
+function maybeShowQuickstart(data) {
+  const scans = (data && data.scans) || [];
+  const demoLoaded = scans.some((s) => s.demo);
+  if (!scans.length || demoLoaded) {
+    renderQuickstart();
+  } else {
+    $("quickstart").hidden = true;
+  }
+}
+
 /* ---------- topbar / targets ---------- */
 let currentTarget = null;
 
@@ -470,6 +578,7 @@ async function loadTargets(keepTarget) {
   } else {
     banner.classList.remove("show");
   }
+  maybeShowQuickstart(data);
 
   const nav = $("targets");
   clear(nav);
@@ -1030,12 +1139,20 @@ async function renderGraph(target) {
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  // Theme-aware token colors for the serialized SVG (falls back to the dark
+  // values when CSS custom properties are unavailable).
+  const cssVar = (name, fallback) => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  };
+  const edgeColor = cssVar("--border-strong", "#3A3F4C");
+  const labelColor = cssVar("--muted", "#8B91A0");
   // Inline styles so a serialized SVG (PNG/SVG export) keeps its look
   // without the page CSS — and without any external resource.
   const gstyle = document.createElementNS("http://www.w3.org/2000/svg", "style");
   gstyle.textContent =
-    ".g-edge{stroke:#3A3F4C;stroke-opacity:.8}" +
-    ".g-label{fill:#8B91A0;font-size:10.5px;font-family:ui-monospace,Menlo,monospace}";
+    ".g-edge{stroke:" + edgeColor + ";stroke-opacity:.8}" +
+    ".g-label{fill:" + labelColor + ";font-size:10.5px;font-family:ui-monospace,Menlo,monospace}";
   svg.appendChild(gstyle);
   const edgeG = document.createElementNS("http://www.w3.org/2000/svg", "g");
   const nodeG = document.createElementNS("http://www.w3.org/2000/svg", "g");

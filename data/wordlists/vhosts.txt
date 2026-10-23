@@ -1,0 +1,44 @@
+# OSINT EYE - virtual host labels for Host-header probing
+# One label per line; combined with the target domain as <label>.<domain>.
+# Only reconnaissance against the authorized target IP (Host header).
+# Lines starting with # are comments.
+www
+mail
+webmail
+smtp
+pop
+imap
+ns1
+ns2
+dev
+staging
+test
+qa
+uat
+api
+admin
+portal
+intranet
+extranet
+vpn
+cdn
+static
+assets
+media
+app
+m
+mobile
+blog
+shop
+store
+git
+jira
+wiki
+docs
+status
+monitor
+cpanel
+whm
+remote
+owa
+autodiscover

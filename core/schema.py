@@ -19,7 +19,8 @@ migrate) only on a different major version.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Mapping, TypedDict
+from collections.abc import Callable, Mapping
+from typing import Any, TypedDict
 
 SCHEMA_VERSION = "2.0"
 
@@ -56,16 +57,16 @@ class ScanResults(TypedDict, total=False):
     target: str
     scan_date: str
     depth: str
-    modules: Dict[str, Dict[str, Any]]
-    errors: List[str]
-    correlation: Dict[str, Any]
-    graph: Dict[str, Any]
-    mitre: Dict[str, Any]
-    attack_chains: List[Dict[str, Any]]
-    ai_analysis: Dict[str, Any]
-    plugins: Dict[str, Any]
+    modules: dict[str, dict[str, Any]]
+    errors: list[str]
+    correlation: dict[str, Any]
+    graph: dict[str, Any]
+    mitre: dict[str, Any]
+    attack_chains: list[dict[str, Any]]
+    ai_analysis: dict[str, Any]
+    plugins: dict[str, Any]
     agent_playbook: str
-    scope: Dict[str, Any]
+    scope: dict[str, Any]
 
 
 def new_results(target: str, depth: str = "normal") -> ScanResults:
@@ -112,7 +113,7 @@ def _int_or_none(value: Any) -> bool:
 # guarantees that) and returns a list of human-readable problems. Only keys
 # known to the contract are checked, and only when present.
 # ─────────────────────────────────────────────────────────────────────────────
-def _validate_dns(d: Dict[str, Any]) -> List[str]:
+def _validate_dns(d: dict[str, Any]) -> list[str]:
     problems = []
     if "domain" in d and not isinstance(d["domain"], str):
         problems.append("dns.domain debe ser string")
@@ -123,7 +124,7 @@ def _validate_dns(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_certs(d: Dict[str, Any]) -> List[str]:
+def _validate_certs(d: dict[str, Any]) -> list[str]:
     problems = []
     if "subdomains" in d and not _is_str_list(d["subdomains"]):
         problems.append("certs.subdomains debe ser lista de strings")
@@ -132,7 +133,7 @@ def _validate_certs(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_wayback(d: Dict[str, Any]) -> List[str]:
+def _validate_wayback(d: dict[str, Any]) -> list[str]:
     problems = []
     if "total_snapshots" in d and not _int_or_none(d["total_snapshots"]):
         problems.append("wayback.total_snapshots debe ser int o null")
@@ -143,7 +144,7 @@ def _validate_wayback(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_network(d: Dict[str, Any]) -> List[str]:
+def _validate_network(d: dict[str, Any]) -> list[str]:
     problems = []
     if "host" in d and not _str_or_none(d["host"]):
         problems.append("network.host debe ser string o null")
@@ -152,7 +153,7 @@ def _validate_network(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_whois(d: Dict[str, Any]) -> List[str]:
+def _validate_whois(d: dict[str, Any]) -> list[str]:
     problems = []
     if "registrar" in d and not _str_or_none(d["registrar"]):
         problems.append("whois.registrar debe ser string o null")
@@ -163,7 +164,7 @@ def _validate_whois(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_web(d: Dict[str, Any]) -> List[str]:
+def _validate_web(d: dict[str, Any]) -> list[str]:
     raw = d.get("technologies", None)
     if raw is not None and not isinstance(raw, (dict, list, set, tuple)):
         problems = ["web.technologies debe ser dict/list"]
@@ -174,7 +175,7 @@ def _validate_web(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_endpoints(d: Dict[str, Any]) -> List[str]:
+def _validate_endpoints(d: dict[str, Any]) -> list[str]:
     problems = []
     if "found" in d and not isinstance(d["found"], list):
         problems.append("endpoints.found debe ser lista")
@@ -185,7 +186,7 @@ def _validate_endpoints(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_cloud(d: Dict[str, Any]) -> List[str]:
+def _validate_cloud(d: dict[str, Any]) -> list[str]:
     problems = []
     for key in ("found", "public"):
         if key in d and not isinstance(d[key], list):
@@ -193,14 +194,14 @@ def _validate_cloud(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_emails(d: Dict[str, Any]) -> List[str]:
+def _validate_emails(d: dict[str, Any]) -> list[str]:
     problems = []
     if "emails_found" in d and not _is_str_list(d["emails_found"]):
         problems.append("emails.emails_found debe ser lista de strings")
     return problems
 
 
-def _validate_github(d: Dict[str, Any]) -> List[str]:
+def _validate_github(d: dict[str, Any]) -> list[str]:
     problems = []
     if "findings" in d and not isinstance(d["findings"], list):
         problems.append("github.findings debe ser lista")
@@ -209,7 +210,7 @@ def _validate_github(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_google(d: Dict[str, Any]) -> List[str]:
+def _validate_google(d: dict[str, Any]) -> list[str]:
     problems = []
     for key in (
         "login_pages",
@@ -225,14 +226,14 @@ def _validate_google(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_cve(d: Dict[str, Any]) -> List[str]:
+def _validate_cve(d: dict[str, Any]) -> list[str]:
     problems = []
     if "cves" in d and not _is_dict_list(d["cves"]):
         problems.append("cve.cves debe ser lista de dicts")
     return problems
 
 
-def _validate_permutation(d: Dict[str, Any]) -> List[str]:
+def _validate_permutation(d: dict[str, Any]) -> list[str]:
     problems = []
     if "subdomains" in d and not _is_str_list(d["subdomains"]):
         problems.append("permutation.subdomains debe ser lista de strings")
@@ -243,7 +244,7 @@ def _validate_permutation(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_takeover(d: Dict[str, Any]) -> List[str]:
+def _validate_takeover(d: dict[str, Any]) -> list[str]:
     problems = []
     if "checked" in d and not _int_or_none(d["checked"]):
         problems.append("takeover.checked debe ser int o null")
@@ -252,7 +253,7 @@ def _validate_takeover(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_cdn_waf(d: Dict[str, Any]) -> List[str]:
+def _validate_cdn_waf(d: dict[str, Any]) -> list[str]:
     problems = []
     for key in ("cdn", "waf"):
         if key in d and not _str_or_none(d[key]):
@@ -260,7 +261,7 @@ def _validate_cdn_waf(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_correlation(d: Dict[str, Any]) -> List[str]:
+def _validate_correlation(d: dict[str, Any]) -> list[str]:
     problems = []
     score = d.get("attack_surface_score")
     if score is not None:
@@ -283,7 +284,7 @@ def _validate_correlation(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_graph(d: Dict[str, Any]) -> List[str]:
+def _validate_graph(d: dict[str, Any]) -> list[str]:
     problems = []
     for key in ("nodes", "edges"):
         if key in d and not _is_dict_list(d[key]):
@@ -291,7 +292,7 @@ def _validate_graph(d: Dict[str, Any]) -> List[str]:
     return problems
 
 
-def _validate_mitre(d: Dict[str, Any]) -> List[str]:
+def _validate_mitre(d: dict[str, Any]) -> list[str]:
     problems = []
     if "findings" in d and not _is_dict_list(d["findings"]):
         problems.append("mitre.findings debe ser lista de dicts")
@@ -300,7 +301,7 @@ def _validate_mitre(d: Dict[str, Any]) -> List[str]:
 
 #: Registry consulted by validate_results(); modules not listed here are
 #: accepted without per-key checks (forward compatibility for plugins).
-MODULE_VALIDATORS: Dict[str, Callable[[Dict[str, Any]], List[str]]] = {
+MODULE_VALIDATORS: dict[str, Callable[[dict[str, Any]], list[str]]] = {
     "dns": _validate_dns,
     "certs": _validate_certs,
     "wayback": _validate_wayback,
@@ -330,7 +331,7 @@ def _check_section(
     key: str,
     expected: type,
     description: str,
-    problems: List[str],
+    problems: list[str],
 ) -> None:
     if key in results and results[key] is not None and not isinstance(
         results[key], expected
@@ -338,7 +339,7 @@ def _check_section(
         problems.append(f"{key} debe ser {description}")
 
 
-def validate_results(results: Any) -> List[str]:
+def validate_results(results: Any) -> list[str]:
     """Validate a results dict against the contract.
 
     Returns a list of human-readable problems (empty when the dict is
@@ -348,7 +349,7 @@ def validate_results(results: Any) -> List[str]:
     if not isinstance(results, Mapping):
         return ["results debe ser un dict"]
 
-    problems: List[str] = []
+    problems: list[str] = []
 
     target = results.get("target")
     if not isinstance(target, str) or not target.strip():
