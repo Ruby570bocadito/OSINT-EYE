@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.logging_config import get_logger
+
+logger = get_logger("core.session_cache")
+
 
 class ScanCache:
     """SQLite-based cache for scan results"""
@@ -18,7 +22,55 @@ class ScanCache:
             db_path = str(cache_dir / "scan_cache.db")
 
         self.db_path = db_path
-        self._init_db()
+        try:
+            self._init_db()
+        except sqlite3.DatabaseError:
+            # H-006 (TEST): a corrupt cache file (e.g. a truncated/garbage
+            # scan_cache.db) used to crash every scan at startup with
+            # ``sqlite3.DatabaseError: file is not a database``. Quarantine
+            # the file, start a fresh one and keep scanning.
+            self._quarantine_corrupt_db()
+            self._init_db()
+
+    def _quarantine_corrupt_db(self) -> None:
+        """Move an unusable cache file aside and warn the operator.
+
+        The file is never silently destroyed: it is renamed to
+        ``<db_path>.corrupt`` (timestamped if that name is taken) so the
+        operator can inspect or delete it later.
+        """
+        db_file = Path(self.db_path)
+        quarantine = Path(self.db_path + ".corrupt")
+        if quarantine.exists():
+            quarantine = Path(
+                self.db_path
+                + "."
+                + datetime.now().strftime("%Y%m%d_%H%M%S")
+                + ".corrupt"
+            )
+        try:
+            db_file.replace(quarantine)
+            logger.warning(
+                "[!] Scan cache %s is not a valid SQLite database; it was "
+                "moved to %s and a fresh cache was created. The scan "
+                "continues without previous data.",
+                self.db_path,
+                quarantine,
+            )
+        except OSError:
+            # Unreadable/unmovable file: last resort is removing it so a
+            # fresh cache can be created; if even that fails the original
+            # DatabaseError propagates (nothing else we can do safely).
+            logger.warning(
+                "[!] Scan cache %s is not a valid SQLite database and could "
+                "not be quarantined; attempting to remove it.",
+                self.db_path,
+            )
+            try:
+                db_file.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.error("[!] Could not remove corrupt cache file: %s", exc)
+                raise
 
     def _connect(self) -> sqlite3.Connection:
         """Open a connection with a generous busy timeout.

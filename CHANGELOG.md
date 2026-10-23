@@ -15,6 +15,11 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h006 (cache corrupta)**: una `scan_cache.db` corrupta ya no crashea el escaneo con
+  `sqlite3.DatabaseError: file is not a database`: `ScanCache` detecta el fallo al inicializar,
+  pone el fichero en cuarentena (`<db>.corrupt`, con timestamp si el nombre está ocupado — nunca se
+  destruye), avisa al operador por el logger de osint_eye y recrea una caché vacía; el escaneo
+  continúa sin datos previos.
 - **fix-h004 (escape injection)**: los targets y las rutas de salida suministradas por el usuario se
   neutralizan antes de llegar al terminal — `_neutralize_console_text()` elimina los bytes de control
   (ESC/OSC/DEL) en la entrada de `scan_targets`, en `OSINTEye.__init__` (target y results heredan la
