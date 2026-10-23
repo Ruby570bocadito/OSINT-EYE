@@ -40,6 +40,12 @@ Reglas del equipo (PROTOCOLO §3):
   (pending/running/done/error), duración, nº de hallazgos y errores de cada módulo durante el escaneo
   (`run_all` y `--modules`); la salida impresa de los módulos se re-renderiza sobre la tabla sin
   corromperse y en tuberías/CI el tracker degrada a impresión normal.
+- **Subdominios pasivos sin API key (`modules/dns/passive_sources.py`)**: 5 fuentes públicas
+  (HackerTarget, AlienVault OTX, Anubis/jldc, RapidDNS, CertSpotter) consultadas en paralelo con
+  deduplicación y validación estricta de cada hostname (entrada remota hostil); integradas en el
+  escaneo DNS en modo `full` (merge con fuerza bruta/CT, detalle por fuente en
+  `results["modules"]["dns"]["passive_subdomains"]`); cualquier fuente caída degrada a `status=error`
+  sin romper el escaneo.
 
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
