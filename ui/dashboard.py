@@ -7,10 +7,12 @@ self-contained (no CDN) and renders all scan data through textContent —
 never innerHTML — so scan results can never inject markup.
 """
 
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 import json
 from datetime import datetime
 from pathlib import Path
+
+from core.scan_diff import ScanDiff
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
@@ -167,6 +169,55 @@ def _collect_assets(results):
     return assets
 
 
+def _diff_view(results):
+    """Project a scan onto the exact shapes ScanDiff reads, strictly typed.
+
+    ScanDiff assumes dict containers and hashable list items; hostile or
+    malformed scan data would raise inside it. This projection guarantees a
+    safe input so the diff endpoint can never 500 on bad shapes.
+    """
+    modules = _as_dict(results.get("modules"))
+
+    def str_items(container, key):
+        return _as_str_list(_as_dict(container).get(key))
+
+    def dict_items(container, key):
+        return [
+            item for item in _as_list(_as_dict(container).get(key))
+            if isinstance(item, dict)
+        ]
+
+    techs = _as_dict(modules.get("web")).get("technologies")
+    if isinstance(techs, dict):
+        tech_view = {"technologies": [t for t in _as_list(techs.get("technologies")) if isinstance(t, str)]}
+    elif isinstance(techs, list):
+        tech_view = {"technologies": [t for t in techs if isinstance(t, str)]}
+    else:
+        tech_view = {"technologies": []}
+
+    return {
+        "modules": {
+            "dns": {"subdomains": str_items(modules.get("dns"), "subdomains")},
+            "certs": {"subdomains": str_items(modules.get("certs"), "subdomains")},
+            "permutation": {"subdomains": str_items(modules.get("permutation"), "subdomains")},
+            "network": {"services": dict_items(modules.get("network"), "services")},
+            "web": {"technologies": tech_view},
+            "emails": {"emails_found": str_items(modules.get("emails"), "emails_found")},
+            "cve": {"cves": dict_items(modules.get("cve"), "cves")},
+            "cloud_buckets": {"found": dict_items(modules.get("cloud_buckets"), "found")},
+        },
+        "correlation": _as_dict(results.get("correlation")),
+    }
+
+
+def _scan_diff(base_results, against_results):
+    """Run ScanDiff on sanitized views — never raises."""
+    try:
+        return ScanDiff().compare(_diff_view(against_results), _diff_view(base_results))
+    except Exception:
+        return ScanDiff().diff
+
+
 # --- API --------------------------------------------------------------------
 
 @app.route("/")
@@ -279,6 +330,28 @@ def get_assets(target):
 
     assets = _collect_assets(SCAN_RESULTS[target])
     return jsonify({"target": target, "assets": assets, "count": len(assets)})
+
+
+@app.route("/api/scan/<target>/diff", methods=["GET"])
+def get_diff(target):
+    """Compare '<target>' (new state) against '?against=' (old state).
+
+    new_* lists are things that appeared in <target>; removed_* are things
+    that disappeared compared to the 'against' scan.
+    """
+    if target not in SCAN_RESULTS:
+        return jsonify({"error": "Scan not found"}), 404
+
+    against = request.args.get("against", "")
+    if not against or against not in SCAN_RESULTS:
+        return jsonify(
+            {"error": "Query param 'against' must reference a loaded scan"}
+        ), 400
+
+    diff = _scan_diff(SCAN_RESULTS[target], SCAN_RESULTS[against])
+    diff["from"] = against
+    diff["to"] = target
+    return jsonify(diff)
 
 
 @app.route("/api/scan/<target>/summary", methods=["GET"])
