@@ -6,8 +6,8 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.1.1-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-293%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
-[![Coverage](https://img.shields.io/codecov/c/github/Ruby570bocadito/OSINT-EYE/master?style=for-the-badge&logo=codecov&logoColor=white)](https://app.codecov.io/gh/Ruby570bocadito/OSINT-EYE)
+[![Tests](https://img.shields.io/badge/Tests-519%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Coverage](https://img.shields.io/codecov/c/github/Ruby570bocadito/OSINT-EYE?style=for-the-badge&logo=codecov&logoColor=white)](https://app.codecov.io/gh/Ruby570bocadito/OSINT-EYE)
 [![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
 
 </div>
@@ -72,8 +72,8 @@ Diseñada para pentesters, bug bounty hunters, analistas SOC e investigadores de
 - **Cero fricción**: `pip install -r requirements.txt` y listo — ninguna API key necesaria para ningún módulo.
 - **Correlación real**: los hallazgos de todos los módulos se cruzan en un inventario unificado de activos con puntuación de riesgo ponderada.
 - **Degradación elegante**: si falta `nmap` o una fuente externa está caída, el módulo se salta con un aviso claro y el escaneo continúa.
-- **Salidas profesionales**: JSON, Markdown, HTML, PDF (ReportLab), CSV, Burp XML, Metasploit JSON, capa MITRE Navigator y grafo HTML interactivo — todo en una sola pasada.
-- **Probado**: 118 tests que corren **100% offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
+- **Salidas profesionales**: JSON, Markdown, HTML, PDF (ReportLab), CSV, Burp XML, Metasploit JSON, capa MITRE Navigator, SARIF 2.1 y grafo HTML interactivo — todo en una sola pasada.
+- **Probado**: 519 tests que corren **100% offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
 
 ---
 
@@ -81,7 +81,7 @@ Diseñada para pentesters, bug bounty hunters, analistas SOC e investigadores de
 
 | Módulo | Descripción |
 |--------|-------------|
-| `dns` | Enumeración DNS (A/AAAA/MX/NS/TXT/CNAME/SOA), SPF/DMARC, fuerza bruta de subdominios |
+| `dns` | Enumeración DNS (A/AAAA/MX/NS/TXT/CNAME/SOA), SPF/DMARC, auditoría email security (DKIM, MTA-STS, TLS-RPT, BIMI) con puntuación de spoofing, subdominios por fuerza bruta + fuentes pasivas (HackerTarget, OTX, Anubis, RapidDNS, CertSpotter) con detección de wildcard y permutaciones |
 | `certs` | Certificate transparency vía crt.sh |
 | `wayback` | Historial de URLs y timeline de snapshots de Wayback Machine |
 | `network` | Escaneo de puertos y servicios vía nmap (opcional, se salta si no está instalado) |
@@ -159,6 +159,12 @@ python osint_eye.py example.com --depth full
 # Múltiples objetivos + diff entre ellos
 python osint_eye.py target1.com target2.com --diff
 
+# Scope de autorización + exclusiones: nada fuera de scope se toca
+python osint_eye.py example.com --scope scope.txt --exclude sub.example.com --exclude 10.0.0.0/8
+
+# Modo CI: exit 1 si la peor severidad alcanza el umbral
+python osint_eye.py example.com --fail-on medium
+
 # Todo lo exportable + informe PDF ejecutivo
 python osint_eye.py example.com -o output/mi_scan --pdf
 
@@ -199,6 +205,13 @@ python osint_eye.py
 | `--plugin-dir DIR` | Carga y ejecuta plugins propios |
 | `--export-cypher FILE` | Exporta el grafo a Cypher (Neo4j) |
 | `--profile default\|deep\|stealth` | Perfil de configuración predefinido |
+| `--log-level LEVEL` | Nivel de log de core/graph/reporting (DEBUG–CRITICAL, default `INFO`); Rich sigue siendo la salida de usuario |
+| `--log-file FILE` | Añade los logs de librería a este fichero (modo append) |
+| `--scope FILE` | Scope de autorización: un dominio, wildcard, IP o CIDR por línea (`#` comentarios); lo fuera de scope se salta y queda registrado |
+| `--exclude ITEM` | Excluye dominio/IP/CIDR del escaneo (repetible; siempre gana a `--scope`) |
+| `--fail-on low\|medium\|high` | Modo CI: exit 1 cuando la peor severidad iguala o supera el umbral (`high` falla también con critical) |
+
+**Exit codes (CI)**: `0` escaneo dentro del umbral · `1` umbral `--fail-on` superado · `2` error de uso · `3` ningún target escaneado (todo fuera de scope).
 
 </details>
 
@@ -215,15 +228,15 @@ python ui/dashboard.py output/mi_scan.json
 # → http://127.0.0.1:5000
 ```
 
-Interfaz minimalista y oscura con KPIs del escaneo, grafo de superficie interactivo (layout de fuerzas propio, sin CDN — 100% offline), puertos/servicios, tecnologías, técnicas MITRE con severidad y cadenas de ataque ordenadas por riesgo. Todo el contenido se renderiza vía `textContent` (a prueba de inyección desde los datos del escaneo) y la API REST es defensiva: nunca devuelve 500 con datos malformados.
+Interfaz minimalista y oscura con KPIs del escaneo, grafo de superficie interactivo (layout de fuerzas propio, sin CDN — 100% offline), puertos/servicios, tecnologías, explorador de hallazgos con búsqueda y filtros por severidad/tipo/módulo, técnicas MITRE con severidad, cadenas de ataque ordenadas por riesgo, selector multiescaneo con vista diff y exportación JSON/CSV/MD del escaneo abierto. Todo el contenido se renderiza vía `textContent` (a prueba de inyección desde los datos del escaneo) y la API REST es defensiva: nunca devuelve 500 con datos malformados.
 
-API REST: `/api/scans`, `/api/scan/<target>`, `/api/scan/<target>/summary`, `/ports`, `/graph`, `/mitre`, `/chains`.
+API REST: `/api/scans` y `/api/scan/<target>` con `/summary`, `/assets`, `/diff`, `/export`, `/subdomains`, `/ports`, `/graph`, `/mitre` y `/chains`.
 
 ---
 
 ## 📤 Exportación
 
-Una pasada con `-o` genera: **JSON** (resultados completos), **Markdown**, **HTML**, **PDF**, **CSV** por tipo de activo, **Burp XML**, **Metasploit JSON**, **MITRE Navigator layer**, **informe bounty** y **grafo HTML interactivo** (autónomo, sin CDN).
+Una pasada con `-o` genera: **JSON** (resultados completos), **Markdown**, **HTML**, **PDF**, **CSV** por tipo de activo, **Burp XML**, **Metasploit JSON**, **MITRE Navigator layer**, **SARIF 2.1** (listo para GitHub Code Scanning), **informe bounty** y **grafo HTML interactivo** (autónomo, sin CDN).
 
 ```bash
 python osint_eye.py example.com -o output/recon_demo --pdf
@@ -264,12 +277,12 @@ flowchart LR
 ```
 osint_eye.py            # Orquestador: fases, CLI, exportación
 ├── modules/            # Colectores por fuente (dns, certs, web, network, osint, cve)
-├── core/               # Correlator, caché SQLite, monitor, plugins, diff, async engine
+├── core/               # Correlador, schema, scope, findings, caché SQLite, monitor, plugins, diff
 ├── graph/              # Grafo NetworkX + export pyvis/Neo4j
-├── reporting/          # PDF, Markdown, HTML, CSV, Burp, MSF, MITRE
+├── reporting/          # PDF, Markdown, HTML, CSV, Burp, MSF, MITRE, SARIF
 ├── ui/                 # Rich CLI, wizard, TUI Textual, dashboard Flask
 ├── ai/                 # Motor IA local (Ollama)
-└── tests/              # 118 tests offline (pytest)
+└── tests/              # Suite offline por zona (pytest)
 ```
 
 ---
