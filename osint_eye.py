@@ -852,6 +852,79 @@ def _positive_int(value: str) -> int:
     return ivalue
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CI exit codes (--fail-on)
+#
+#   0  scan finished under the requested threshold (or no --fail-on given)
+#   1  --fail-on threshold reached or exceeded by the worst finding severity
+#   2  usage error (argparse convention)
+#   3  nothing was scanned (all targets outside the authorized scope)
+# ─────────────────────────────────────────────────────────────────────────────
+EXIT_OK = 0
+EXIT_FAIL_ON = 1
+EXIT_USAGE = 2
+EXIT_NOTHING_SCANNED = 3
+
+SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+FAIL_ON_CHOICES = ("low", "medium", "high")
+
+
+def max_severity(results_by_target: dict) -> str:
+    """Worst attack-surface severity across all scanned targets.
+
+    Reads ``results["correlation"]["attack_surface_score"]["severity"]``
+    per target; targets without correlation (e.g. partial ``--modules``
+    runs) count as LOW and malformed shapes are tolerated.
+    """
+    worst = "LOW"
+    if not isinstance(results_by_target, dict):
+        return worst
+    for result in results_by_target.values():
+        if not isinstance(result, dict):
+            continue
+        correlation = result.get("correlation")
+        score = (
+            correlation.get("attack_surface_score")
+            if isinstance(correlation, dict)
+            else None
+        )
+        severity = (
+            str(score.get("severity", "")).upper()
+            if isinstance(score, dict)
+            else ""
+        )
+        if SEVERITY_RANK.get(severity, 0) > SEVERITY_RANK[worst]:
+            worst = severity
+    return worst
+
+
+def decide_exit_code(all_results: dict, args) -> int:
+    """Turn a finished scan into a pipeline-friendly exit code."""
+    if getattr(args, "monitor", False):
+        # A daemon run has no finite result set to grade.
+        return EXIT_OK
+    if not all_results:
+        print(
+            "[x] no target scanned: every target was outside the authorized "
+            "scope (exit code 3)"
+        )
+        return EXIT_NOTHING_SCANNED
+
+    threshold = getattr(args, "fail_on", None)
+    if not threshold:
+        return EXIT_OK
+
+    worst = max_severity(all_results)
+    if SEVERITY_RANK.get(worst, 0) >= SEVERITY_RANK[threshold.upper()]:
+        print(
+            f"[x] fail-on {threshold}: worst severity {worst} reaches the "
+            f"threshold (exit code {EXIT_FAIL_ON})"
+        )
+        return EXIT_FAIL_ON
+    print(f"[+] fail-on {threshold}: worst severity {worst} under the threshold")
+    return EXIT_OK
+
+
 def _print_module_catalog():
     """Print the available scan modules as a Rich table."""
     from rich.console import Console
@@ -890,6 +963,10 @@ Examples:
   python osint_eye.py example.com --stealth --no-ai --no-cache
   python osint_eye.py example.com --modules dns network web cloud emails graph mitre chains
   python osint_eye.py example.com --scope scope.txt --exclude sub.example.com --exclude 10.0.0.0/8
+
+Exit codes (CI):
+  0 scan finished under threshold · 1 --fail-on threshold exceeded ·
+  2 usage error · 3 no target scanned (all outside scope)
         """,
     )
 
@@ -961,6 +1038,14 @@ Examples:
         metavar="ITEM",
         help="Exclude domain/IP/CIDR from the scan (repeatable; always wins "
         "over --scope)",
+    )
+    parser.add_argument(
+        "--fail-on",
+        choices=FAIL_ON_CHOICES,
+        type=str.lower,
+        default=None,
+        help="CI mode: exit with code 1 when the worst attack-surface severity "
+        "is low/medium/high or above (high also fails on critical)",
     )
     parser.add_argument(
         "--pdf", action="store_true", help="Generate an executive PDF report after scan"
@@ -1049,7 +1134,8 @@ Examples:
         from ui.rich_cli import RichCLI as _RCli
 
         _RCli().print_banner()
-        scan_targets(args.targets, args)
+        all_results = scan_targets(args.targets, args)
+        return decide_exit_code(all_results, args)
     return 0
 
 
