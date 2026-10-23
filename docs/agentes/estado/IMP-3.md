@@ -19,7 +19,10 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1 — cierre: 5/5 tareas)
 
 ## En curso
 
-- (IMP-3) config-file queda en el ROADMAP como siguiente tarea IMP-3 de la fase v2.2 (no iniciada).
+- (IMP-3) config-file — osint_eye.toml con perfiles/timeouts/módulos/exportadores (última de v2.2).
+- Petición IMP-2 asumida para esta ronda: ScanDiff.compare() no debe mutar self.diff entre llamadas;
+  markdown_reporter: exponer el informe como texto sin escribir fichero; PUL-1: f-string pyflakes +
+  imports lazy de reportlab.
 
 ## Bloqueado
 
