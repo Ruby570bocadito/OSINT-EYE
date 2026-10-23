@@ -37,6 +37,13 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Hash de favicon para pivotar (`favicon-hash`)**: descarga el icono del objetivo (primero el
+  `<link rel="icon">` declarado, con fallback a `/favicon.ico`) y calcula el hash favicon estándar
+  de los motores de búsqueda de activos — MurmurHash3 x86_32 firmado sobre el base64, implementado
+  en Python puro (cero dependencias nuevas, paridad con la librería de referencia verificada) —
+  junto a md5/sha256, tamaño y content-type; las respuestas que no son imagen (por content-type o
+  magic bytes) se reportan pero nunca se hashean. Respeta el scope y degrada sin red
+  (`modules/web/favicon_hash.py`).
 - **Secretos y endpoints en ficheros JS (`js-secrets`)**: descarga los .js del objetivo (tope 20
   ficheros / 2 MB) y extrae claves AWS/Google/GitHub/Slack, JWT, cabeceras Bearer, claves Firebase,
   contraseñas hardcodeadas, claves privadas y endpoints (absolutos y `/api|/rest|/graphql`), más un
