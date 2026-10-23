@@ -18,6 +18,7 @@ from .advanced_dns import (
 )
 from .wildcard import WildcardDetector
 from .passive_sources import PassiveSubdomainEnumerator
+from .email_security import EmailSecurityAuditor
 
 __all__ = [
     "DNSResolver",
@@ -37,4 +38,5 @@ __all__ = [
     "ScreenshotCapture",
     "WildcardDetector",
     "PassiveSubdomainEnumerator",
+    "EmailSecurityAuditor",
 ]
