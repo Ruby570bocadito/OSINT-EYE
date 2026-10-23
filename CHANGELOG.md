@@ -10,6 +10,12 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Extractor canónico de hallazgos (`core/findings.py`)**: una sola capa de "qué ha encontrado el scan"
+  (takeover, buckets públicos, secretos de GitHub, CVEs, ficheros sensibles, paneles admin/login) con
+  `Finding` inmutable, severidad normalizada (CVSS por nombre o score), evidencia, fingerprint estable,
+  ordenación determinista y resúmenes por severidad/regla. `reporting/sarif.py` delega en él (reglas
+  OE001-OE007, ahora con `properties.evidence`/`sourceModule` por resultado) — base para exit-codes y
+  risk-scoring.
 - **Códigos de salida para CI (`--fail-on low|medium|high`)**: el peor `attack_surface_score.severity`
   entre los escaneos se compara con el umbral y fija el exit code — `0` dentro del umbral, `1` umbral
   alcanzado/superado, `2` error de uso, `3` ningún target escaneado (todo fuera de scope); códigos
