@@ -5,6 +5,7 @@ import sys
 import json
 import asyncio
 import re
+from typing import Optional
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +22,10 @@ from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
 from core.correlator import AssetCorrelator
+from core.config import (
+    VALID_EXPORT_FORMATS as _EXPORT_FORMATS,
+)
+from core.config import Config, ConfigError
 from core.logging_config import parse_level, setup_logging
 from core.schema import SCHEMA_VERSION, new_results, validate_results
 from core.scope import Scope, ScopeError
@@ -551,8 +556,13 @@ class OSINTEye:
 
         return self.results
 
-    def export_all(self, output_base=None):
-        """Export results in all formats"""
+    def export_all(self, output_base=None, formats=None):
+        """Export results in all (or the selected) formats.
+
+        ``formats`` selects a subset of the export catalogue
+        (json, markdown, html, csv, mitre_json, mitre_navigator,
+        bounty_report, graph, pdf, burp, metasploit, sarif). None = all.
+        """
         self._refresh_scope_summary()
         self._validate_schema()
 
@@ -561,6 +571,16 @@ class OSINTEye:
                 f"osint_eye_{_sanitize_filename(self.target)}_"
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
+
+        if formats is None:
+            formats = list(_EXPORT_FORMATS)
+        unknown = [f for f in formats if f not in _EXPORT_FORMATS]
+        if unknown:
+            raise ValueError(
+                f"formatos de exportación desconocidos: {sorted(unknown)}; "
+                f"válidos: {sorted(_EXPORT_FORMATS)}"
+            )
+        wanted = set(formats)
 
         exports = {}
 
@@ -573,63 +593,75 @@ class OSINTEye:
         # (e.g. "out/report"); create it instead of crashing after the scan.
         Path(json_path).parent.mkdir(parents=True, exist_ok=True)
 
-        with open(json_path, "w") as f:
-            json.dump(self.results, f, indent=2, default=str)
-        exports["json"] = json_path
+        if "json" in wanted:
+            with open(json_path, "w") as f:
+                json.dump(self.results, f, indent=2, default=str)
+            exports["json"] = json_path
 
-        md_path = (
-            json_path.replace(".json", ".md")
-            if json_path.endswith(".json")
-            else output_base + ".md"
-        )
-        self.reporter.load_results(self.results)
-        self.reporter.generate(md_path)
-        exports["markdown"] = md_path
+        if "markdown" in wanted:
+            md_path = (
+                json_path.replace(".json", ".md")
+                if json_path.endswith(".json")
+                else output_base + ".md"
+            )
+            self.reporter.load_results(self.results)
+            self.reporter.generate(md_path)
+            exports["markdown"] = md_path
 
-        html_path = (
-            json_path.replace(".json", ".html")
-            if json_path.endswith(".json")
-            else output_base + ".html"
-        )
-        self.html_reporter.generate(self.results, html_path)
-        exports["html"] = html_path
+        if "html" in wanted:
+            html_path = (
+                json_path.replace(".json", ".html")
+                if json_path.endswith(".json")
+                else output_base + ".html"
+            )
+            self.html_reporter.generate(self.results, html_path)
+            exports["html"] = html_path
 
-        csv_files = self.csv_exporter.export_all(self.results, output_base)
-        exports["csv"] = csv_files
+        if "csv" in wanted:
+            csv_files = self.csv_exporter.export_all(self.results, output_base)
+            exports["csv"] = csv_files
 
-        mitre_json = output_base + "_mitre.json"
-        with open(mitre_json, "w") as f:
-            json.dump(self.results.get("mitre", {}), f, indent=2)
-        exports["mitre_json"] = mitre_json
+        if "mitre_json" in wanted:
+            mitre_json = output_base + "_mitre.json"
+            with open(mitre_json, "w") as f:
+                json.dump(self.results.get("mitre", {}), f, indent=2)
+            exports["mitre_json"] = mitre_json
 
-        mitre_navigator = output_base + "_navigator.json"
-        with open(mitre_navigator, "w") as f:
-            json.dump(self.mitre_mapper.export_navigator_layer(), f, indent=2)
-        exports["mitre_navigator"] = mitre_navigator
+        if "mitre_navigator" in wanted:
+            mitre_navigator = output_base + "_navigator.json"
+            with open(mitre_navigator, "w") as f:
+                json.dump(self.mitre_mapper.export_navigator_layer(), f, indent=2)
+            exports["mitre_navigator"] = mitre_navigator
 
-        bounty_path = self.bounty_reporter.generate(self.results)
-        exports["bounty_report"] = bounty_path
+        if "bounty_report" in wanted:
+            bounty_path = self.bounty_reporter.generate(self.results)
+            exports["bounty_report"] = bounty_path
 
-        graph_path = output_base + "_graph.html"
-        self.graph_builder.export_html(graph_path)
-        exports["graph"] = graph_path
+        if "graph" in wanted:
+            graph_path = output_base + "_graph.html"
+            self.graph_builder.export_html(graph_path)
+            exports["graph"] = graph_path
 
-        pdf_path = (
-            output_base + ".pdf" if not output_base.endswith(".pdf") else output_base
-        )
-        self.pdf_reporter.generate(self.results, pdf_path)
-        exports["pdf"] = pdf_path
+        if "pdf" in wanted:
+            pdf_path = (
+                output_base + ".pdf" if not output_base.endswith(".pdf") else output_base
+            )
+            self.pdf_reporter.generate(self.results, pdf_path)
+            exports["pdf"] = pdf_path
 
-        burp_path = self.burp_exporter.export(self.results, output_base + "_burp.xml")
-        exports["burp"] = burp_path
+        if "burp" in wanted:
+            burp_path = self.burp_exporter.export(self.results, output_base + "_burp.xml")
+            exports["burp"] = burp_path
 
-        msf_path = self.msf_exporter.export(self.results, output_base + "_msf.json")
-        exports["metasploit"] = msf_path
+        if "metasploit" in wanted:
+            msf_path = self.msf_exporter.export(self.results, output_base + "_msf.json")
+            exports["metasploit"] = msf_path
 
-        sarif_path = self.sarif_exporter.export(
-            self.results, output_base + ".sarif"
-        )
-        exports["sarif"] = sarif_path
+        if "sarif" in wanted:
+            sarif_path = self.sarif_exporter.export(
+                self.results, output_base + ".sarif"
+            )
+            exports["sarif"] = sarif_path
 
         return exports
 
@@ -764,7 +796,9 @@ def scan_targets(targets: list, args):
                 if len(targets) == 1
                 else f"{args.output}_{_sanitize_filename(target)}"
             )
-            exports = engine.export_all(output)
+            exports = engine.export_all(
+                output, formats=getattr(args, "export_formats", None)
+            )
             print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
 
         if getattr(args, "export_cypher", None):
@@ -925,6 +959,45 @@ def decide_exit_code(all_results: dict, args) -> int:
     return EXIT_OK
 
 
+def _apply_config_to_args(args, config: Config, parser) -> None:
+    """Fill args from the config file where the user left CLI defaults.
+
+    Precedence: explicit CLI flags win; anything the user did not pass
+    gets the config value. A flag equal to its argparse default is treated
+    as "not passed" (documented edge: passing --depth normal with a config
+    that sets deep lets the config win).
+    """
+    option_map = {
+        "depth": config.depth,
+        "stealth": config.stealth,
+        "no_ai": config.no_ai,
+        "no_cache": config.no_cache,
+        "monitor_interval": config.monitor_interval,
+    }
+    for attr, value in option_map.items():
+        if value is None or value == parser.get_default(attr):
+            continue
+        if getattr(args, attr, None) == parser.get_default(attr):
+            setattr(args, attr, value)
+
+    if config.modules and getattr(args, "modules", None) is None:
+        args.modules = list(config.modules)
+
+    # Export formats have no CLI flag yet (export-cli-flags, Banco):
+    # config is the only source, applied directly.
+    if config.export_formats:
+        args.export_formats = list(config.export_formats)
+
+
+def build_scope_from_config(config: Config) -> Optional[Scope]:
+    """Scope from [scope].includes/excludes (None when unconfigured)."""
+    includes = config.scope_includes
+    excludes = config.scope_excludes
+    if not includes and not excludes:
+        return None
+    return Scope(includes=includes, excludes=excludes)
+
+
 def _print_module_catalog():
     """Print the available scan modules as a Rich table."""
     from rich.console import Console
@@ -988,7 +1061,12 @@ Exit codes (CI):
         "--dashboard", action="store_true", help="Launch web dashboard after scan"
     )
     parser.add_argument(
-        "--profile", choices=["default", "deep", "stealth"], help="Use a config profile"
+        "--profile", help="Use a named [profiles.<name>] section from the "
+        "config file (requires --config or an osint_eye.toml)"
+    )
+    parser.add_argument(
+        "--config", metavar="FILE", help="TOML configuration file "
+        "(default: osint_eye.toml in the current directory, if present)"
     )
     parser.add_argument(
         "--monitor",
@@ -1103,19 +1181,46 @@ Exit codes (CI):
         parser.error(str(exc))
     setup_logging(log_level, args.log_file)
 
+    args.scope_obj = None
+    config_obj = None
+    try:
+        config_obj = Config.load(args.config)
+    except ConfigError as exc:
+        parser.error(f"config: {exc}")
+
+    if getattr(args, "profile", None):
+        if config_obj is None:
+            parser.error(
+                "--profile requiere un fichero de configuración (--config u "
+                "osint_eye.toml en el directorio actual)"
+            )
+        try:
+            config_obj = config_obj.apply_profile(args.profile)
+        except ConfigError as exc:
+            parser.error(f"config: {exc}")
+
+    if config_obj is not None:
+        try:
+            config_obj.validate_modules(MODULE_CATALOG).validate_export_formats()
+        except ConfigError as exc:
+            parser.error(f"config: {exc}")
+        _apply_config_to_args(args, config_obj, parser)
+        args.config_obj = config_obj
+
     # Scope control: --scope FILE defines what may be touched, --exclude
-    # always wins. Built (and validated) before anything runs so a broken
-    # scope file is a clean usage error, never a mid-scan crash.
-    scope_obj = None
+    # always wins; [scope] del fichero de configuración se usa sólo si el
+    # usuario no dio nada por CLI. Built (and validated) before anything
+    # runs so a broken scope is a clean usage error, never a mid-scan crash.
     if getattr(args, "scope", None) or getattr(args, "exclude", None):
         try:
             if args.scope:
-                scope_obj = Scope.from_file(args.scope, excludes=args.exclude)
+                args.scope_obj = Scope.from_file(args.scope, excludes=args.exclude)
             else:
-                scope_obj = Scope(excludes=args.exclude)
+                args.scope_obj = Scope(excludes=args.exclude)
         except (ScopeError, OSError) as exc:
             parser.error(f"scope: {exc}")
-    args.scope_obj = scope_obj
+    elif config_obj is not None:
+        args.scope_obj = build_scope_from_config(config_obj)
 
     # `--modules` without a value prints the module catalog and exits.
     if getattr(args, "modules", None) is not None and len(args.modules) == 0:
