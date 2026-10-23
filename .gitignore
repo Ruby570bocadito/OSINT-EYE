@@ -49,15 +49,15 @@ downloads/
 .osint_eye/
 *.db
 
+# Borradores y volcados de agentes (PROTOCOLO §3)
+.agent-tmp/
+
 # Secrets
 .env
 .env.local
 *.key
 *.pem
 secrets/
-
-# Docker
-.dockerignore
 
 # NOTE: .github/, docs/ and docs/assets/ (screenshots, GIFs) are tracked.
 # Scan results must be written to ./output/ or kept to the root patterns above.

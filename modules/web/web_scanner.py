@@ -6,6 +6,8 @@ from typing import Dict, List
 from urllib.parse import urljoin
 import concurrent.futures
 
+from .ssrf_guard import safe_get
+
 
 class TechDetector:
     """Detect web technologies without API keys"""
@@ -164,7 +166,7 @@ class TechDetector:
         }
 
         try:
-            response = self.session.get(url, timeout=self.timeout, allow_redirects=True)
+            response = safe_get(self.session, url, timeout=self.timeout)
 
             result["status_code"] = response.status_code
             result["response_time"] = response.elapsed.total_seconds()
@@ -708,7 +710,7 @@ class SensitiveDataDetector:
                     }
                 )
 
-                response = session.get(url, timeout=10)
+                response = safe_get(session, url, timeout=10)
                 result["status_code"] = response.status_code
                 result["content_length"] = len(response.content)
 

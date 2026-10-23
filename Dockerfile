@@ -2,9 +2,12 @@ FROM python:3.12-slim
 
 LABEL maintainer="OSINT EYE Team"
 LABEL description="AI-Powered Attack Surface Intelligence Engine"
-LABEL version="2.1.0"
+LABEL version="2.1.1"
 
 WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap \

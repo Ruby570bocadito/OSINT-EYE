@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osint-eye"
+version = "2.1.1"
+description = "AI-Powered Attack Surface Intelligence — plataforma OSINT y reconocimiento de superficie de ataque"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "OSINT EYE Team" }]
+keywords = ["osint", "reconnaissance", "attack-surface", "security", "pentesting", "bugbounty"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+# Paridad 1:1 con requirements.txt: ui/__init__ y reporting/__init__ importan
+# flask/textual/reportlab en el arranque del CLI (import eagre), así que hoy el
+# base no puede rebajarse. Cuando IMP-2/IMP-3 hagan lazy esos imports, mover
+# flask/textual aquí fuera y dejar el base mínimo.
+dependencies = [
+    "aiohttp>=3.9.0",
+    "beautifulsoup4>=4.12.0",
+    "dnspython>=2.4.0",
+    "flask>=3.0.0",
+    "ipwhois>=1.2.0",
+    "lxml>=4.9.0",
+    "networkx>=3.0",
+    "nvdlib>=0.6.0",
+    "pyvis>=0.3.2",
+    "python-nmap>=0.7.1",
+    "python-whois>=0.9.0",
+    "reportlab>=4.0.0",
+    "requests>=2.31.0",
+    "rich>=13.0.0",
+    "textual>=0.40.0",
+    "waybackpy>=3.0.0",
+]
+
+[project.optional-dependencies]
+ui = ["flask>=3.0.0", "textual>=0.40.0"]
+pdf = ["reportlab>=4.0.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "ruff>=0.4.0"]
+
+[project.scripts]
+osint-eye = "osint_eye:main"
+
+[project.urls]
+Repository = "https://github.com/Ruby570bocadito/OSINT-EYE"
+Changelog = "https://github.com/Ruby570bocadito/OSINT-EYE/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+py-modules = ["osint_eye"]
+
+[tool.setuptools.packages.find]
+include = ["ai", "ai.*", "core", "core.*", "graph", "graph.*", "modules", "modules.*", "reporting", "reporting.*", "ui", "ui.*"]

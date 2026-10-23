@@ -7,6 +7,8 @@ import concurrent.futures
 
 import requests
 
+from modules.web.ssrf_guard import safe_get
+
 
 class CloudBucketDetector:
     """Detect exposed cloud storage buckets (no API keys)"""
@@ -443,7 +445,7 @@ class CDNDetector:
         result = {"url": url, "cdn": None, "waf": None, "headers": {}, "indicators": []}
 
         try:
-            response = self.session.get(url, timeout=self.timeout, allow_redirects=True)
+            response = safe_get(self.session, url, timeout=self.timeout)
 
             for header, value in response.headers.items():
                 result["headers"][header] = value
