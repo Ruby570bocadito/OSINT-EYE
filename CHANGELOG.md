@@ -15,6 +15,10 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h001 (persistencia)**: el quickstart del README ya deja fichero reutilizable: sin `--output`,
+  cada escaneo auto-guarda `osint_eye_<target>_<ts>.json` en el directorio actual (misma convención
+  que el PDF por defecto) e imprime dónde quedó y que la caché vive en `~/.osint_eye/cache`. La rama
+  `--dashboard` reutiliza ese fichero en vez de generar un duplicado con otro timestamp.
 - **fix-h007 (Ctrl+C)**: interrumpir un escaneo ya no termina en traceback crudo: el bucle de targets
   captura `KeyboardInterrupt`, reúne los resultados parciales (targets completados + el en vuelo) en
   `ScanInterrupted`, imprime mensaje de aborto con el resumen por target y sale con código propio

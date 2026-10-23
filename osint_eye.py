@@ -918,6 +918,7 @@ def scan_targets(targets: list, args):
                 except Exception as e:
                     print(f"[!] PDF generation failed: {e}")
 
+            auto_saved_json = None
             if args.output:
                 output = (
                     args.output
@@ -928,6 +929,30 @@ def scan_targets(targets: list, args):
                     output, formats=getattr(args, "export_formats", None)
                 )
                 print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
+            else:
+                # H-001 (TEST): the README quickstart left the user with no
+                # reusable file at all. Persist a default JSON (same CWD
+                # convention as the default PDF) and say where things live.
+                default_json = (
+                    f"osint_eye_{_sanitize_filename(target)}_"
+                    f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                )
+                try:
+                    with open(default_json, "w") as f:
+                        json.dump(engine.results, f, indent=2, default=str)
+                except OSError as exc:
+                    print(f"[!] Could not auto-save results: {exc}")
+                else:
+                    auto_saved_json = default_json
+                    cache_hint = (
+                        "cached in ~/.osint_eye/cache"
+                        if engine.use_cache
+                        else "cache disabled"
+                    )
+                    print(
+                        f"[+] Results saved to {default_json} ({cache_hint}; "
+                        f"export more formats with -o)"
+                    )
 
             if getattr(args, "export_cypher", None):
                 from graph.neo4j_exporter import Neo4jExporter
@@ -948,13 +973,16 @@ def scan_targets(targets: list, args):
                 from ui.dashboard import load_scan_results, start_dashboard
 
                 # Persist the scan JSON first so the dashboard always has real
-                # data to load, then hand the exact path over.
+                # data to load, then hand the exact path over. The auto-saved
+                # default from H-001 is reused when present (no duplicate).
                 if args.output:
                     dash_json = (
                         args.output
                         if args.output.endswith(".json")
                         else args.output + ".json"
                     )
+                elif auto_saved_json:
+                    dash_json = auto_saved_json
                 else:
                     dash_json = (
                         f"osint_eye_{_sanitize_filename(target)}_"
