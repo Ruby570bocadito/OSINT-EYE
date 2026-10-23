@@ -67,6 +67,10 @@ def _results_with_everything() -> dict:
                     "https://example.com/backup.sql",
                 ]
             },
+            "google": {
+                "admin_panels": [{"url": "https://example.com/admin"}],
+                "login_pages": ["https://example.com/login"],
+            },
         },
     }
 
@@ -152,8 +156,10 @@ class TestLevels:
         levels = {(f["rule_id"], f["level"]) for f in findings}
         assert ("OE001", "error") in levels
         assert ("OE002", "error") in levels
-        assert ("OE003", "warning") in levels
+        assert ("OE003", "warning") in levels  # potential leak = medium
         assert ("OE005", "warning") in levels
+        assert ("OE006", "note") in levels  # login page = low
+        assert ("OE007", "warning") in levels  # admin panel = medium
 
 
 class TestTolerance:
