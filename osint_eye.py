@@ -23,6 +23,7 @@ from modules.cve import CVEScanner
 from core.correlator import AssetCorrelator
 from core.logging_config import parse_level, setup_logging
 from core.schema import SCHEMA_VERSION, new_results, validate_results
+from core.scope import Scope, ScopeError
 from core.session_cache import ScanCache, SessionManager
 from core.scan_diff import ScanDiff, AttackChainBuilder, BountyReporter
 from core.monitor import SubdomainMonitor, AlertManager
@@ -89,12 +90,14 @@ class OSINTEye:
         ai: bool = True,
         depth: str = "normal",
         cache: bool = True,
+        scope: Scope = None,
     ):
         self.target = target
         self.stealth = stealth
         self.use_ai = ai
         self.depth = depth
         self.use_cache = cache
+        self.scope = scope
         self.results = new_results(target, depth)
         # Defensive: new_results() must always emit a schema-versioned dict;
         # if the contract drifts, fail loudly here instead of shipping
@@ -155,6 +158,11 @@ class OSINTEye:
 
     def _print(self, msg):
         print(f"[*] {msg}")
+
+    def _refresh_scope_summary(self):
+        """Embed the live scope summary (incl. discard log) into results."""
+        if self.scope is not None:
+            self.results["scope"] = self.scope.to_dict()
 
     def _validate_schema(self):
         """Check self.results against the contract; warn, never fail.
@@ -314,6 +322,9 @@ class OSINTEye:
         found = self._safe_run(
             "permutation", self.permutator.enumerate, self.target, discovered
         )
+        if self.scope is not None:
+            # Resolution is an active touch: drop candidates outside scope.
+            found = self.scope.filter_targets(found, "permutation")
         self.results["modules"]["permutation"] = {
             "subdomains": found,
             "total_found": len(found),
@@ -334,6 +345,10 @@ class OSINTEye:
         # "TypeError: 'NoneType' object is not subscriptable".
         if not isinstance(subs, list):
             subs = []
+        if self.scope is not None:
+            # Takeover probing actively touches every candidate; never let
+            # a discovered asset pull the scan outside the authorized scope.
+            subs = self.scope.filter_targets(subs, "takeover")
         vulnerable = self._safe_run(
             "takeover", self.takeover_detector.scan_list, subs[:50]
         )
@@ -524,6 +539,7 @@ class OSINTEye:
         self.run_ai()
         self._print("[+] Phase 4 complete.")
 
+        self._refresh_scope_summary()
         self._validate_schema()
 
         if self.scan_cache:
@@ -535,6 +551,7 @@ class OSINTEye:
 
     def export_all(self, output_base=None):
         """Export results in all formats"""
+        self._refresh_scope_summary()
         self._validate_schema()
 
         if not output_base:
@@ -647,6 +664,14 @@ def scan_targets(targets: list, args):
         return {}
 
     for target in targets:
+        scope = getattr(args, "scope_obj", None)
+        if scope is not None and not scope.allows(target):
+            scope.discard(target, "cli")
+            print(
+                f"[!] {target} fuera de scope ({scope.reason(target)}) - target omitido"
+            )
+            continue
+
         # Rich header for each target
         from ui.rich_cli import RichCLI as _RCli
 
@@ -659,6 +684,7 @@ def scan_targets(targets: list, args):
             ai=not args.no_ai,
             depth=args.depth,
             cache=not args.no_cache,
+            scope=getattr(args, "scope_obj", None),
         )
 
         if args.modules:
@@ -856,6 +882,7 @@ Examples:
   python osint_eye.py target1.com target2.com target3.com --depth deep
   python osint_eye.py example.com --stealth --no-ai --no-cache
   python osint_eye.py example.com --modules dns network web cloud emails graph mitre chains
+  python osint_eye.py example.com --scope scope.txt --exclude sub.example.com --exclude 10.0.0.0/8
         """,
     )
 
@@ -916,6 +943,19 @@ Examples:
         help="Append library logs to this file (console keeps receiving them)",
     )
     parser.add_argument(
+        "--scope",
+        metavar="FILE",
+        help="Authorization scope: one domain, wildcard domain, IP or CIDR per "
+        "line (# comments). Targets outside it are skipped and recorded",
+    )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        metavar="ITEM",
+        help="Exclude domain/IP/CIDR from the scan (repeatable; always wins "
+        "over --scope)",
+    )
+    parser.add_argument(
         "--pdf", action="store_true", help="Generate an executive PDF report after scan"
     )
     parser.add_argument(
@@ -970,6 +1010,20 @@ Examples:
     except ValueError as exc:
         parser.error(str(exc))
     setup_logging(log_level, args.log_file)
+
+    # Scope control: --scope FILE defines what may be touched, --exclude
+    # always wins. Built (and validated) before anything runs so a broken
+    # scope file is a clean usage error, never a mid-scan crash.
+    scope_obj = None
+    if getattr(args, "scope", None) or getattr(args, "exclude", None):
+        try:
+            if args.scope:
+                scope_obj = Scope.from_file(args.scope, excludes=args.exclude)
+            else:
+                scope_obj = Scope(excludes=args.exclude)
+        except (ScopeError, OSError) as exc:
+            parser.error(f"scope: {exc}")
+    args.scope_obj = scope_obj
 
     # `--modules` without a value prints the module catalog and exits.
     if getattr(args, "modules", None) is not None and len(args.modules) == 0:
