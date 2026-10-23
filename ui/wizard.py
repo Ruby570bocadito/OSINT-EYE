@@ -46,6 +46,124 @@ class InteractiveWizard:
 
     # ── helpers ──────────────────────────────────────────────────────────
     @staticmethod
+    def _looks_like_url(token: str) -> bool:
+        """Whether ``token`` smells like a URL instead of a bare target.
+
+        Detects explicit schemes (``https://…``), scheme-less forms with a
+        path (``example.com/admin``), userinfo (``user@host``), bracketed
+        hosts (``[::1]:8080``) and ``host:port`` (``example.com:8080``).
+        Bare IPv6 (``::1``, ``2001:db8::1``) is NOT flagged: several colons
+        without a digits-only port is how IPv6 looks.
+        """
+        t = (token or "").strip().lower()
+        if not t:
+            return False
+        if "://" in t or "@" in t:
+            return True
+        if t.startswith("[") or "]" in t:
+            return True
+        if "/" in t:  # a valid CIDR is NOT a URL
+            try:
+                ipaddress.ip_network(t, strict=False)
+                return False
+            except ValueError:
+                return True
+        if t.count(":") == 1:  # host:port — bare IPv6 has 2+ colons
+            host, _, port = t.partition(":")
+            if host and port.isdigit():
+                return True
+        return False
+
+    @staticmethod
+    def _host_from_url(token: str) -> str:
+        """Best-effort host extraction from a URL-ish token.
+
+        ``https://EXAMPLE.com/admin?t=1`` → ``EXAMPLE.com``;
+        ``user@host`` → ``host``; ``[::1]:8080`` → ``::1``;
+        ``example.com:8080`` → ``example.com``. Returns ``''`` when
+        nothing host-like can be extracted.
+        """
+        t = (token or "").strip()
+        if "://" in t:
+            t = t.split("://", 1)[1]
+        t = t.split("/", 1)[0]
+        t = t.split("@", 1)[-1]
+        if t.startswith("[") and "]" in t:  # [v6]:port form
+            host, _, _rest = t[1:].partition("]")
+            return host
+        host, _, _port = t.partition(":")
+        return host or t
+
+    @classmethod
+    def _validate_target(cls, target: str):
+        """Validate one scan target format.
+
+        Returns ``(ok, reason)``. Accepted formats: domain names
+        (``scanme.example.org``, punycode ``xn--…`` labels included),
+        IPv4/IPv6 addresses and CIDR networks (``192.0.2.0/24``).
+        Wildcards are rejected for targets — they belong in scope/
+        exclusions — as are URL-like or padded inputs.
+        """
+        t = (target or "").strip().rstrip(".").lower()
+        if not t:
+            return False, "empty target"
+        if "*" in t or "?" in t:
+            return False, "wildcards are not scan targets — put them in scope/exclusions"
+        if "://" in t or "@" in t or " " in t or "[" in t or "]" in t:
+            return False, f"'{t}' is not a bare domain, IP or CIDR"
+
+        # CIDR (must contain exactly one '/'); ip_network also rejects
+        # things like 'example.com/24' for us.
+        if "/" in t:
+            try:
+                ipaddress.ip_network(t, strict=False)
+                return True, ""
+            except ValueError:
+                return False, f"'{t}' is not a valid CIDR (e.g. 192.0.2.0/24)"
+
+        # IP address (v4 or v6)?
+        try:
+            ipaddress.ip_address(t)
+            return True, ""
+        except ValueError:
+            pass
+
+        # Domain name (RFC-style labels; a-z, 0-9 and '-', punycode included)
+        if len(t) > 253:
+            return False, "domain longer than 253 characters"
+        for label in t.split("."):
+            if not label:
+                return False, "empty label (double dot?)"
+            if len(label) > 63:
+                return False, f"label '{label}' longer than 63 characters"
+            if label.startswith("-") or label.endswith("-"):
+                return False, f"label '{label}' starts/ends with hyphen"
+            if not set(label) <= set("abcdefghijklmnopqrstuvwxyz0123456789-"):
+                return False, f"label '{label}' has characters outside a-z, 0-9 and '-'"
+        return True, ""
+
+    @classmethod
+    def _validate_targets(cls, tokens: list):
+        """Validate a batch of raw tokens.
+
+        Returns ``(clean, bad)``: ``clean`` keeps the valid tokens in
+        order, ``bad`` holds ``(token, reason)`` pairs for the rest.
+        URL-like tokens fail here with a dedicated reason — the
+        interactive swap lives in ``_ask_targets``.
+        """
+        clean, bad = [], []
+        for token in tokens:
+            if cls._looks_like_url(token):
+                bad.append((token, "looks like a URL — use the bare host"))
+                continue
+            ok, reason = cls._validate_target(token)
+            if ok:
+                clean.append(token)
+            else:
+                bad.append((token, reason))
+        return clean, bad
+
+    @staticmethod
     def _parse_targets(raw: str) -> list:
         """Accept 'a.com, b.com  c.com' → ['a.com', 'b.com', 'c.com']."""
         for sep in (",", " "):
@@ -107,15 +225,66 @@ class InteractiveWizard:
         return kept, dropped
 
     def _ask_targets(self) -> list:
+        """Ask for targets until the whole batch is valid.
+
+        Every token must be a bare domain, IP or CIDR. URL-like input gets
+        a warning and an interactive fix (use the extracted host); anything
+        invalid lists the reasons and re-asks the batch (retry).
+        """
         while True:
             raw = Prompt.ask(
                 "[bold cyan]◆ Target domain(s) or IP(s)[/bold cyan] "
                 "[dim](comma/space separated)[/dim]"
             ).strip()
             targets = self._parse_targets(raw)
-            if targets:
-                return targets
-            console.print("[yellow]⚠ At least one target is required.[/yellow]")
+            if not targets:
+                console.print("[yellow]⚠ At least one target is required.[/yellow]")
+                continue
+
+            pending, rejected = [], []
+            from rich.markup import escape as _escape
+
+            for token in targets:
+                if self._looks_like_url(token):
+                    host = self._host_from_url(token)
+                    console.print(
+                        f"[yellow]⚠ '{_escape(token)}' looks like a URL, "
+                        "not a bare target.[/yellow]"
+                    )
+                    if host and Confirm.ask(
+                        f"[cyan]  Use '{_escape(host)}' as the target instead?[/cyan]",
+                        default=True,
+                    ):
+                        token = host
+                    else:
+                        rejected.append(
+                            (token, "looks like a URL — enter the bare host")
+                        )
+                        continue
+                pending.append(token)
+
+            clean, bad = self._validate_targets(pending)
+            rejected.extend(bad)
+            if rejected:
+                for token, reason in rejected:
+                    console.print(
+                        f"[red]✖ Invalid target '{_escape(str(token))}': {reason}[/red]"
+                    )
+                console.print(
+                    "[dim]  Formats: domain (scanme.example.org), IPv4/IPv6, "
+                    "CIDR (192.0.2.0/24). Try again.[/dim]"
+                )
+                continue
+            if clean:
+                # A URL swap can create duplicates ('a.com https://a.com'):
+                # dedupe case-insensitively, keep first spelling.
+                seen, unique = set(), []
+                for token in clean:
+                    key = token.lower().rstrip(".")
+                    if key not in seen:
+                        seen.add(key)
+                        unique.append(token)
+                return unique
 
     def _ask_scope_and_exclusions(self, targets: list):
         """Ask for scope limits and exclusions; narrow the targets for real."""

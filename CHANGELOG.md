@@ -10,6 +10,11 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Validación de targets en el wizard**: cada objetivo debe ser un dominio (etiquetas RFC,
+  punycode incluido), IP v4/v6 o CIDR (`192.0.2.0/24`); la entrada inválida lista el motivo por
+  token y reintenta. Si parece una URL (`https://…`, `host:puerto`, `usuario@host`) se avisa y se
+  ofrece usar el host extraído; los CIDR válidos no se marcan como URL. El texto del wizard escapa
+  siempre el input del usuario (sin Rich MarkupError con targets hostiles).
 - **Extractor canónico de hallazgos (`core/findings.py`)**: una sola capa de "qué ha encontrado el scan"
   (takeover, buckets públicos, secretos de GitHub, CVEs, ficheros sensibles, paneles admin/login) con
   `Finding` inmutable, severidad normalizada (CVSS por nombre o score), evidencia, fingerprint estable,

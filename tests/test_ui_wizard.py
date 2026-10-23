@@ -61,13 +61,22 @@ class TestWizardMarkupTarget:
     def test_start_survives_hostile_target(self):
         from ui import wizard as wiz
 
-        prompt_answers = iter(["x[/bold]y.com", "", "", "normal", "osint_eye_x"])
+        # Adapted for wizard-validacion-target: 'x[/bold]y.com' is no longer
+        # accepted as a target (brackets are not part of domain/IP/CIDR) and
+        # the URL-swap offer is declined. The survival contract is preserved:
+        # the rejection path escapes the hostile string (no Rich MarkupError),
+        # the wizard retries, and a valid target reaches the CLI while the
+        # hostile one never does.
+        prompt_answers = iter(
+            ["x[/bold]y.com", "example.com", "", "", "normal", "osint_eye_x"]
+        )
         confirm_answers = iter(
-            [True, True, True, False, False, False, False, False, False]
-        )  # authorization, ai, cache, stealth, rich, agent, pdf, dashboard, cypher
+            [False, True, True, True, False, False, False, False, False, False]
+        )  # url-swap, authorization, ai, cache, stealth, rich, agent, pdf, dashboard, cypher
 
         with patch.object(wiz.Prompt, "ask", staticmethod(lambda *a, **k: next(prompt_answers))), \
              patch.object(wiz.Confirm, "ask", staticmethod(lambda *a, **k: next(confirm_answers))):
             args = wiz.InteractiveWizard().start()
 
-        assert args[0] == "x[/bold]y.com"
+        assert args[0] == "example.com"
+        assert "x[/bold]y.com" not in args
