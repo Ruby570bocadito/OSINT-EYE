@@ -827,6 +827,12 @@ def scan_targets(targets: list, args):
         )
 
         if args.modules:
+            # Instrument FIRST, then build the dispatch map: module_map
+            # captures bound methods, so mapping before instrument_engine()
+            # would call the unwrapped originals and the live "Module
+            # Progress" table would stay "pending" for the whole scan.
+            tracker = instrument_engine(engine)
+            tracker.start_live()
             module_map = {
                 "dns": engine.run_dns,
                 "certs": engine.run_certs,
@@ -849,8 +855,6 @@ def scan_targets(targets: list, args):
                 "mitre": engine.run_mitre,
                 "chains": engine.run_attack_chains,
             }
-            tracker = instrument_engine(engine)
-            tracker.start_live()
             for module in args.modules:
                 if module in module_map:
                     module_map[module]()
