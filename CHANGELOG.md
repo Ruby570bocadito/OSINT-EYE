@@ -14,6 +14,11 @@ Reglas del equipo (PROTOCOLO §3):
 - **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
 - **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
 - **Empaquetado estándar**: `pyproject.toml` con metadatos completos, dependencias en paridad con `requirements.txt`, extras (`[ui]`, `[pdf]`, `[dev]`), entry point `osint-eye` y `pip install -e .` verificado desde cero.
+- **Control de scope (`--scope FILE` / `--exclude`)**: autorización explícita por dominio, wildcard
+  (`*.dominio`), IP o CIDR (IPv4/IPv6); los excludes siempre ganan; targets y candidatos fuera de scope
+  se omiten y quedan registrados en `results["scope"]["discarded"]` (target, módulo, motivo, timestamp).
+  Gateo activo en el orquestador (targets de CLI, candidatos de permutación y sondas de takeover);
+  archivo de scope inválido = error de uso limpio antes de escanear.
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
   ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
@@ -58,6 +63,9 @@ Reglas del equipo (PROTOCOLO §3):
   escaneo DNS en modo `full` (merge con fuerza bruta/CT, detalle por fuente en
   `results["modules"]["dns"]["passive_subdomains"]`); cualquier fuente caída degrada a `status=error`
   sin romper el escaneo.
+- **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
+  alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
+  exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.
 
 ### Documentación
 - README fiel: badges de versión (2.1.1) y de tests sincronizados con el recuento real de la suite, árbol actualizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
