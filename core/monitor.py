@@ -2,34 +2,42 @@
 
 import asyncio
 import json
-from core.logging_config import get_logger
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from collections.abc import Callable
 from datetime import datetime
-from typing import Dict, List, Callable, Optional
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
+from typing import Any
 
+from core.logging_config import get_logger
+from core.session_cache import ScanCache
+from modules.certs import CertScanner
 from modules.dns import DNSScanner
 from modules.dns.subdomain_permutator import SubdomainPermutator
-from modules.certs import CertScanner
-from core.session_cache import ScanCache
 
 logger = get_logger(__name__)
+
+# Signature every alert channel must honour (alert_type, message, severity, data).
+AlertHandler = Callable[[str, str, str, dict[str, Any]], None]
 
 
 class AlertManager:
     """Send alerts via various channels"""
 
-    def __init__(self):
-        self.handlers = []
+    def __init__(self) -> None:
+        self.handlers: list[AlertHandler] = []
 
-    def add_handler(self, handler: Callable):
+    def add_handler(self, handler: AlertHandler) -> None:
         self.handlers.append(handler)
 
     def send(
-        self, alert_type: str, message: str, severity: str = "medium", data: Optional[Dict] = None
-    ):
+        self,
+        alert_type: str,
+        message: str,
+        severity: str = "medium",
+        data: dict[str, Any] | None = None,
+    ) -> None:
         for handler in self.handlers:
             try:
                 handler(alert_type, message, severity, data or {})
@@ -42,12 +50,16 @@ class AlertManager:
                 )
 
     @staticmethod
-    def log_handler(alert_type, message, severity, data):
+    def log_handler(
+        alert_type: str, message: str, severity: str, data: dict[str, Any]
+    ) -> None:
         logger.info("[ALERT] [%s] [%s] %s", severity.upper(), alert_type, message)
 
     @staticmethod
-    def file_handler(logfile: str):
-        def handler(alert_type, message, severity, data):
+    def file_handler(logfile: str) -> AlertHandler:
+        def handler(
+            alert_type: str, message: str, severity: str, data: dict[str, Any]
+        ) -> None:
             timestamp = datetime.now().isoformat()
             entry = json.dumps(
                 {
@@ -64,8 +76,12 @@ class AlertManager:
         return handler
 
     @staticmethod
-    def email_handler(smtp_config: Dict, recipients: List[str]):
-        def handler(alert_type, message, severity, data):
+    def email_handler(
+        smtp_config: dict[str, Any], recipients: list[str]
+    ) -> AlertHandler:
+        def handler(
+            alert_type: str, message: str, severity: str, data: dict[str, Any]
+        ) -> None:
             try:
                 msg = MIMEMultipart()
                 msg["From"] = smtp_config["from"]
@@ -103,7 +119,7 @@ Data: {json.dumps(data, indent=2)}
         return handler
 
     @staticmethod
-    def webhook_handler(url: str):
+    def webhook_handler(url: str) -> AlertHandler:
         from modules.web.ssrf_guard import is_safe_webhook_url
 
         if not is_safe_webhook_url(url):
@@ -114,7 +130,9 @@ Data: {json.dumps(data, indent=2)}
             )
             return lambda *args, **kwargs: None
 
-        def handler(alert_type, message, severity, data):
+        def handler(
+            alert_type: str, message: str, severity: str, data: dict[str, Any]
+        ) -> None:
             try:
                 import requests
 
@@ -139,8 +157,8 @@ class SubdomainMonitor:
     """Monitor targets for subdomain changes"""
 
     def __init__(
-        self, targets: List[str], check_interval: int = 3600, cache: bool = True
-    ):
+        self, targets: list[str], check_interval: int = 3600, cache: bool = True
+    ) -> None:
         self.targets = targets
         self.check_interval = check_interval
         self.alert_manager = AlertManager()
@@ -149,12 +167,12 @@ class SubdomainMonitor:
         self.running = False
         self.dns_scanner = DNSScanner()
         self.permutator = SubdomainPermutator(threads=50)
-        self.cert_scanner = CertScanner()
-        self.baseline = {}
+        self.cert_scanner = CertScanner()  # type: ignore[no-untyped-call]  # modules/ aún sin tipar (type-hints-modules, fase 2 de PUL-2)
+        self.baseline: dict[str, set[str]] = {}
 
-    def set_baseline(self, target: str):
+    def set_baseline(self, target: str) -> None:
         """Establish baseline for a target"""
-        subdomains = set()
+        subdomains: set[str] = set()
 
         if self.scan_cache:
             cached = self.scan_cache.get_subdomains(target)
@@ -162,9 +180,9 @@ class SubdomainMonitor:
 
         self.baseline[target] = subdomains
 
-    async def check_target(self, target: str) -> Dict:
+    async def check_target(self, target: str) -> dict[str, Any]:
         """Check a single target for changes"""
-        new_subdomains = set()
+        new_subdomains: set[str] = set()
 
         # Lazily build the baseline (from cache) so run_once() callers get a
         # meaningful diff too; previously a missing baseline re-alerted everything.
@@ -211,9 +229,9 @@ class SubdomainMonitor:
             "timestamp": datetime.now().isoformat(),
         }
 
-    async def check_all(self) -> List[Dict]:
+    async def check_all(self) -> list[dict[str, Any]]:
         """Check all targets"""
-        results = []
+        results: list[dict[str, Any]] = []
         for target in self.targets:
             result = await self.check_target(target)
             if result["new_subdomains"]:
@@ -226,11 +244,11 @@ class SubdomainMonitor:
             results.append(result)
         return results
 
-    async def run_once(self) -> List[Dict]:
+    async def run_once(self) -> list[dict[str, Any]]:
         """Run a single check cycle"""
         return await self.check_all()
 
-    async def run_daemon(self, max_cycles: int = 0):
+    async def run_daemon(self, max_cycles: int = 0) -> None:
         """Run as daemon (max_cycles=0 means run until stop() is called)"""
         self.running = True
         cycle = 0
@@ -242,7 +260,9 @@ class SubdomainMonitor:
 
         for target in self.targets:
             self.set_baseline(target)
-            logger.info("  - %s: %d known subdomains", target, len(self.baseline[target]))
+            logger.info(
+                "  - %s: %d known subdomains", target, len(self.baseline[target])
+            )
 
         logger.info("Monitoring started")
 
@@ -278,7 +298,7 @@ class SubdomainMonitor:
 
         logger.info("Monitor stopped after %d cycles", cycle)
 
-    async def _interruptible_sleep(self, seconds: float):
+    async def _interruptible_sleep(self, seconds: float) -> None:
         """Sleep in short slices so stop() is honoured promptly (no stale asyncio.sleep)."""
         step = 1.0
         slept = 0.0
@@ -287,14 +307,14 @@ class SubdomainMonitor:
             await asyncio.sleep(chunk)
             slept += chunk
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
 
 
 class PassiveDNSDatabase:
     """Build a passive DNS database from scan results"""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None) -> None:
         if not db_path:
             db_dir = Path.home() / ".osint_eye" / "pdns"
             db_dir.mkdir(parents=True, exist_ok=True)
@@ -303,7 +323,7 @@ class PassiveDNSDatabase:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         import sqlite3
 
         with sqlite3.connect(self.db_path) as conn:
@@ -324,7 +344,7 @@ class PassiveDNSDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pdns_value ON pdns(value)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pdns_target ON pdns(target)")
 
-    def ingest_scan(self, results: Dict):
+    def ingest_scan(self, results: dict[str, Any]) -> None:
         """Ingest scan results into passive DNS"""
         import sqlite3
 
@@ -333,7 +353,7 @@ class PassiveDNSDatabase:
         if not isinstance(modules, dict):
             modules = {}
 
-        records_to_insert = []
+        records_to_insert: list[tuple[str, str, str, str]] = []
 
         dns = modules.get("dns") or {}
         if not isinstance(dns, dict):
@@ -371,7 +391,9 @@ class PassiveDNSDatabase:
                     (query, rtype, value, target, now, now, now),
                 )
 
-    def lookup(self, query: str, record_type: str = None) -> List[Dict]:
+    def lookup(
+        self, query: str, record_type: str | None = None
+    ) -> list[dict[str, Any]]:
         """Look up passive DNS records"""
         import sqlite3
 
@@ -391,7 +413,7 @@ class PassiveDNSDatabase:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def reverse_lookup(self, value: str) -> List[Dict]:
+    def reverse_lookup(self, value: str) -> list[dict[str, Any]]:
         """Find all queries that resolved to a value"""
         import sqlite3
 
@@ -403,7 +425,7 @@ class PassiveDNSDatabase:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict[str, Any]:
         """Get database statistics"""
         import sqlite3
 
