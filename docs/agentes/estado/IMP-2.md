@@ -1,42 +1,49 @@
 # Estado IMP-2 — Interfaz
 
-Actualizado: 2026-10-23 (ronda 2 v2.2/v2.3 — SESIÓN LARGA, 5/5 tareas, empujadas a main)
+Actualizado: 2026-10-23 (ronda 3 v2.2/v2.3 — SESIÓN LARGA, 5/5 tareas, empujadas a main)
 
 ## Hecho (últimas 24 h)
 
-- [x] wizard-validacion-target — dominio/IP/CIDR con reintentos; aviso de URL con swap de host
-  (CIDRs válidos no son URL); input siempre escapado. 59 tests. 034fa93.
-- [x] dashboard-autorefresco — /api/dashboard/config, badge LIVE con pausa/OFFLINE tras 3 fallos,
-  watcher por mtime + reload_scan_results (upsert refreshed_at); cableado --monitor --dashboard.
-  19 tests. 9bc4dd5.
-- [x] fix-h005-dashboard-slash — /api/scan/... a <path:target> (%2F ok en Werkzeug 3.1),
-  merge_slashes off, 404 JSON uniforme en /api/*. 14 tests. 096e190.
-- [x] timeline-historico — /api/timeline + por target con deltas sobre _collect_assets;
-  SCAN_ARCHIVE[(target, date)] guarda estados históricos; panel Surface Timeline. 15 tests. 3761b6a.
-- [x] grafo-avanzado — chips-filtro por tipo, búsqueda, Attack paths (BFS hub→riesgo), export
-  SVG/PNG (SVG con estilos inline, PNG por canvas data:, descarga Blob). 14 tests. f2bbe1f.
-- Suite: 466 → 720 tests en verde (ronda 2: +121 míos, offline). Nota: claims de timeline/grafo
-  absorbidos por su commit feat tras un lío de rebase; ciclo completo en main (claim + release).
+- [x] demo-assets-nuevos (ALTA, petición del propietario) — 7 capturas reales de la UI con fixture
+  offline example.com: dashboard-dark, cli-progress (tracker real), wizard-auth (wizard real en pty,
+  abortado en el gate de autorización — cero red), report-pdf, graph-view, demo-scan.gif (14 s,
+  0.57 MB) y demo-scan.mp4. Grafo construido con GraphBuilder real. 992d131. PUL-1 ya las cableó.
+- [x] tui-completa — Textual navegable: TabbedContent Overview/Assets/DNS/Network/Findings (teclas
+  1-5), tabla de activos con la vista canónica _collect_assets + filtro en vivo (ctrl+f), ficha
+  modal por activo (módulos que lo reportan + evidencia), --tui cableado (getattr tolerante).
+  14 tests pilot offline. b1de59c (rebase sobre fix-h007 resuelto).
+- [x] tema-claro — prefers-color-scheme con paleta clara completa; topbar con --topbar-bg, timeline
+  sin la var inexistente --panel-bg, export SVG/PNG del grafo lee tokens computados. Verificado en
+  Chromium (media light). 9 tests. 8beb3b0.
+- [x] dashboard-vacio-guiado (propuesta TEST) — panel «No scan data yet» con los 3 comandos exactos
+  y copiado al portapapeles cuando no hay escaneos o es demo; oculto con datos reales; CSP-safe.
+  6 tests. eb14ffa.
+- [x] fix-tech-shapes-dashboard (autodetectado) — summary y _collect_assets solo aceptaban el doble
+  envoltorio: un escaneo REAL de web_scanner mostraba 0 tecnologías (stat, panel, explorer, TUI).
+  _tech_names() normaliza todas las formas sin filtrar claves del payload; contrato SEG ({url:...}
+  → []) respetado. 5 tests. 7dccd9f.
+- Suite: 897 → 979 en verde. Sin claims activos de IMP-2.
 
 ## En curso
 
-- Nada (sesión cerrada 5/5; sin claims activos de IMP-2).
+- Nada (sesión cerrada 5/5).
 
 ## Bloqueado
 
-- Nada. (PUL-2 partirá rich_cli.py: al aterrizar, revisar las 3 llamadas del tracker.)
+- Nada. (Fleet push muy activo: 3 conflictos de rebase resueltos conservando ambos lados.)
 
 ## Peticiones a otras zonas
 
-- (IMP-3) core/monitor.py: persistir cada ciclo como JSON con scan_date nuevo — con mi watcher
-  (watch_paths) el dashboard lo reflejaría en vivo sin tocar más core.
-- (SEG) revisar merge_slashes=False + 404 JSON (ui/dashboard.py, 096e190): criterios previos a
-  dashboard-api-hardening, no quiero duplicarlos.
-- (IMP-3) fix-h004: el render del dashboard ya es textContent-only; el escape pendiente es CLI —
-  coordinar para no escapar dos veces.
+- (PUL-2) i18n (siguiente en la cola IMP-2) conviene hacerla DESPUÉS de partir-rich-cli: no quiero
+  traducir textos que van a mudar de módulo; así no duplicamos trabajo.
+- (IMP-1) documentar en el contrato que modules.web.technologies es {url, technologies[], status_code}
+  (mi _tech_names ya lo tolera junto a lista directa y wrapper; solo informativo).
 
 ## Propuestas para el roadmap
 
-- [ ] (IMP-2) timeline-export — descarga CSV/MD de la vista timeline (eventos + deltas) — ui/dashboard.py
-- [ ] (IMP-2) wizard-target-presets — presets de targets/scope/exclusiones (--wizard-preset FILE) — ui/wizard.py
-- [ ] (IMP-2) grafo-node-detail — ficha al hacer clic en nodo (conexiones, módulos, severidad) — ui/dashboard_template.html
+- [ ] (IMP-2) tui-export — exportar el escaneo abierto desde la TUI (JSON/CSV/MD) reutilizando la
+  capa de export del dashboard — ui/tui_app.py
+- [ ] (IMP-2) wizard-resumen-previo — resumen (targets finales, scope, exclusiones, profundidad)
+  justo antes del gate de autorización — ui/wizard.py
+- [ ] (IMP-2) dashboard-graph-sidebar — lista de nodos sincronizada con el grafo (clic resalta y
+  centra el nodo) — ui/dashboard_template.html
