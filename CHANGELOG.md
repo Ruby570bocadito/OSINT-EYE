@@ -10,6 +10,12 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Configuración TOML (`osint_eye.toml`, `--config`, `--profile`)**: `[scan]` (depth, stealth, no_ai,
+  no_cache, módulos por defecto), `[timeouts]`, `[scope]` (includes/excludes) y `[exports].formats`
+  (subconjunto de exportadores); perfiles `[profiles.<nombre>]` que sobreescriben secciones; precedencia
+  flags CLI > perfil > fichero; claves/secciones desconocidas = error de uso limpio (con tomllib stdlib,
+  Python 3.11+; en 3.10 todo sigue funcionando sin TOML). `export_all()` acepta `formats=` para exportar
+  un subconjunto.
 - **Validación de targets en el wizard**: cada objetivo debe ser un dominio (etiquetas RFC,
   punycode incluido), IP v4/v6 o CIDR (`192.0.2.0/24`); la entrada inválida lista el motivo por
   token y reintenta. Si parece una URL (`https://…`, `host:puerto`, `usuario@host`) se avisa y se
