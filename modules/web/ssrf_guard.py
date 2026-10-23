@@ -125,8 +125,10 @@ def safe_get(session: "requests.Session", url: str,
              **kwargs) -> "requests.Response":
     """`session.get(url, allow_redirects=True)` with per-hop SSRF validation.
 
-    Follows redirects manually (up to `max_redirects`, stricter than the
-    requests default of 30), validating each hop with `is_public_http_url`.
+    The initial URL is the operator's explicit choice and is fetched as-is
+    (like nmap or httpx would). Every redirect hop, in contrast, is chosen
+    by the remote server, so each one is validated with `is_public_http_url`
+    (up to `max_redirects`, stricter than the requests default of 30).
     Refused or malformed hops raise `SSRFBlockedError`. The list of
     intermediate responses is attached to the final response as
     `response.history`, so callers reporting redirect chains keep working.
@@ -137,10 +139,6 @@ def safe_get(session: "requests.Session", url: str,
     current = url
     hops = []
     for _ in range(max_redirects + 1):
-        if not is_public_http_url(current):
-            raise SSRFBlockedError(
-                f"SSRF guard: refusing non-public URL {current!r}"
-            )
         response = session.get(
             current, timeout=timeout, allow_redirects=False, **kwargs
         )
@@ -159,6 +157,10 @@ def safe_get(session: "requests.Session", url: str,
             raise SSRFBlockedError(
                 f"SSRF guard: malformed redirect target {location!r}"
             ) from exc
+        if not is_public_http_url(current):
+            raise SSRFBlockedError(
+                f"SSRF guard: refusing non-public redirect target {current!r}"
+            )
     raise SSRFBlockedError(
         f"SSRF guard: more than {max_redirects} redirects"
     )

@@ -10,6 +10,7 @@ scripted fake sessions.
 
 import sys
 import os
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -34,6 +35,8 @@ class FakeResponse:
         self.content = text.encode()
         self.url = ""
         self.history = []
+        self.elapsed = timedelta(milliseconds=42)
+        self.cookies = []
 
     @property
     def is_redirect(self):
@@ -186,11 +189,24 @@ def test_safe_get_blocks_scheme_downgrade_via_redirect():
     assert session.requested == ["http://93.184.216.34/"]
 
 
-def test_safe_get_rejects_non_public_initial_url():
-    session = FakeSession([FakeResponse(200)])
+def test_safe_get_allows_private_initial_url_operator_choice():
+    """The initial URL is the operator's explicit choice (like nmap/httpx):
+    scanning local fixtures (localhost) must keep working."""
+    session = FakeSession([FakeResponse(200, text="local fixture")])
+    resp = safe_get(session, "http://127.0.0.1:8599/")
+    assert resp.status_code == 200
+    assert session.requested == ["http://127.0.0.1:8599/"]
+
+
+def test_safe_get_blocks_private_redirect_from_local_fixture():
+    """Even a local fixture may not bounce the scanner into private space."""
+    session = FakeSession([
+        FakeResponse(302, {"Location": "http://169.254.169.254/latest/meta-data/"}),
+        FakeResponse(200, text="metadata leak"),  # must stay unconsumed
+    ])
     with pytest.raises(SSRFBlockedError):
-        safe_get(session, "http://127.0.0.1:8080/")
-    assert session.requested == []
+        safe_get(session, "http://127.0.0.1:8599/redirect")
+    assert session.requested == ["http://127.0.0.1:8599/redirect"]
 
 
 def test_safe_get_too_many_redirects():
@@ -231,6 +247,15 @@ def test_tech_detector_refuses_private_redirect():
     result = detector.detect("http://93.184.216.34/")
     assert "SSRF" in result["error"]
     assert session.requested == ["http://93.184.216.34/"]
+
+
+def test_tech_detector_still_scans_local_fixture():
+    detector = TechDetector(timeout=5)
+    session = FakeSession([FakeResponse(200, text="<html>nginx</html>")])
+    detector.session = session
+    result = detector.detect("http://127.0.0.1:8599/")
+    assert "error" not in result
+    assert result["status_code"] == 200
 
 
 def test_cdn_detector_refuses_private_redirect():
