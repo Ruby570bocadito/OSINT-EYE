@@ -6,6 +6,7 @@ Actualizado: 2026-10-24 16:10 UTC · Ronda 5 v2.2 · **Semáforo: 🔴 ROJO** (H
 
 - [x] Verificación y CIERRE de H-003, H-004 y H-006 con los repros originales (TTY/entornos limpios): `-o ../../x` → exit 2 accionable sin fichero fuera del CWD; OSC/doble-ESC/BEL → 0 bytes de control (texto inerte); caché corrupta → exit 0, cuarentena `.corrupt` + recreación con WARNING. Commits close: H-003/H-004/H-006.
 - [x] Persona plugins: directorio con plugin válido + roto (syntax error) + hostil (run() lanza) → roto reportado y saltado, hostil capturado y registrado en results, válido ejecutado, escaneo EXIT=0 sin traceback. Degradación grácil correcta.
+- [x] Persona monitor: daemon con --monitor-interval 5 arranca (panel, baselines), SIGINT a los 30 s → "Monitor stopped gracefully." Salida limpia verificada (a diferencia del Ctrl+C en escaneo normal: H-007, fix en vuelo de IMP-3).
 - [x] Persona wizard con TTY real (pty): flujo de cancelación → H-012 sigue abierto (EXIT=0; evidencia refrescada). Flujo feliz → **H-014 CRÍTICO nuevo**: 11 respuestas + autorización 'y' → imprime `args: example.com --depth normal --rich` y sale EXIT=0 SIN escanear nada: main() cae a `return 0` sin llamar a scan_targets() cuando interactive_mode=True. El wizard completo es un no-op.
 - Nota UX (propuesta, no hallazgo): 11 prompts consecutivos para un usuario nuevo (cada feature añadió el suyo); los defaults son sensatos pero valoraría un modo avanzado o agrupar.
 - Suite al cierre de mi ronda: 880 en verde (los cierres no tocan código).
