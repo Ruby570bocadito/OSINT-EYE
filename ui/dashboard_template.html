@@ -256,6 +256,34 @@
   .live-chip button:hover { color: var(--text); border-color: var(--border-strong); }
   @keyframes live-pulse { 0% { opacity: 1; } 50% { opacity: .25; } 100% { opacity: 1; } }
 
+  /* ---------- timeline (evolution between scans) ---------- */
+  .tl { position: relative; padding-left: 18px; }
+  .tl::before {
+    content: ""; position: absolute; left: 5px; top: 6px; bottom: 6px;
+    width: 2px; background: var(--border);
+  }
+  .tl-event { position: relative; padding: 8px 0 14px; }
+  .tl-event::before {
+    content: ""; position: absolute; left: -18px; top: 12px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--panel-bg, #14161c);
+  }
+  .tl-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .tl-date { font-weight: 700; font-size: 13px; color: var(--text); }
+  .tl-target { color: var(--muted); font-size: 12.5px; }
+  .tl-score { font-size: 11.5px; color: var(--muted); }
+  .tl-deltas { display: flex; gap: 8px; margin: 6px 0 4px; }
+  .tl-badge {
+    display: inline-flex; gap: 5px; align-items: center;
+    border-radius: 12px; padding: 2px 10px; font-size: 11.5px; font-weight: 700;
+  }
+  .tl-badge.up { color: var(--ok); background: rgba(16,185,129,.10); }
+  .tl-badge.down { color: var(--danger); background: rgba(239,68,68,.10); }
+  .tl-badge.flat { color: var(--muted); background: rgba(148,163,184,.10); }
+  .tl-list { margin: 2px 0 0; padding: 0; list-style: none; }
+  .tl-list li { font-size: 12.5px; color: var(--muted); padding: 1px 0; }
+  .tl-list b { color: var(--text); font-weight: 600; }
+
   /* ---------- empty states ---------- */
   .empty {
     display: grid; place-items: center; gap: 6px;
@@ -350,6 +378,11 @@
       </div>
 
       <div class="panel span-2">
+        <div class="panel-h"><h2>Surface Timeline</h2><span class="meta" id="timeline-meta"></span></div>
+        <div id="timeline-body"></div>
+      </div>
+
+      <div class="panel span-2">
         <div class="panel-h"><h2>Scan Comparison</h2><span class="meta" id="diff-meta"></span></div>
         <div class="filter-bar">
           <label class="f-label" for="diff-from">From</label>
@@ -433,6 +466,7 @@ async function loadTargets(keepTarget) {
     setEmpty($("chains-body"), "No scans loaded");
     setEmpty($("assets-body"), "No scans loaded");
     setEmpty($("diff-body"), "No scans loaded");
+    setEmpty($("timeline-body"), "No scans loaded");
     setEmpty($("graph-box"), "No graph data");
   }
   fillScanSelectors();
@@ -471,6 +505,7 @@ async function selectTarget(target) {
   renderChains(target);
   renderGraph(target);
   renderAssetsFor(target);
+  renderTimeline(target);
 }
 
 /* ---------- ports ---------- */
@@ -965,6 +1000,63 @@ async function renderGraph(target) {
 }
 
 /* ---------- auto-refresh (monitor mode) ---------- */
+/* ---------- surface timeline (evolution between scans) ---------- */
+function tlDeltaLine(listEl, label, assets, count) {
+  if (!count) return;
+  const li = el("li");
+  const b = el("b", null, label + " (" + count + "):");
+  li.appendChild(b);
+  li.appendChild(document.createTextNode(" "));
+  assets.slice(0, 6).forEach((a, i) => {
+    if (i) li.appendChild(document.createTextNode(", "));
+    li.appendChild(el("span", null, a.name));
+  });
+  if (count > assets.length) {
+    li.appendChild(document.createTextNode(" …"));
+  }
+  listEl.appendChild(li);
+}
+
+async function renderTimeline(target) {
+  const body = $("timeline-body");
+  const data = await getJSON(`/api/scan/${encodeURIComponent(target)}/timeline`);
+  if (!data || !Array.isArray(data.timeline)) {
+    setEmpty(body, "Timeline unavailable");
+    $("timeline-meta").textContent = "";
+    return;
+  }
+  $("timeline-meta").textContent =
+    data.timeline.length + (data.timeline.length === 1 ? " scan" : " scans");
+
+  clear(body);
+  const wrap = el("div", "tl");
+  // oldest → newest, newest at the bottom of the rail
+  data.timeline.forEach((ev) => {
+    const item = el("div", "tl-event");
+    const head = el("div", "tl-head");
+    head.appendChild(el("span", "tl-date", String(ev.date || "—").replace("T", " ").slice(0, 19)));
+    head.appendChild(el("span", "tl-target", ev.target || ""));
+    head.appendChild(el("span", "tl-score",
+      "depth " + (ev.depth || "—") + " · risk " + (ev.score ?? 0) +
+      (ev.severity ? " (" + ev.severity + ")" : "")));
+    item.appendChild(head);
+
+    const deltas = el("div", "tl-deltas");
+    const up = ev.new_count || 0, down = ev.removed_count || 0;
+    if (up) deltas.appendChild(el("span", "tl-badge up", "+" + up + " new"));
+    if (down) deltas.appendChild(el("span", "tl-badge down", "−" + down + " gone"));
+    if (!up && !down) deltas.appendChild(el("span", "tl-badge flat", "no changes vs previous"));
+    item.appendChild(deltas);
+
+    const list = el("ul", "tl-list");
+    tlDeltaLine(list, "new", ev.new || [], up);
+    tlDeltaLine(list, "gone", ev.removed || [], down);
+    if ((ev.new_count || 0) || (ev.removed_count || 0)) item.appendChild(list);
+    wrap.appendChild(item);
+  });
+  body.appendChild(wrap);
+}
+
 const live = { enabled: false, paused: false, intervalS: 60, timer: null, failures: 0, lastKey: "" };
 
 async function initLiveRefresh() {

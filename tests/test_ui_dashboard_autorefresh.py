@@ -19,6 +19,7 @@ def dashboard():
 
     dashboard.SCAN_RESULTS.clear()
     dashboard.SCAN_HISTORY.clear()
+    dashboard.SCAN_ARCHIVE.clear()
     dashboard.LAST_LOAD_WARNING = None
     dashboard.DASHBOARD_CONFIG.update(
         {"auto_refresh": False, "interval_s": 60, "watch_paths": []}
@@ -116,7 +117,7 @@ class TestReloadScanResults:
         assert t1 == "example.com"
         assert len(dashboard.SCAN_HISTORY) == 1
 
-        scan["scan_date"] = "2026-10-23T11:00:00"
+        # Same scan reloaded (same target + date): entry replaced, data fresh.
         scan["modules"]["dns"]["subdomains"].append("b.example.com")
         path.write_text(json.dumps(scan), encoding="utf-8")
 
@@ -124,9 +125,34 @@ class TestReloadScanResults:
         assert t2 == "example.com"
         assert len(dashboard.SCAN_HISTORY) == 1  # replaced, not appended
         entry = dashboard.SCAN_HISTORY[0]
-        assert entry["date"] == "2026-10-23T11:00:00"
+        assert entry["date"] == "2026-10-23T10:00:00"
         assert entry["refreshed_at"]
         assert "b.example.com" in dashboard.SCAN_RESULTS["example.com"]["modules"]["dns"]["subdomains"]
+
+    def test_new_scan_date_appends_history_entry(self, dashboard, tmp_path):
+        # A genuinely new scan of the same target (new scan_date) is a new
+        # timeline event: it must append, not replace.
+        scan = {
+            "target": "example.com",
+            "scan_date": "2026-10-23T10:00:00",
+            "depth": "normal",
+            "modules": {"dns": {"subdomains": []}},
+        }
+        path = tmp_path / "scan.json"
+        path.write_text(json.dumps(scan), encoding="utf-8")
+        dashboard.load_scan_results(str(path))
+
+        scan["scan_date"] = "2026-10-23T11:00:00"
+        scan["modules"]["dns"]["subdomains"] = ["new.example.com"]
+        path.write_text(json.dumps(scan), encoding="utf-8")
+        dashboard.reload_scan_results(str(path))
+
+        assert len(dashboard.SCAN_HISTORY) == 2
+        dates = [e["date"] for e in dashboard.SCAN_HISTORY]
+        assert dates == ["2026-10-23T10:00:00", "2026-10-23T11:00:00"]
+        # The archive keeps BOTH historical states for the timeline.
+        assert dashboard.SCAN_ARCHIVE[("example.com", "2026-10-23T10:00:00")]["modules"]["dns"]["subdomains"] == []
+        assert dashboard.SCAN_ARCHIVE[("example.com", "2026-10-23T11:00:00")]["modules"]["dns"]["subdomains"] == ["new.example.com"]
 
     def test_missing_file_never_raises(self, dashboard):
         # Tolerant loading falls back to demo data stored under 'demo'.

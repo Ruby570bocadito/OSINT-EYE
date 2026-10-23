@@ -10,6 +10,12 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Surface Timeline (evolución entre escaneos)**: nuevo panel del dashboard con la línea temporal
+  de la superficie — `GET /api/timeline` (global) y `GET /api/scan/<target>/timeline` (por target)
+  encadenan deltas por fecha sobre la vista canónica de activos: cuántos activos son nuevos, cuántos
+  desaparecieron y listas top con nombres, puntuación de riesgo y profundidad de cada escaneo.
+  Los estados históricos se archivan por `(target, scan_date)` (un nuevo escaneo añade evento; la
+  recarga del mismo escaneo reemplaza su entrada) — sin CDN, todo por `textContent`, nunca 500.
 - **Imports perezosos de reportlab (extra `[pdf]` real)**: `import osint_eye` y `import reporting` ya no
   cargan reportlab hasta generar un PDF de verdad (`PDFReporter` perezoso vía PEP 562 y propiedad
   diferida en el orquestador); arranque más ligero y empaquetado coherente (petición PUL-1).

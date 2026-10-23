@@ -19,6 +19,7 @@ def dashboard():
 
     dashboard.SCAN_RESULTS.clear()
     dashboard.SCAN_HISTORY.clear()
+    dashboard.SCAN_ARCHIVE.clear()
     dashboard.LAST_LOAD_WARNING = None
     return dashboard
 

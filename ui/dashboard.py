@@ -87,6 +87,11 @@ def _api_not_found(e):
 
 SCAN_RESULTS = {}
 SCAN_HISTORY = []
+# Per-(target, scan_date) archive: the timeline needs the state of EVERY
+# scan, but SCAN_RESULTS only keeps the latest payload per target (reloads
+# replace it). _store_scan files each payload here; _build_timeline reads
+# from the archive and falls back to SCAN_RESULTS for direct injections.
+SCAN_ARCHIVE = {}
 
 # Message shown in the web UI when a scan file could not be located.
 LAST_LOAD_WARNING = None
@@ -498,6 +503,109 @@ def get_summary(target):
     )
 
 
+# --- timeline (timeline-historico) ------------------------------------------
+
+def _timeline_event(target: str, entry: dict, results: dict, previous_assets):
+    """Build one chronological timeline event for a scan of ``target``.
+
+    Deltas are computed on the canonical asset view (``_collect_assets``)
+    against the previous event of the SAME target: ``new`` = assets present
+    now that were not before, ``removed`` = the opposite. Everything is
+    defensive; malformed scans degrade to empty deltas, never a 500.
+    """
+    assets = _collect_assets(results)
+    current_keys = {(a["type"], a["name"].lower()) for a in assets}
+    previous_rows = previous_assets or []
+    previous_keys = {
+        (a["type"], str(a.get("name", "")).lower()) for a in previous_rows
+    }
+
+    new_assets = [
+        a for a in assets if (a["type"], a["name"].lower()) not in previous_keys
+    ]
+    removed_assets = []
+    if previous_rows:
+        for a in previous_rows:
+            if (a["type"], str(a.get("name", "")).lower()) not in current_keys:
+                removed_assets.append(a)
+
+    score_info = _as_dict(_as_dict(results.get("correlation")).get("attack_surface_score"))
+    counts = {
+        "subdomains": sum(1 for a in assets if a["type"] == "subdomain"),
+        "ports": sum(1 for a in assets if a["type"] == "port"),
+        "techs": sum(1 for a in assets if a["type"] == "tech"),
+        "emails": sum(1 for a in assets if a["type"] == "email"),
+        "cves": sum(1 for a in assets if a["type"] == "cve"),
+        "buckets": sum(1 for a in assets if a["type"] == "bucket"),
+    }
+    return {
+        "target": target,
+        "date": entry.get("date") or results.get("scan_date") or "",
+        "depth": entry.get("depth") or results.get("depth") or "unknown",
+        "score": score_info.get("score", 0),
+        "severity": str(score_info.get("severity", "")).lower(),
+        "counts": counts,
+        "total_assets": len(assets),
+        "new": new_assets[:25],
+        "new_count": len(new_assets),
+        "removed": removed_assets[:25],
+        "removed_count": len(removed_assets),
+    }, assets
+
+
+def _build_timeline(targets=None):
+    """Chronological evolution across loaded scans (oldest → newest).
+
+    ``targets`` optionally restricts the timeline to a list of target keys.
+    Scans of the same target chain deltas against each other; different
+    targets are independent chains sharing the same time axis.
+    """
+    events = []
+    chains = {}
+    for entry in SCAN_HISTORY:
+        target = entry.get("target")
+        if not isinstance(target, str) or not target:
+            continue
+        if targets and target not in targets:
+            continue
+        results = SCAN_ARCHIVE.get((target, entry.get("date")))
+        if not isinstance(results, dict):
+            results = SCAN_RESULTS.get(target)
+        if not isinstance(results, dict):
+            continue
+        event, assets = _timeline_event(
+            target, entry, results, chains.get(target)
+        )
+        chains[target] = assets
+        events.append(event)
+
+    def _date_key(event):
+        try:
+            return datetime.fromisoformat(str(event["date"]).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            # Unparseable dates sort last: the rail stays chronological and
+            # unknown-time events never pollute the beginning.
+            return datetime.max
+
+    events.sort(key=_date_key)
+    return events
+
+
+@app.route("/api/timeline", methods=["GET"])
+def get_timeline():
+    """Surface evolution across every loaded scan (oldest → newest)."""
+    return jsonify({"timeline": _build_timeline(), "events": len(SCAN_HISTORY)})
+
+
+@app.route("/api/scan/<path:target>/timeline", methods=["GET"])
+def get_target_timeline(target):
+    """Surface evolution for one target across its scans (oldest → newest)."""
+    if target not in SCAN_RESULTS:
+        return jsonify({"error": "Scan not found"}), 404
+    events = _build_timeline(targets=[target])
+    return jsonify({"target": target, "timeline": events})
+
+
 def _safe_download_name(target: str, ext: str) -> str:
     """Build a safe filename for Content-Disposition (no traversal, no CRLF)."""
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(target or "scan"))[:80]
@@ -656,6 +764,8 @@ def _store_scan(data: dict) -> str:
     Reloading the same target (auto-refresh) replaces the previous history
     entry instead of appending duplicates; ``refreshed_at`` marks the last
     time the payload changed so clients can detect fresh data cheaply.
+    Every payload is also archived under ``(target, scan_date)`` so the
+    timeline can chain historical states of the same target.
     """
     target = str(data.get("target") or "unknown")
     SCAN_RESULTS[target] = data
@@ -668,8 +778,12 @@ def _store_scan(data: dict) -> str:
         "warning": LAST_LOAD_WARNING,
         "refreshed_at": now_iso,
     }
+    SCAN_ARCHIVE[(target, entry["date"])] = data
     for i, existing in enumerate(SCAN_HISTORY):
-        if existing.get("target") == target:
+        # Replace only a reload of the SAME scan (target + date): a new scan
+        # of the same target has its own date and MUST append, or the
+        # timeline would lose the historical events it exists to show.
+        if existing.get("target") == target and existing.get("date") == entry["date"]:
             SCAN_HISTORY[i] = entry
             break
     else:
