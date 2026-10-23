@@ -6,6 +6,8 @@ from typing import Dict, List, Set
 import concurrent.futures
 
 from modules._http import HTTPClient
+from modules._scope import allowed as _scope_allowed
+from modules._scope import apply_scope as _apply_scope
 
 from modules.web.ssrf_guard import safe_get
 
@@ -160,8 +162,27 @@ class CloudBucketDetector:
 
         return urls
 
-    def scan(self, domain: str, max_workers: int = 30) -> Dict:
-        """Scan for exposed cloud buckets"""
+    def scan(self, domain: str, max_workers: int = 30, scope=None) -> Dict:
+        """Scan for exposed cloud buckets.
+
+        ``scope`` is optional (``core.scope.Scope``) and gates the whole
+        enumeration on the domain being in scope: bucket names are derived
+        from it, and probing third-party bucket hosts for an out-of-scope
+        domain is exactly what the scope exists to avoid. Rejections land
+        in the discard audit log (module label "cloud_buckets").
+        """
+        results = {
+            "domain": domain,
+            "found": [],
+            "public": [],
+            "listable": [],
+            "total_tested": 0,
+        }
+
+        if scope is not None and not _scope_allowed(scope, domain, "cloud_buckets"):
+            print(f"[!] {domain} out of scope: skipping cloud bucket enumeration")
+            return results
+
         print(f"[*] Generating bucket names for {domain}...")
         bucket_names = self._generate_bucket_names(domain)
 
@@ -170,14 +191,6 @@ class CloudBucketDetector:
             all_urls.extend(self._generate_urls(name))
 
         print(f"[*] Testing {len(all_urls)} bucket URLs...")
-
-        results = {
-            "domain": domain,
-            "found": [],
-            "public": [],
-            "listable": [],
-            "total_tested": 0,
-        }
 
         def check_url(url_provider):
             url, provider = url_provider
@@ -214,8 +227,12 @@ class EmailEnumerator:
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
         )
 
-    def extract_from_web(self, domain: str) -> Set[str]:
-        """Extract emails from web pages"""
+    def extract_from_web(self, domain: str, scope=None) -> Set[str]:
+        """Extract emails from web pages.
+
+        ``scope`` is optional (``core.scope.Scope``): derived page URLs
+        outside it are never requested (module label "email_web").
+        """
         emails = set()
 
         urls_to_check = [
@@ -228,6 +245,7 @@ class EmailEnumerator:
             f"https://{domain}/terms",
             f"https://www.{domain}/contact",
         ]
+        urls_to_check = _apply_scope(scope, urls_to_check, "email_web")
 
         for url in urls_to_check:
             try:
@@ -351,7 +369,7 @@ class EmailEnumerator:
 
         return result
 
-    def scan(self, domain: str, whois_data: Dict = None) -> Dict:
+    def scan(self, domain: str, whois_data: Dict = None, scope=None) -> Dict:
         """Full email enumeration scan"""
         print(f"[*] Enumerating emails for {domain}...")
 
@@ -362,7 +380,7 @@ class EmailEnumerator:
             "verified": [],
         }
 
-        web_emails = self.extract_from_web(domain)
+        web_emails = self.extract_from_web(domain, scope=scope)
         results["emails_found"] = sorted(list(web_emails))
 
         if whois_data:

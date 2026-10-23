@@ -23,6 +23,7 @@ import dns.resolver
 import dns.reversename
 
 from modules._http import HTTPClient
+from modules._scope import apply_scope as _apply_scope
 
 try:  # aiohttp is only needed by the async helper classes below.
     import aiohttp
@@ -289,15 +290,23 @@ class VirtualHostBruteforcer:
             return None
 
     async def bruteforce(
-        self, ip: str, domain: str = None, port: int = 80
+        self, ip: str, domain: str = None, port: int = 80, scope=None
     ) -> List[Dict]:
-        """Bruteforce virtual hosts on an IP"""
+        """Bruteforce virtual hosts on an IP.
+
+        ``scope`` is optional (``core.scope.Scope``): the derived
+        ``prefix.domain`` candidates are filtered through it before any
+        probe (module label "vhost_bruteforce"). Bare prefixes are
+        Host-header labels sent to the already in-scope IP, so they are
+        not filtered.
+        """
         _require_aiohttp()
         hostnames = list(self.vhost_prefixes)
 
         if domain:
-            hostnames.extend([f"{p}.{domain}" for p in self.vhost_prefixes])
-            hostnames.append(domain)
+            derived = [f"{p}.{domain}" for p in self.vhost_prefixes]
+            derived.append(domain)
+            hostnames.extend(_apply_scope(scope, derived, "vhost_bruteforce"))
 
         semaphore = asyncio.Semaphore(self.threads)
 
@@ -425,13 +434,20 @@ class JavaScriptEndpointDiscovery:
 
         return result
 
-    async def scan(self, base_url: str) -> Dict:
-        """Full JavaScript analysis (session lives for this scan only)."""
+    async def scan(self, base_url: str, scope=None) -> Dict:
+        """Full JavaScript analysis (session lives for this scan only).
+
+        ``scope`` is optional (``core.scope.Scope``): JS file URLs outside
+        it are not fetched (module label "js_endpoints") — third-party CDN
+        scripts stay untouched unless the operator allows them. Extracted
+        endpoint strings are only reported, never requested.
+        """
         _require_aiohttp()
 
         async with aiohttp.ClientSession() as session:
             self.session = session
             js_urls = await self.fetch_js_files(base_url)
+            js_urls = _apply_scope(scope, js_urls, "js_endpoints")
 
             results = {
                 "base_url": base_url,

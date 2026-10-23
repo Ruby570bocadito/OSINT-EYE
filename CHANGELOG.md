@@ -30,6 +30,14 @@ Reglas del equipo (PROTOCOLO §3):
 - **Imports perezosos de reportlab (extra `[pdf]` real)**: `import osint_eye` y `import reporting` ya no
   cargan reportlab hasta generar un PDF de verdad (`PDFReporter` perezoso vía PEP 562 y propiedad
   diferida en el orquestador); arranque más ligero y empaquetado coherente (petición PUL-1).
+- **Scope aplicado dentro de los colectores**: los objetivos derivados (candidatos de brute-force
+  DNS por wordlist, permutaciones de subdominios, virtual hosts derivados, ficheros JS de terceros,
+  URLs de páginas para emails, enumeración de buckets cloud y endpoints web) pasan por
+  `Scope.allows()`/`filter_targets()` vía `modules/_scope.py` antes de cualquier resolución o
+  petición; cada rechazo queda en el log de auditoría (`results["scope"]["discarded"]`) con etiqueta
+  del módulo de origen (`dns_bruteforce`, `dns_permutations`, `vhost_bruteforce`, `js_endpoints`,
+  `email_web`, `cloud_buckets`, `web_endpoints`, `web`). Sin scope definido el comportamiento es
+  idéntico al anterior.
 - **Auto-refresco del dashboard (modo monitor)**: el dashboard puede vivir actualizándose —
   `GET /api/dashboard/config` entrega la configuración al cliente; con `--monitor --dashboard` la
   página hace polling de la API cada `--monitor-interval` (límites 5–3600 s), muestra un badge
@@ -138,6 +146,10 @@ Reglas del equipo (PROTOCOLO §3):
   logging de librería, configuración TOML, dashboard y variables de entorno `OSINT_EYE_*`.
 
 ### Corregido
+- **Permutador DNS sondeaba FQDN duplicados**: los candidatos de `generate_*` ya son FQDN completos
+  y los resolutores les añadían el dominio otra vez (`www.example.com.example.com`, siempre
+  NXDOMAIN); ahora `enumerate()` normaliza los candidatos (tolerando etiquetas desnudas de
+  llamantes externos) y sondea el FQDN real.
 - **Targets con `/` inalcanzables en el dashboard (H-005)**: las rutas `/api/scan/...` usan el
   converter `<path:target>` (el cliente ya codificaba con `encodeURIComponent`, Werkzeug decodifica
   `%2F` tras el routing), así escaneos con target tipo URL (`http://127.0.0.1:8599`) o JSON hostil

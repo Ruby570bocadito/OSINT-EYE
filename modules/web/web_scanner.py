@@ -6,6 +6,7 @@ from typing import Dict, List
 from urllib.parse import urljoin
 
 from modules._http import HTTPClient, get_client
+from modules._scope import allowed as _scope_allowed
 
 from .ssrf_guard import safe_get
 
@@ -517,13 +518,32 @@ class EndpointDiscovery:
         ]
 
     def discover(
-        self, base_url: str, paths: List[str] = None, max_workers: int = 20
+        self, base_url: str, paths: List[str] = None, max_workers: int = 20, scope=None
     ) -> Dict:
-        """Discover endpoints on a target"""
+        """Discover endpoints on a target.
+
+        ``scope`` is optional (``core.scope.Scope``): every URL about to
+        be requested (including absolute-path overrides passed by the
+        caller) is checked first; out-of-scope URLs are never touched and
+        land in the discard audit log (module label "web_endpoints").
+        """
         if not base_url.endswith("/"):
             base_url += "/"
 
         target_paths = paths or self.common_paths
+
+        # Scope gate up front: out-of-scope URLs are never queued, so the
+        # "total_tested" counter only reflects requests actually attempted.
+        # Absolute-path overrides from the caller are covered too.
+        target_pairs = [
+            (path, urljoin(base_url, path.lstrip("/"))) for path in target_paths
+        ]
+        if scope is not None:
+            target_pairs = [
+                (path, url)
+                for path, url in target_pairs
+                if _scope_allowed(scope, url, "web_endpoints")
+            ]
 
         results = {
             "base_url": base_url,
@@ -533,8 +553,7 @@ class EndpointDiscovery:
             "total_tested": 0,
         }
 
-        def check_path(path):
-            url = urljoin(base_url, path.lstrip("/"))
+        def check_path(path, url):
             try:
                 resp = self.session.get(
                     url, timeout=self.timeout, allow_redirects=False
@@ -559,7 +578,10 @@ class EndpointDiscovery:
             return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(check_path, path): path for path in target_paths}
+            futures = {
+                executor.submit(check_path, path, url): path
+                for path, url in target_pairs
+            }
 
             for future in concurrent.futures.as_completed(futures):
                 results["total_tested"] += 1
@@ -575,11 +597,11 @@ class EndpointDiscovery:
 
         return results
 
-    def discover_sensitive(self, base_url: str) -> Dict:
+    def discover_sensitive(self, base_url: str, scope=None) -> Dict:
         """Discover sensitive files"""
-        return self.discover(base_url, self.sensitive_paths)
+        return self.discover(base_url, self.sensitive_paths, scope=scope)
 
-    def discover_apis(self, base_url: str) -> Dict:
+    def discover_apis(self, base_url: str, scope=None) -> Dict:
         """Discover API endpoints"""
         api_paths = [
             "/api",
@@ -636,7 +658,7 @@ class EndpointDiscovery:
             "/altair",
         ]
 
-        return self.discover(base_url, api_paths)
+        return self.discover(base_url, api_paths, scope=scope)
 
 
 class SensitiveDataDetector:
@@ -717,8 +739,15 @@ class WebScanner:
         self.endpoint_discovery = EndpointDiscovery()
         self.sensitive_detector = SensitiveDataDetector()
 
-    def scan(self, target: str) -> Dict:
-        """Full web scan"""
+    def scan(self, target: str, scope=None) -> Dict:
+        """Full web scan.
+
+        ``scope`` is optional (``core.scope.Scope``): when the target is
+        outside it nothing is requested and the empty result shape is
+        returned (module label "web"); when it is inside, the scope is
+        passed down to the endpoint discovery so every derived URL is
+        checked before being requested.
+        """
         if not target.startswith("http"):
             target = f"https://{target}"
 
@@ -729,11 +758,17 @@ class WebScanner:
             "sensitive_data": {},
         }
 
+        if scope is not None and not _scope_allowed(scope, target, "web"):
+            print(f"[!] {target} out of scope: skipping web scan")
+            return results
+
         print(f"[*] Detecting technologies on {target}...")
         results["technologies"] = self.tech_detector.detect(target)
 
         print("[*] Discovering API endpoints...")
-        results["endpoints"]["apis"] = self.endpoint_discovery.discover_apis(target)
+        results["endpoints"]["apis"] = self.endpoint_discovery.discover_apis(
+            target, scope=scope
+        )
 
         print("[*] Scanning for sensitive data...")
         results["sensitive_data"] = self.sensitive_detector.scan_url(target)

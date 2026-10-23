@@ -26,6 +26,7 @@ import dns.zone
 from modules.dns.passive_sources import PassiveSubdomainEnumerator
 from modules.dns.wildcard import WildcardDetector
 from modules.dns.email_security import EmailSecurityAuditor
+from modules._scope import allowed as _scope_allowed
 
 
 class DNSResolver:
@@ -426,16 +427,29 @@ class SubdomainEnumerator:
         domain: str,
         progress_callback=None,
         wildcard_detector: Optional[WildcardDetector] = None,
+        scope=None,
     ) -> List[str]:
         """Enumerate subdomains using bruteforce (bounded thread pool).
 
         ``wildcard_detector`` is opt-in: when provided (and its detection
         says the zone has a wildcard), candidates whose only answer is the
         wildcard IP set are discarded instead of reported.
+
+        ``scope`` is optional (``core.scope.Scope``): wordlist candidates
+        outside the operator scope are never resolved and land in the
+        discard audit log (module label "dns_bruteforce").
         """
         wordlist = self.load_wordlist()
         self.found_subdomains = set()
         self.wildcard_skipped = 0
+
+        # Scope gate: never resolve candidates outside the operator scope.
+        if scope is not None:
+            wordlist = [
+                sub
+                for sub in wordlist
+                if _scope_allowed(scope, f"{sub}.{domain}", "dns_bruteforce")
+            ]
 
         active = (
             wildcard_detector
@@ -470,9 +484,9 @@ class SubdomainEnumerator:
 
         return sorted(list(self.found_subdomains))
 
-    def enumerate_with_resolve(self, domain: str) -> Dict[str, List[str]]:
+    def enumerate_with_resolve(self, domain: str, scope=None) -> Dict[str, List[str]]:
         """Enumerate and resolve IPs for each subdomain"""
-        subdomains = self.enumerate(domain)
+        subdomains = self.enumerate(domain, scope=scope)
         results = {}
 
         for sub in subdomains:

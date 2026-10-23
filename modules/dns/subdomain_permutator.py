@@ -20,6 +20,7 @@ from typing import List, Dict, Optional, Set
 import requests
 
 from modules._http import HTTPClient
+from modules._scope import apply_scope as _apply_scope
 from modules.dns.wildcard import WildcardDetector
 from modules.web.ssrf_guard import safe_get
 
@@ -431,27 +432,37 @@ class SubdomainPermutator:
         ]
 
     def _check_subdomain(self, subdomain: str, domain: str) -> Optional[str]:
-        """Check if a subdomain resolves"""
+        """Check if a subdomain resolves.
+
+        Candidates coming from ``generate_*`` are already full FQDNs under
+        ``domain`` (the generator always appends it), so the candidate is
+        resolved as-is. Resolving ``f"{subdomain}.{domain}"`` here used to
+        probe doubled names like ``www.example.com.example.com`` — always
+        NXDOMAIN — while the enumeration results and the scope filter used
+        the single-domain FQDN.
+        """
         try:
-            full = f"{subdomain}.{domain}"
-            socket.gethostbyname(full)
-            return full
+            socket.gethostbyname(subdomain)
+            return subdomain
         except (socket.gaierror, socket.herror, OSError):
             return None
 
     def _check_subdomain_with_wildcard(
         self, subdomain: str, domain: str, detector: WildcardDetector
     ) -> Optional[str]:
-        """Resolve and discard answers explained by a DNS wildcard."""
-        full = f"{subdomain}.{domain}"
+        """Resolve and discard answers explained by a DNS wildcard.
+
+        Like :meth:`_check_subdomain`, the candidate is a full FQDN and is
+        resolved as-is.
+        """
         try:
-            ip = socket.gethostbyname(full)
+            ip = socket.gethostbyname(subdomain)
         except (socket.gaierror, socket.herror, OSError):
             return None
         if detector.is_false_positive([ip]):
             self.wildcard_skipped += 1
             return None
-        return full
+        return subdomain
 
     def generate_permutations(
         self, domain: str, base_names: Optional[List[str]] = None
@@ -527,12 +538,17 @@ class SubdomainPermutator:
         discovered: Optional[List[str]] = None,
         wordlist: Optional[List[str]] = None,
         wildcard_detector: Optional[WildcardDetector] = None,
+        scope=None,
     ) -> List[str]:
         """Full permutation enumeration.
 
         ``wildcard_detector`` is opt-in: when provided (and its detection
         says the zone has a wildcard), candidates whose only answer is the
         wildcard IP set are discarded instead of reported.
+
+        ``scope`` is optional (``core.scope.Scope``): permutations outside
+        the operator scope are never resolved and land in the discard
+        audit log (module label "dns_permutations").
         """
         all_permutations = set()
 
@@ -543,6 +559,22 @@ class SubdomainPermutator:
 
         if wordlist:
             all_permutations.update(self.generate_brute_force(domain, wordlist))
+
+        # Candidates are full FQDNs under ``domain``: generate_* always
+        # appends it. Bare labels from external callers (or tests) are
+        # completed here, so probing, results and the scope filter share
+        # one identity per candidate (previously f"{c}.{domain}" was
+        # applied again inside the resolvers, probing doubled names like
+        # "www.example.com.example.com" — always NXDOMAIN).
+        all_permutations = {
+            c if c.endswith("." + domain) else f"{c}.{domain}"
+            for c in all_permutations
+        }
+
+        # Scope gate: never resolve candidates outside the operator scope.
+        all_permutations = set(
+            _apply_scope(scope, sorted(all_permutations), "dns_permutations")
+        )
 
         print(f"[*] Testing {len(all_permutations)} permutations for {domain}...")
 
