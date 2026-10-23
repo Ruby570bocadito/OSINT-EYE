@@ -22,6 +22,7 @@ import re
 from datetime import datetime
 from typing import Dict, List
 
+from core.findings import extract_findings as extract_canonical_findings
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -34,7 +35,7 @@ INFORMATION_URI = "https://github.com/Ruby570bocadito/OSINT-EYE"
 #: Control characters are illegal in SARIF message strings and ugly in URIs.
 _BAD_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
-#: Rule catalogue: id → (name, severity default, short description).
+#: Rule catalogue: id → (name, default SARIF level, short description).
 RULES: Dict[str, Dict[str, str]] = {
     "OE001": {
         "name": "SubdomainTakeover",
@@ -53,7 +54,7 @@ RULES: Dict[str, Dict[str, str]] = {
     },
     "OE004": {
         "name": "VulnerableServiceCVE",
-        "level": "warning",
+        "level": "error",
         "short": "Known CVE affecting a discovered service",
     },
     "OE005": {
@@ -61,6 +62,36 @@ RULES: Dict[str, Dict[str, str]] = {
         "level": "warning",
         "short": "Sensitive file reachable on a public endpoint",
     },
+    "OE006": {
+        "name": "ExposedLoginPage",
+        "level": "note",
+        "short": "Login page indexed by search engines",
+    },
+    "OE007": {
+        "name": "ExposedAdminPanel",
+        "level": "warning",
+        "short": "Admin panel indexed by search engines",
+    },
+}
+
+#: Canonical finding rules (core/findings.py) → SARIF rule ids.
+CANONICAL_TO_OE = {
+    "subdomain_takeover": "OE001",
+    "public_cloud_bucket": "OE002",
+    "github_secret_leak": "OE003",
+    "vulnerable_service_cve": "OE004",
+    "sensitive_file": "OE005",
+    "exposed_login_page": "OE006",
+    "exposed_admin_panel": "OE007",
+}
+
+#: Canonical severity → SARIF level.
+SEVERITY_TO_SARIF = {
+    "critical": "error",
+    "high": "error",
+    "medium": "warning",
+    "low": "note",
+    "info": "note",
 }
 
 
@@ -86,142 +117,30 @@ def _tool_version() -> str:
         return "unknown"
 
 
-def _cve_severity(cve: Dict) -> Dict:
-    """Normalise the many shapes a CVE 'severity' field can take."""
-    sev = cve.get("severity")
-    if isinstance(sev, list) and sev and isinstance(sev[0], dict):
-        return sev[0]
-    if isinstance(sev, dict):
-        return sev
-    return {}
-
-
-def _cve_level(cve: Dict) -> str:
-    """Map a CVE entry to a SARIF level; unknown/malformed → 'note'."""
-    sev = _cve_severity(cve)
-    severity = str(sev.get("severity", "") or "").upper()
-    if severity in ("CRITICAL", "HIGH"):
-        return "error"
-    if severity == "MEDIUM":
-        return "warning"
-    if severity in ("LOW", "INFO"):
-        return "note"
-    try:
-        score = float(sev.get("score"))
-    except (TypeError, ValueError):
-        return "note"
-    if score >= 7.0:
-        return "error"
-    if score >= 4.0:
-        return "warning"
-    return "note"
-
-
-def _level_for(rule_id: str, finding: Dict) -> str:
-    if rule_id == "OE004":
-        return _cve_level(finding)
-    return RULES[rule_id]["level"]
-
-
 def extract_findings(results: Dict) -> List[Dict]:
-    """Pull every SARIF-worthy finding out of a results dict.
+    """Project the canonical findings (core/findings.py) into SARIF dicts.
 
-    Returns a list of ``{rule_id, message, uri, level}`` dicts. Malformed
-    entries (None, scalars, empty) are skipped.
+    Each entry: ``{rule_id, message, uri, level, evidence, source_module}``.
+    Malformed module shapes are already handled by the canonical layer.
     """
-    results = _d(results)
-    modules = _d(results.get("modules"))
-    target = _clean(results.get("target")) or "unknown"
-    findings: List[Dict] = []
-
-    def _add(rule_id: str, message: str, uri: str, finding: Dict = None):
-        uri = _clean(uri) or f"https://{target}"
-        if not message:
-            return
-        findings.append(
+    sarif_findings = []
+    for finding in extract_canonical_findings(results):
+        rule_id = CANONICAL_TO_OE.get(finding.rule)
+        if rule_id is None:
+            continue  # canonical rule without SARIF mapping yet
+        sarif_findings.append(
             {
                 "rule_id": rule_id,
-                "message": _clean(message),
-                "uri": uri,
-                "level": _level_for(rule_id, finding or {}),
+                "message": _clean(finding.title),
+                "uri": _clean(finding.uri),
+                "level": SEVERITY_TO_SARIF.get(
+                    finding.severity, RULES[rule_id]["level"]
+                ),
+                "evidence": _clean(finding.evidence),
+                "source_module": finding.source_module,
             }
         )
-
-    # OE001 — subdomain takeover
-    for item in _l(_d(modules.get("takeover")).get("vulnerable")):
-        if isinstance(item, dict):
-            sub = _clean(item.get("subdomain"))
-            service = _clean(item.get("service"))
-        else:
-            sub, service = _clean(item), ""
-        if sub:
-            detail = f" (dangling fingerprint: {service})" if service else ""
-            _add("OE001", f"Subdomain {sub} appears takeable{detail}", f"https://{sub}")
-
-    # OE002 — public cloud buckets
-    for item in _l(_d(modules.get("cloud_buckets")).get("public")):
-        if isinstance(item, dict):
-            url = _clean(item.get("url"))
-            provider = _clean(item.get("provider"))
-        else:
-            url, provider = _clean(item), ""
-        if url:
-            detail = f" [{provider}]" if provider else ""
-            _add(
-                "OE002",
-                f"Public cloud bucket readable without authentication{detail}: {url}",
-                url,
-            )
-
-    # OE003 — GitHub secret leaks
-    for item in _l(_d(modules.get("github")).get("findings")):
-        if isinstance(item, dict):
-            label = _clean(item.get("file") or item.get("match") or item.get("url"))
-            snippet = _clean(item.get("snippet") or item.get("dork"))
-        else:
-            label, snippet = _clean(item), ""
-        if label:
-            detail = f" — {snippet}" if snippet else ""
-            _add(
-                "OE003",
-                f"Potential secret/config leak on GitHub: {label}{detail}",
-                label if label.startswith("http") else f"https://github.com/search?q={label}",
-            )
-
-    # OE004 — CVEs
-    for item in _l(_d(modules.get("cve")).get("cves")):
-        if not isinstance(item, dict):
-            continue
-        cve_id = _clean(item.get("id"))
-        if not cve_id:
-            continue
-        sev = _cve_severity(item)
-        score = _clean(sev.get("score")) or "n/a"
-        description = _clean(item.get("description"))[:200]
-        detail = f": {description}" if description else ""
-        _add(
-            "OE004",
-            f"{cve_id} (score {score}) affects a discovered service{detail}",
-            f"https://{target}",
-            item,
-        )
-
-    # OE005 — sensitive files
-    endpoints = _d(modules.get("endpoints"))
-    sensitive = _l(endpoints.get("sensitive")) or _l(
-        _d(_d(modules.get("web")).get("endpoints")).get("sensitive")
-    )
-    for item in sensitive:
-        if isinstance(item, dict):
-            url = _clean(item.get("url"))
-            status = _clean(item.get("status"))
-        else:
-            url, status = _clean(item), ""
-        if url:
-            detail = f" (HTTP {status})" if status else ""
-            _add("OE005", f"Sensitive file exposed{detail}: {url}", url)
-
-    return findings
+    return sarif_findings
 
 
 def _fingerprint(rule_id: str, uri: str, message: str) -> str:
@@ -258,6 +177,10 @@ def _build_log(results: Dict) -> Dict:
                 "osintEye/finding/v1": _fingerprint(
                     f["rule_id"], f["uri"], f["message"]
                 )
+            },
+            "properties": {
+                "evidence": f["evidence"],
+                "sourceModule": f["source_module"],
             },
         }
         for f in findings
