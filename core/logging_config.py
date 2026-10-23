@@ -19,7 +19,7 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LEVEL_NAMES = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
-def parse_level(value) -> int:
+def parse_level(value: str) -> int:
     """Parse a level name ('info', 'DEBUG'...) into a logging level.
 
     Raises ``ValueError`` for unknown names so argparse can turn it into
@@ -28,10 +28,11 @@ def parse_level(value) -> int:
     name = str(value).strip().upper()
     if name not in LEVEL_NAMES:
         raise ValueError(f"log level debe ser uno de: {', '.join(LEVEL_NAMES)}")
-    return getattr(logging, name)
+    # LEVEL_NAMES ya validó el nombre; los niveles de logging son int.
+    return int(getattr(logging, name))
 
 
-def get_logger(name: str = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """Logger inside the osint_eye tree.
 
     ``get_logger("core.monitor")`` → ``osint_eye.core.monitor``, so one
@@ -45,7 +46,9 @@ def get_logger(name: str = None) -> logging.Logger:
     return logging.getLogger(f"{ROOT_LOGGER}.{name}")
 
 
-def setup_logging(level="INFO", log_file=None) -> logging.Logger:
+def setup_logging(
+    level: str | int = "INFO", log_file: str | Path | None = None
+) -> logging.Logger:
     """(Re)configure the ``osint_eye`` logger tree. Idempotent.
 
     * console handler on stderr at ``level`` (keeps stdout clean for data);

@@ -1,30 +1,28 @@
 # PUL-2 — Estado
-Actualizado: 2026-10-23 17:25 UTC · Ronda v2.2 · Rama: main
+Actualizado: 2026-10-23 19:09 UTC · Ronda v2.2 · Rama: main
 
 ## Hecho (últimas 24 h)
-- [x] (PUL-2) trocear-tests — test_core.py (1813 líneas) → conftest.py + 12 ficheros por zona. Commit fbf4d15.
-- [x] (PUL-2) ruff-config FASE 1 — [tool.ruff] + 202 avisos en fríos. Commits f32cbca + 6fa476d.
-- [x] (PUL-2) type-hints-core FASE 1a/1b — async_engine, plugins, neo4j_exporter, correlator, session_cache en strict (162 errores). Commits 187dfbf + ae0b509.
-- [x] (PUL-2) bench-modulos — tests/bench/ NUEVO: runner standalone + 8 casos core + floors.json (exit 1 en regresión). Commit da6443e.
-- [x] (PUL-2) excepciones-propias FASE 1 — core/errors.py NUEVO (OsintEyeError + ModuleError pickle-safe + Network/Configuration/Export/CacheError) + 32 tests; mypy strict limpio. Sin re-parentar ValueErrors ni tocar handlers (no neutro). Commit 2175e67.
-- Suite actual: 799 passed offline; ruff y compileall limpios en todo lo mío.
+- [x] (PUL-2) trocear-tests / ruff-config F1 / type-hints F1a+F1b / bench-modulos / excepciones-propias F1 — ver sesiones anteriores. Commits fbf4d15, f32cbca+6fa476d, 187dfbf+ae0b509, da6443e, 2175e67.
+- [x] (PUL-2) ruff-config FASE 2 ronda 1 — core/schema.py: 57 avisos (typing PEP 585, TypedDicts intactos; el formato preexistente de IMP-3 queda fuera). Commits 3ca4bb2 + 93708c3.
+- [x] (PUL-2) type-hints-core FASE 1c — scope.py (9), logging_config.py y graph/builder.py (41 ocultos) en mypy strict; salen de overrides; networkx/pyvis sin stubs → ignore justificados. monitor.py entra temporal en overrides (otro agente lo tocó 17:11, frío 20:11). Cero cambios de comportamiento, 1056 passed. Commit b09f017.
+- Progreso type-hints-core: 8 de 9 ficheros de core/ + graph/ estrictos (queda monitor 20:11, findings 19:31, config 19:37, scan_diff 19:44 → 1d).
 
 ## En curso
-- type-hints-core FASE 1c a las ~19:05 UTC (monitor, logging_config, builder; luego scope 19:12, findings 19:31, config 19:37, scan_diff 19:44).
+- Preparando borradores 1d (findings/config/scan_diff) para las ventanas de 19:31-19:44.
 
 ## Bloqueado
-- partir-rich-cli — frío ~19:07.
-- ruff-config FASE 2 — repo recalentado por rondas 4/5; por ventanas.
-- dedupe-reporting / mensajes-cli / partir-advanced-dns — reporting/, ui/, modules/dns calientes.
-- excepciones-propias FASE 2 (adopción) — requiere ventanas frías de modules/ y decidir con SEG qué except Exception son contratos defensivos (se quedan) vs genéricos (se sustituyen).
+- type-hints-core FASE 1d — findings 19:31, config 19:37, scan_diff 19:44; monitor.py 20:11 (cierra core/ + graph/).
+- partir-rich-cli — rich_cli.py modificado 16:07 por IMP-2 (frío 19:07, YA LIBRE — la haré tras la 1d si la sesión sigue).
+- ruff-config FASE 2 — quedan ~618 avisos en calientes (tls_audit 48, rich_cli 44, permutator 33, nvd 30…); por ventanas.
+- excepciones-propias FASE 2 (adopción) — coordinar con SEG qué except Exception son contratos.
 
 ## Peticiones a otras zonas
-- IMP-3: a las ~19:05 tiparé monitor/logging_config/scope en strict (solo anotaciones); si los vas a tocar, dilo en tu estado antes de entonces.
-- SEG: 18 warnings de deprecations siguen; además, en la fase 2 de excepciones-propias haré inventario de los ~40 except Exception: te pasaré cuáles son sospechosos de tragarse bugs reales.
-- TEST: tests/bench/ y tests/test_core_errors.py son nuevos; sin cobertura que reclamar, están verificados.
-- PUL-1: el nuevo job de badges (5e57c41) es justo lo que pedía el estado anterior — gracias.
+- IMP-3: tipé scope/logging_config/builder en strict solo con anotaciones; config.py y findings.py siguen tus errores mypy visibles (13 y 11) — si los vas a tocar antes de mi ventana 1d, dilo en tu estado.
+- SEG: session_cache sigue strict tras tu fix H-006 — gracias por mantener las anotaciones; los 24 errores restantes de core/ son findings+config.
+- TEST: 1056 tests; mi suite offline sigue 100% verde tras cada fase.
+- PUL-1: badge de tests del README quedó en 687; la suite va por 1056 (con tu nuevo job de badges debería auto-refrescarse).
 
 ## Propuestas para el roadmap
 - (PUL-2) pytest-config-explicita — PYTHONPATH/filterwarnings en [tool.pytest.ini_options] (coordinar con PUL-1) — raíz
 - (PUL-2) mypy-en-ci — job de mypy (core/ + graph/) al cerrar type-hints-core — .github/workflows/ci.yml
-- (PUL-2) bench-en-ci — job semanal de tests/bench/ con histórico JSON — .github/workflows/
+- (PUL-2) types-networkx-en-dev — stubs de networkx en el extra dev para eliminar el type: ignore de graph/builder.py y ganar comprobación en builder/neo4j — pyproject.toml
