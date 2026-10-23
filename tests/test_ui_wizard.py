@@ -13,13 +13,15 @@ class TestInteractiveWizard:
         prompt_answers = iter(
             [
                 "example.com, www.example.com",  # targets (deduped)
+                "",  # scope (empty = all targets)
+                "",  # exclusions (empty = none)
                 "deep",  # depth
                 "osint_eye_custom",  # output base
             ]
         )
         confirm_answers = iter(
-            [False, False, True, True, False, False, False, False]
-        )  # ai, cache, stealth, rich, agent, pdf, dashboard, cypher
+            [True, False, False, True, True, False, False, False, False]
+        )  # authorization, ai, cache, stealth, rich, agent, pdf, dashboard, cypher
 
         with patch.object(wiz.Prompt, "ask", staticmethod(lambda *a, **k: next(prompt_answers))), \
              patch.object(wiz.Confirm, "ask", staticmethod(lambda *a, **k: next(confirm_answers))):
@@ -59,10 +61,10 @@ class TestWizardMarkupTarget:
     def test_start_survives_hostile_target(self):
         from ui import wizard as wiz
 
-        prompt_answers = iter(["x[/bold]y.com", "normal", "osint_eye_x"])
+        prompt_answers = iter(["x[/bold]y.com", "", "", "normal", "osint_eye_x"])
         confirm_answers = iter(
-            [True, True, False, False, False, False, False, False]
-        )  # ai, cache, stealth, rich, agent, pdf, dashboard, cypher
+            [True, True, True, False, False, False, False, False, False]
+        )  # authorization, ai, cache, stealth, rich, agent, pdf, dashboard, cypher
 
         with patch.object(wiz.Prompt, "ask", staticmethod(lambda *a, **k: next(prompt_answers))), \
              patch.object(wiz.Confirm, "ask", staticmethod(lambda *a, **k: next(confirm_answers))):
