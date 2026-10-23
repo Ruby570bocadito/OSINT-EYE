@@ -56,6 +56,10 @@ BIMI_SELECTORS: List[str] = ["default", "selector1", "selector2"]
 
 _SPF_MECHANISM_RE = re.compile(r"[~+\-?]all\b")
 
+#: ``p=`` with an empty value (up to the next ``;`` or end of record):
+#: a revoked DKIM key per RFC 6376 §3.6.1.1, never evidence of signing.
+_EMPTY_P_RE = re.compile(r"(?<![\w.-])p=\s*(?:;|$)", re.IGNORECASE)
+
 
 def _txt_text(answers: List[str]) -> str:
     """Join TXT fragments into one record string (robust to quoting)."""
@@ -94,17 +98,33 @@ class EmailSecurityAuditor:
     def check_dkim(self, domain: str) -> Dict[str, object]:
         """Probe common DKIM selectors; evidence only (we cannot validate)."""
         found = []
+        revoked = []
         for selector in DKIM_SELECTORS:
             name = f"{selector}._domainkey.{domain}"
             record = _txt_text(self._lookup(name, "TXT"))
             # A DKIM key record carries a p= (key) or v=DKIM1 tag; bare
             # garbage TXT must not count as evidence.
             lowered = record.lower()
-            if record and ("p=" in lowered or "v=dkim1" in lowered):
+            if not record or ("p=" not in lowered and "v=dkim1" not in lowered):
+                continue
+            key = _tag_value(record, "p")
+            if key is not None and key.strip():
                 found.append({"selector": selector, "record": record})
+                continue
+            if key is not None or _EMPTY_P_RE.search(record):
+                # p= empty (after strip) is a REVOKED key (RFC 6376
+                # §3.6.1.1), not proof of signing.
+                reason = "revoked"
+            else:
+                # v=DKIM1 without p= is malformed (p= is REQUIRED).
+                reason = "malformed"
+            revoked.append(
+                {"selector": selector, "record": record, "reason": reason}
+            )
         return {
             "selectors_probed": len(DKIM_SELECTORS),
             "found": found,
+            "revoked": revoked,
             "present": bool(found),
         }
 
@@ -231,6 +251,10 @@ class EmailSecurityAuditor:
         if not dkim.get("present"):
             recommendations.append(
                 "No DKIM key found on common selectors: sign outbound mail and publish selector keys."
+            )
+        if dkim.get("revoked") and not dkim.get("found"):
+            recommendations.append(
+                "DKIM selectors only publish empty p= keys (revoked/malformed, RFC 6376): republish a valid selector key."
             )
         if mx.get("present"):
             if not mta_sts.get("present"):

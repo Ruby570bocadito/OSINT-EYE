@@ -15,6 +15,10 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h011 (DKIM p= vacío)**: la auditoría email-security ya no da por protegido un dominio cuyo
+  registro DKIM publica `p=` vacío (clave revocada, RFC 6376 §3.6.1.1): esos selectores quedan en
+  `dkim.revoked` con su motivo (`revoked`/`malformed`), no cuentan como evidencia, el score aplica
+  la deducción por ausencia de DKIM (-15) y se sugiere republicar una clave válida.
 - **fix-h010 (módulos con comas)**: `--modules dns,web` ya funciona (la forma natural de listar): el
   flag acepta comas y espacios a la vez, recorta espacios, descarta fragmentos vacíos y deduplica.
   Un nombre desconocido produce un error corto y accionable (lista de módulos válidos + hint

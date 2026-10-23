@@ -84,6 +84,59 @@ class TestChecks:
         auditor = EmailSecurityAuditor(resolver=_fake_resolver(records))
         assert auditor.check_dkim(DOMAIN)["present"] is False
 
+    def test_dkim_empty_p_is_revoked_not_evidence(self):
+        # H-011: v=DKIM1 with an empty p= is a revoked key (RFC 6376
+        # §3.6.1.1), not proof of signing.
+        records = {("google._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p="']}
+        auditor = EmailSecurityAuditor(resolver=_fake_resolver(records))
+        result = auditor.check_dkim(DOMAIN)
+        assert result["present"] is False
+        assert result["found"] == []
+        assert result["revoked"][0]["selector"] == "google"
+        assert result["revoked"][0]["reason"] == "revoked"
+
+    def test_dkim_empty_p_before_semicolon_is_revoked(self):
+        records = {
+            ("default._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p=; t=y"']
+        }
+        auditor = EmailSecurityAuditor(resolver=_fake_resolver(records))
+        result = auditor.check_dkim(DOMAIN)
+        assert result["present"] is False
+        assert result["revoked"][0]["reason"] == "revoked"
+
+    def test_dkim_v_tag_without_p_is_malformed_not_evidence(self):
+        records = {("s1._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1"']}
+        auditor = EmailSecurityAuditor(resolver=_fake_resolver(records))
+        result = auditor.check_dkim(DOMAIN)
+        assert result["present"] is False
+        assert result["revoked"][0]["selector"] == "s1"
+        assert result["revoked"][0]["reason"] == "malformed"
+
+    def test_dkim_revoked_on_one_selector_valid_on_other(self):
+        records = {
+            ("google._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p="'],
+            ("default._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p=MIIB"'],
+        }
+        auditor = EmailSecurityAuditor(resolver=_fake_resolver(records))
+        result = auditor.check_dkim(DOMAIN)
+        assert result["present"] is True
+        assert [f["selector"] for f in result["found"]] == ["default"]
+        assert [r["selector"] for r in result["revoked"]] == ["google"]
+
+    def test_audit_empty_p_does_not_inflate_score(self):
+        # H-011 regression: a domain publishing only revoked DKIM keys
+        # must still pay the missing-DKIM deduction (-15).
+        records = {
+            ("google._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p="'],
+            ("default._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p="'],
+            ("selector1._domainkey." + DOMAIN, "TXT"): ['"v=DKIM1; p="'],
+        }
+        auditor = EmailSecurityAuditor(resolver=_fake_resolver(records))
+        result = auditor.audit(DOMAIN, spf=SPF_HARD, dmarc=DMARC_REJECT)
+        assert result["dkim"]["present"] is False
+        assert result["score_breakdown"]["dkim"] == -15
+        assert any("empty p=" in rec for rec in result["recommendations"])
+
     def test_dkim_absent(self):
         auditor = EmailSecurityAuditor(resolver=_fake_resolver({}))
         result = auditor.check_dkim(DOMAIN)
