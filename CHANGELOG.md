@@ -37,6 +37,13 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Secretos y endpoints en ficheros JS (`js-secrets`)**: descarga los .js del objetivo (tope 20
+  ficheros / 2 MB) y extrae claves AWS/Google/GitHub/Slack, JWT, cabeceras Bearer, claves Firebase,
+  contraseñas hardcodeadas, claves privadas y endpoints (absolutos y `/api|/rest|/graphql`), más un
+  pase de entropía de Shannon para tokens sin patrón conocido; verificación de falsos positivos
+  (ejemplos de documentación, plantillas `${...}`/`process.env`, líneas comentadas y cadenas de
+  baja diversidad se descartan) con confianza y línea de origen por hallazgo. Respeta el scope y
+  degrada sin red (`modules/web/js_secrets.py`).
 - **Benchmarks offline reproducibles (`tests/bench/`)**: runner standalone (`python tests/bench/bench_runner.py`,
   sin dependencias nuevas, sin red, no se recolecta por pytest) que mide 8 casos de core sobre datos
   sintéticos — `Scope.allows()`/`filter_targets()`, ingest y consultas del `AssetCorrelator`,
