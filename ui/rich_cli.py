@@ -27,7 +27,12 @@ from rich.padding import Padding
 from rich.columns import Columns
 from rich.markup import escape
 from rich.theme import Theme
+from rich.live import Live
 from datetime import datetime
+from collections import OrderedDict
+import atexit
+import threading
+import time
 from typing import Any, Dict, List, Optional
 
 __all__ = [
@@ -36,6 +41,8 @@ __all__ = [
     "THEME",
     "SEVERITY_COLORS",
     "ASCII_BANNER",
+    "ModuleProgressTracker",
+    "instrument_engine",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1219,3 +1226,243 @@ class RichCLI:
             else:
                 table.add_row(str(fmt).upper(), escape(str(path)))
         self.console.print(Padding(table, (0, 2)))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# LIVE MODULE PROGRESS
+# ─────────────────────────────────────────────────────────────────────────────
+_STATE_STYLE = {
+    "pending": "dim",
+    "running": "bold cyan",
+    "done": "green",
+    "error": "bold red",
+}
+
+# instrument_engine() wiring: engine method -> (label, location, results key).
+# location "modules" reads results["modules"][key]; location "root" reads
+# results[key] directly (analysis payloads live at the top level).
+_TRACKED_MODULES = OrderedDict(
+    [
+        ("run_dns", ("dns", "modules", "dns")),
+        ("run_certs", ("certs", "modules", "certs")),
+        ("run_wayback", ("wayback", "modules", "wayback")),
+        ("run_whois", ("whois", "modules", "whois")),
+        ("run_network", ("network", "modules", "network")),
+        ("run_cdn_waf", ("cdn/waf", "modules", "cdn_waf")),
+        ("run_permutation", ("permutation", "modules", "permutation")),
+        ("run_github", ("github", "modules", "github")),
+        ("run_google", ("google dorks", "modules", "google")),
+        ("run_web", ("web", "modules", "web")),
+        ("run_takeover_check", ("takeover", "modules", "takeover")),
+        ("run_endpoints", ("endpoints", "modules", "endpoints")),
+        ("run_cloud_buckets", ("cloud", "modules", "cloud_buckets")),
+        ("run_emails", ("emails", "modules", "emails")),
+        ("run_cve", ("cve", "modules", "cve")),
+        ("run_correlation", ("correlation", "root", "correlation")),
+        ("run_graph", ("graph", "root", "graph")),
+        ("run_mitre", ("mitre", "root", "mitre")),
+        ("run_attack_chains", ("chains", "root", "attack_chains")),
+        ("run_ai", ("ai", "root", "ai_analysis")),
+    ]
+)
+
+
+def _finding_count(value: Any) -> int:
+    """Count 'findings' produced by a module result.
+
+    Generic and shape-agnostic: sums list lengths at the top level and one
+    level deep inside dict values (e.g. web -> technologies -> technologies).
+    Any other type contributes 0, so empty or malformed module results are
+    simply reported as 0 findings.
+    """
+    if not isinstance(value, dict):
+        return 0
+    total = 0
+    for item in value.values():
+        if isinstance(item, list):
+            total += len(item)
+        elif isinstance(item, dict):
+            for inner in item.values():
+                if isinstance(inner, list):
+                    total += len(inner)
+    return total
+
+
+class ModuleProgressTracker:
+    """Thread-safe live progress table for module execution.
+
+    Tracks state (pending/running/done/error), elapsed time, finding count
+    and error count per module, rendered as a Rich ``Live`` table pinned to
+    the bottom of the terminal. Modules keep printing to stdout as usual —
+    ``Live(redirect_stdout=True)`` re-renders that output above the table
+    instead of garbling it. Outside a real TTY Rich degrades gracefully to
+    plain prints, so scans in pipes/CI are never blocked by the tracker.
+    """
+
+    def __init__(self, console: Optional[Console] = None, live: bool = True):
+        self._console = console or Console(highlight=False)
+        self._live_enabled = live
+        self._lock = threading.Lock()
+        self._rows: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+        self._live: Optional[Live] = None
+
+    # -- internal ---------------------------------------------------------------
+    def _ensure(self, name: str) -> Dict[str, Any]:
+        if name not in self._rows:
+            self._rows[name] = {
+                "state": "pending",
+                "elapsed": None,
+                "findings": None,
+                "errors": 0,
+            }
+        return self._rows[name]
+
+    def _render(self) -> Table:
+        table = Table(
+            title="Module Progress",
+            box=box.SIMPLE_HEAVY,
+            title_style="bold cyan",
+            expand=False,
+        )
+        table.add_column("Module", style="cyan", no_wrap=True)
+        table.add_column("State", no_wrap=True)
+        table.add_column("Time", justify="right", no_wrap=True)
+        table.add_column("Findings", justify="right", no_wrap=True)
+        table.add_column("Errors", justify="right", no_wrap=True)
+
+        now = time.monotonic()
+        for name, row in self._rows.items():
+            state = row["state"]
+            if state == "running" and isinstance(row.get("_started"), (int, float)):
+                shown = f"{now - row['_started']:.0f}s"
+            elif isinstance(row["elapsed"], (int, float)):
+                shown = f"{row['elapsed']:.0f}s"
+            else:
+                shown = "—"
+            findings = "—" if row["findings"] is None else str(row["findings"])
+            errors = str(row["errors"]) if row["errors"] else "—"
+            table.add_row(
+                name,
+                Text(state, style=_STATE_STYLE.get(state, "white")),
+                shown,
+                findings,
+                errors,
+            )
+        return table
+
+    def _refresh(self) -> None:
+        with self._lock:
+            if self._live is not None:
+                self._live.update(self._render(), refresh=True)
+
+    # -- public API (thread-safe) -------------------------------------------------
+    def ensure_module(self, name: str) -> None:
+        with self._lock:
+            self._ensure(name)
+        self._refresh()
+
+    def start(self, name: str) -> None:
+        with self._lock:
+            row = self._ensure(name)
+            row["state"] = "running"
+            row["_started"] = time.monotonic()
+        self._refresh()
+
+    def finish(
+        self, name: str, findings: int = 0, errors: int = 0, error: bool = False
+    ) -> None:
+        with self._lock:
+            row = self._ensure(name)
+            started = row.pop("_started", None)
+            if started is not None:
+                row["elapsed"] = time.monotonic() - started
+            row["state"] = "error" if (error or errors) else "done"
+            row["findings"] = findings
+            row["errors"] = errors
+        self._refresh()
+
+    def snapshot(self) -> Dict[str, Dict[str, Any]]:
+        with self._lock:
+            return {name: dict(row) for name, row in self._rows.items()}
+
+    # -- live session ---------------------------------------------------------------
+    def start_live(self) -> None:
+        if not self._live_enabled:
+            return
+        with self._lock:
+            if self._live is not None:
+                return
+            self._live = Live(
+                self._render(),
+                console=self._console,
+                refresh_per_second=4,
+                redirect_stdout=True,
+                redirect_stderr=True,
+                transient=False,
+            )
+            self._live.start()
+        # Safety net: if the scan crashes before stop_live(), the terminal
+        # must not be left in raw mode.
+        atexit.register(self.stop_live)
+
+    def stop_live(self) -> None:
+        with self._lock:
+            if self._live is None:
+                return
+            live, self._live = self._live, None
+        try:
+            live.update(self._render(), refresh=True)
+        except Exception:
+            pass
+        live.stop()
+
+
+def instrument_engine(
+    engine: Any, tracker: Optional[ModuleProgressTracker] = None
+) -> ModuleProgressTracker:
+    """Wrap an engine's run_* methods so they drive a live progress table.
+
+    Pure runtime composition: bound methods are wrapped on the engine
+    instance, so the orchestrator only has to call this once before running
+    modules. Each wrapper records elapsed time, the findings the module
+    stored in ``results`` (generic count) and the error delta, and re-raises
+    module exceptions after flagging the row as error. Idempotent: an
+    already-wrapped engine is left untouched.
+    """
+    if tracker is None:
+        tracker = ModuleProgressTracker()
+    if not isinstance(getattr(engine, "results", None), dict):
+        return tracker
+
+    for attr, (label, location, key) in _TRACKED_MODULES.items():
+        original = getattr(engine, attr, None)
+        if original is None or getattr(original, "_oe_tracked", False):
+            continue
+        tracker.ensure_module(label)
+
+        def _factory(orig, label, location, key):
+            def wrapper(*args, **kwargs):
+                tracker.start(label)
+                errors_before = len(engine.results.get("errors") or [])
+                try:
+                    result = orig(*args, **kwargs)
+                except Exception:
+                    tracker.finish(label, findings=0, errors=1, error=True)
+                    raise
+                errors_after = len(engine.results.get("errors") or [])
+                if location == "modules":
+                    stored = engine.results.get("modules", {}).get(key)
+                else:
+                    stored = engine.results.get(key)
+                tracker.finish(
+                    label,
+                    findings=_finding_count(stored),
+                    errors=errors_after - errors_before,
+                )
+                return result
+            wrapper._oe_tracked = True
+            return wrapper
+
+        setattr(engine, attr, _factory(original, label, location, key))
+    return tracker
