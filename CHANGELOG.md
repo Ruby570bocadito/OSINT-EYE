@@ -7,6 +7,8 @@
   (subdominios, puertos, tecnologías, emails, CVEs, buckets y técnicas MITRE) con búsqueda de texto,
   filtros por severidad, tipo de activo y módulo de origen; API `GET /api/scan/<target>/assets`
   tolerante a datos malformados (nunca 500) y renderizado 100 % offline vía `textContent`.
+### Documentación
+- README fiel: badges de versión (2.1.1) y tests (118 passing) reales, árbol sincronizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
 
 ## [2.1.1] - 2026-09-11
 
