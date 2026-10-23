@@ -60,6 +60,22 @@ class OutputPathError(ValueError):
     """A user-supplied output path resolves outside the current directory."""
 
 
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _neutralize_console_text(value) -> str:
+    """Strip ANSI/control bytes from user-controlled text (H-004, TEST).
+
+    Targets and external data reach the terminal through prints and Rich
+    panels; raw ESC/OSC sequences (e.g. ``\\x1b]0;pwned\\x07``) could
+    rewrite the terminal title or fake operator-facing output. Control
+    bytes carry no meaning in domains/IPs/paths, so they are removed at
+    the entry points and render boundaries. Results files keep whatever
+    the collectors captured untouched.
+    """
+    return _CONTROL_CHARS_RE.sub("", str(value))
+
+
 def _validate_output_path(value: str, flag: str = "--output") -> str:
     """Ensure a user-supplied output path stays inside the current directory.
 
@@ -122,6 +138,10 @@ class OSINTEye:
         cache: bool = True,
         scope: Scope = None,
     ):
+        # H-004: one neutralization up front — self.target, new_results()
+        # and every downstream consumer (exports, graph, dashboard keys)
+        # inherit the clean form; raw bytes never enter the results.
+        target = _neutralize_console_text(target)
         self.target = target
         self.stealth = stealth
         self.use_ai = ai
@@ -198,7 +218,10 @@ class OSINTEye:
         return self._pdf_reporter
 
     def _print(self, msg):
-        print(f"[*] {msg}")
+        # Choke point for every engine/module message: external data
+        # interpolated here (targets, banners, records) is neutralized so
+        # control bytes never reach the terminal (H-004).
+        print(f"[*] {_neutralize_console_text(msg)}")
 
     def _refresh_scope_summary(self):
         """Embed the live scope summary (incl. discard log) into results."""
@@ -722,6 +745,9 @@ class OSINTEye:
 
 def scan_targets(targets: list, args):
     """Scan one or multiple targets"""
+    # H-004: hostile ESC/OSC sequences in a target must never reach the
+    # monitor panel, the scan header or any print downstream.
+    targets = [_neutralize_console_text(t) for t in targets]
     all_results = {}
 
     if getattr(args, "monitor", False):
@@ -1268,10 +1294,15 @@ Exit codes (CI):
     ):
         value = getattr(args, attr, None)
         if value:
+            # H-004 first: strip control bytes, then validate the exact
+            # string that will be used and echoed back, so the cleaned
+            # path can never escape where the raw one did not.
+            value = _neutralize_console_text(value)
             try:
                 _validate_output_path(value, flag=flag)
             except OutputPathError as exc:
                 parser.error(str(exc))
+            setattr(args, attr, value)
 
     # Configure the library logger before any scan/monitor work runs, so
     # every core/graph/reporting message honours --log-level/--log-file.

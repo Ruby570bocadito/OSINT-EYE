@@ -15,6 +15,12 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h004 (escape injection)**: los targets y las rutas de salida suministradas por el usuario se
+  neutralizan antes de llegar al terminal — `_neutralize_console_text()` elimina los bytes de control
+  (ESC/OSC/DEL) en la entrada de `scan_targets`, en `OSINTEye.__init__` (target y results heredan la
+  forma limpia) y en el choke point `_print()` de los 49 mensajes del motor. Un target tipo
+  `$'\x1b]0;pwned\x07evil.com'` ya no puede reescribir el título del terminal; los ficheros de
+  resultados nunca contienen los bytes crudos.
 - **fix-h003 (path traversal)**: toda ruta de salida suministrada por el usuario (`--output/-o`,
   `--export-cypher`, `--log-file`) debe resolver dentro del directorio de trabajo; las que escapan
   se rechazan con usage error (exit 2) antes de escanear, escribir logs o crear ficheros. `export_all()`
