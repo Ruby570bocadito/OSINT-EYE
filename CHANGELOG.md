@@ -10,6 +10,12 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Módulo `reverse_ip`**: vecinos en la misma IP (fuente pública sin clave, solo inteligencia: nunca
+  se contacta a los vecinos) + descubrimiento de virtual hosts sondando la IP del objetivo con
+  cabeceras `Host:` derivadas del dominio (wordlist `data/wordlists/vhosts.txt`) o pasadas
+  explícitamente; una respuesta distinta a la baseline (status/Server/título/longitud) revela el
+  vhost. Scope-aware: candidatos derivados fuera de scope se descartan con auditoría. Disponible
+  vía `--modules reverse_ip`.
 - **Módulo `shodan_censys`**: inteligencia de hosts desde Shodan/Censys/FOFA, totalmente opcional
   (claves del usuario vía `OSINT_EYE_SHODAN_KEY`, `OSINT_EYE_CENSYS_API_ID/SECRET`,
   `OSINT_EYE_FOFA_EMAIL/KEY`): sin clave cada proveedor se marca `skipped` y el escaneo sigue;

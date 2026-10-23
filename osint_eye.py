@@ -21,6 +21,7 @@ from modules.certs.tls_audit import TLSAuditor
 from modules.web import WaybackScanner
 from modules.web.web_scanner import WebScanner, EndpointDiscovery
 from modules.network import NetworkScanner
+from modules.network.reverse_ip import ReverseIPVHostScanner
 from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.shodan_censys import ShodanCensysCollector
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
@@ -279,6 +280,7 @@ class OSINTEye:
         self.web_scanner = WebScanner()
         self.endpoint_discovery = EndpointDiscovery()
         self.network_scanner = NetworkScanner()
+        self.reverse_ip_scanner = ReverseIPVHostScanner()
         self.whois_scanner = WhoisScanner()
         self.github_scanner = GitHubScanner()
         self.google_scanner = GoogleScanner()
@@ -405,6 +407,17 @@ class OSINTEye:
         self.results["modules"]["shodan_censys"] = result
         used = ", ".join(result.get("summary", {}).get("providers_used", [])) or "none (set keys via OSINT_EYE_* env)"
         self._print(f"  Providers used: {used}")
+
+    def run_reverse_ip(self):
+        self._print("Reverse IP neighbours + virtual hosts...")
+        result = self._safe_run(
+            "reverse_ip", self.reverse_ip_scanner.scan, self.target, scope=self.scope
+        )
+        self.results["modules"]["reverse_ip"] = result
+        summary = result.get("summary", {})
+        self._print(
+            f"  Neighbours: {summary.get('neighbors', 0)} | Virtual hosts: {summary.get('vhosts_found', 0)}"
+        )
 
     def run_wayback(self):
         self._print("Running Wayback Machine...")
@@ -969,6 +982,7 @@ def scan_targets(targets: list, args):
                     "certs": engine.run_certs,
                     "tls_audit": engine.run_tls_audit,
                     "shodan_censys": engine.run_shodan_censys,
+                    "reverse_ip": engine.run_reverse_ip,
                     "wayback": engine.run_wayback,
                     "network": engine.run_network,
                     "whois": engine.run_whois,
@@ -1155,6 +1169,7 @@ MODULE_CATALOG = {
     "certs": "Certificate transparency (crt.sh) subdomain discovery",
     "tls_audit": "TLS protocol versions, weak ciphers, certificate expiry and chain (stdlib ssl)",
     "shodan_censys": "Host intelligence from Shodan/Censys/FOFA (optional keys via OSINT_EYE_* env vars; skipped without them)",
+    "reverse_ip": "Reverse-IP neighbours (public keyless source, intelligence only) + virtual host discovery via Host-header probing of the target IP",
     "wayback": "Wayback Machine URL history and snapshot timeline",
     "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
     "whois": "Domain registration and ownership data",
