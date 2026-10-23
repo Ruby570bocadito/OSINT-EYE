@@ -51,6 +51,14 @@ Reglas del equipo (PROTOCOLO §3):
   se omiten y quedan registrados en `results["scope"]["discarded"]` (target, módulo, motivo, timestamp).
   Gateo activo en el orquestador (targets de CLI, candidatos de permutación y sondas de takeover);
   archivo de scope inválido = error de uso limpio antes de escanear.
+### Corregido
+- **Targets con `/` inalcanzables en el dashboard (H-005)**: las rutas `/api/scan/...` usan el
+  converter `<path:target>` (el cliente ya codificaba con `encodeURIComponent`, Werkzeug decodifica
+  `%2F` tras el routing), así escaneos con target tipo URL (`http://127.0.0.1:8599`) o JSON hostil
+  con barras sirven por todos los endpoints. `merge_slashes` desactivado (sin 308 a otra clave) y
+  handler 404 con JSON uniforme en `/api/*` — nunca HTML de error ni 500; residuales documentados
+  (targets que empiezan por `/`, colisión con ancla de subruta).
+
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
   ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de

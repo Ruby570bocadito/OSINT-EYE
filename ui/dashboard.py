@@ -5,6 +5,16 @@ local-only web dashboard on 127.0.0.1. Every REST endpoint is defensive and
 never raises a 500 on malformed or empty scan data. The frontend is 100%
 self-contained (no CDN) and renders all scan data through textContent —
 never innerHTML — so scan results can never inject markup.
+
+Scan targets may contain slashes (URL-shaped targets like
+``http://127.0.0.1:8599`` — H-005): every ``/api/scan/...`` route therefore
+uses the ``<path:target>`` converter, and the client percent-encodes the
+target (``encodeURIComponent``); Werkzeug decodes ``%2F`` after routing, so
+lookups hit ``SCAN_RESULTS`` by exact key. Known residuals (honest 404,
+never a 500): targets starting with ``/`` (Werkzeug path converters never
+match a leading slash) and targets shaped like an existing sub-route anchor
+(``a.com/summary`` resolves to the sub-route of ``a.com``) — sid-based
+resolution would remove both if hardening ever needs it.
 """
 
 from flask import Flask, render_template_string, jsonify, request, Response
@@ -24,6 +34,10 @@ from reporting.markdown_reporter import MarkdownReporter
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
+# Slash-shaped scan targets (H-005) must not be merged away by Werkzeug's
+# slash-collapsing redirect: keep route matching byte-exact and answer with
+# the plain 404 JSON instead of a 308 to a different target key.
+app.url_map.merge_slashes = False
 
 # Upper bound for scan JSON files loaded from disk (memory-exhaustion guard:
 # a corrupted or hostile file must not pin the dashboard).
@@ -56,6 +70,19 @@ def _security_headers(response):
     if request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.errorhandler(404)
+def _api_not_found(e):
+    """Uniform JSON 404 for API paths (routing misses included).
+
+    A scan target that cannot be matched by routing (e.g. a leading-slash
+    target, see H-005 notes) must answer with the same JSON contract as a
+    lookup miss — never an HTML error page.
+    """
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Not found"}), 404
+    return e
 
 
 SCAN_RESULTS = {}
@@ -314,14 +341,14 @@ def dashboard_config():
     )
 
 
-@app.route("/api/scan/<target>", methods=["GET"])
+@app.route("/api/scan/<path:target>", methods=["GET"])
 def get_scan(target):
     if target in SCAN_RESULTS:
         return jsonify(SCAN_RESULTS[target])
     return jsonify({"error": "Scan not found"}), 404
 
 
-@app.route("/api/scan/<target>/subdomains", methods=["GET"])
+@app.route("/api/scan/<path:target>/subdomains", methods=["GET"])
 def get_subdomains(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -341,7 +368,7 @@ def get_subdomains(target):
     )
 
 
-@app.route("/api/scan/<target>/ports", methods=["GET"])
+@app.route("/api/scan/<path:target>/ports", methods=["GET"])
 def get_ports(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -362,7 +389,7 @@ def get_ports(target):
     )
 
 
-@app.route("/api/scan/<target>/graph", methods=["GET"])
+@app.route("/api/scan/<path:target>/graph", methods=["GET"])
 def get_graph(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -376,7 +403,7 @@ def get_graph(target):
     return jsonify({"nodes": nodes, "edges": edges})
 
 
-@app.route("/api/scan/<target>/mitre", methods=["GET"])
+@app.route("/api/scan/<path:target>/mitre", methods=["GET"])
 def get_mitre(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -392,7 +419,7 @@ def get_mitre(target):
     )
 
 
-@app.route("/api/scan/<target>/chains", methods=["GET"])
+@app.route("/api/scan/<path:target>/chains", methods=["GET"])
 def get_chains(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -401,7 +428,7 @@ def get_chains(target):
     return jsonify(_as_list(results.get("attack_chains")))
 
 
-@app.route("/api/scan/<target>/assets", methods=["GET"])
+@app.route("/api/scan/<path:target>/assets", methods=["GET"])
 def get_assets(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -410,7 +437,7 @@ def get_assets(target):
     return jsonify({"target": target, "assets": assets, "count": len(assets)})
 
 
-@app.route("/api/scan/<target>/diff", methods=["GET"])
+@app.route("/api/scan/<path:target>/diff", methods=["GET"])
 def get_diff(target):
     """Compare '<target>' (new state) against '?against=' (old state).
 
@@ -432,7 +459,7 @@ def get_diff(target):
     return jsonify(diff)
 
 
-@app.route("/api/scan/<target>/summary", methods=["GET"])
+@app.route("/api/scan/<path:target>/summary", methods=["GET"])
 def get_summary(target):
     if target not in SCAN_RESULTS:
         return jsonify({"error": "Scan not found"}), 404
@@ -489,7 +516,7 @@ def _csv_cell(value) -> str:
     return text
 
 
-@app.route("/api/scan/<target>/export", methods=["GET"])
+@app.route("/api/scan/<path:target>/export", methods=["GET"])
 def export_scan(target):
     """Download the loaded scan as JSON / CSV (asset rows) / Markdown report."""
     if target not in SCAN_RESULTS:
