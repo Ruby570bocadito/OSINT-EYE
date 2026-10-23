@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Seguridad
+- **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
+  ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
+  degradar la sonda ante objetivos hostiles (riesgo MITM).
+
 ### Añadido
 - **Dashboard — explorador de hallazgos con búsqueda y filtros**: nueva tabla unificada de activos
   (subdominios, puertos, tecnologías, emails, CVEs, buckets y técnicas MITRE) con búsqueda de texto,
