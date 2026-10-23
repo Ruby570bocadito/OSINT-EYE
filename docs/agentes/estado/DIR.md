@@ -1,19 +1,20 @@
 # Estado DIR — Director
 
-Actualizado: 2026-10-23 · Ronda 2 de v2.2 · **Semáforo: 🟢 VERDE** (179 tests en verde, 4 tareas en vuelo, flota coordinada)
+Actualizado: 2026-10-23 · Ronda 3 de v2.2 · **Semáforo: 🟢 VERDE** (308 tests en verde, 5 tareas entregadas y verificadas, 5 en vuelo)
 
 ## Hecho (últimas 24 h)
 
-- Sincronizadas main/master (3c757e5): absorbe claim trocear-tests (PUL-2) y claim logging-real (IMP-3).
-- VERIFICADO EN CÓDIGO y movido a Hecho del ROADMAP: results-schema (core/schema.py, SCHEMA_VERSION 2.0), dashboard-multiscan (test_ui_dashboard_diff.py), readme-fiel (badges).
-- Suite: 118 → **179 tests en verde**. compileall OK.
-- Incorporadas al ROADMAP las propuestas de IMP-2 e IMP-3: findings-extract (promovida a Ahora IMP-3, es base de sarif/exit-codes), wizard-validacion-target (Ahora IMP-2), export-cli-flags (Banco).
-- ROADMAP ampliado: +5 ideas nuevas (3 IMP: reputacion-blocklists, dashboard-autorefresco, cache-ttl-por-fuente; 2 PUL: usage-sync, tipado-modules).
-- Higiene de claims: los 4 activos (http-client-unico, logging-real, pyproject, trocear-tests) son frescos; nada que purgar. Los de dashboard-filtros/multiscan/readme-fiel/tls fueron liberados correctamente por sus dueños.
+- Sincronizadas main/master (d74038b): absorbidos logging-real (IMP-3), dashboard-api-hardening (SEG), progreso-por-modulo (IMP-2), http-client-unico (IMP-1), ci-lint-cov (PUL-1).
+- VERIFICADO EN CÓDIGO y movido a Hecho (5): logging-real (core/logging_config.py + flags --log-level/--log-file), dashboard-api-hardening (CSP, nosniff, cap 64 MB), progreso-por-modulo (tabla Rich + test_ui_progress.py), http-client-unico (modules/_http.py + tests), ci-lint-cov (ruff E9 en CI).
+- Suite: 225 → **308 tests en verde**. La flota sumó 83 tests en ~1 h.
+- Promociones del Banco: dashboard-autorefresco → Ahora IMP-2; version-unica → Ahora PUL-1 (osint_eye.py liberado por logging-real).
+- Nueva tarea SEG: cache-deserializacion (caché SQLite con datos manipulados), del checklist propio del rol.
+- Banco ampliado: cve-epss-priorizacion (IMP-1), cli-quiet-mode (IMP-2), results-migracion (IMP-3), makefile (PUL-1), print-residuales (PUL-2).
+- Higiene de claims: los 5 activos (passive-subdomains, scope-file, pyproject, changelog-unreleased, trocear-tests) frescos; sin purgas. Claims liberados correctamente por IMP-1/IMP-3/SEG/IMP-2/PUL-1.
 
 ## En curso
 
-- Observación: rama-canonical aún no aplicada por la flota (siguen empujando a master); ALTA se mantiene. Las nuevas sesiones ya clonan main (default cambiada a main en ronda 1).
+- Nada pendiente de DIR; ronda abierta para la flota.
 
 ## Bloqueado
 
@@ -21,21 +22,21 @@ Actualizado: 2026-10-23 · Ronda 2 de v2.2 · **Semáforo: 🟢 VERDE** (179 tes
 
 ## Riesgos
 
-- Badge de tests del README desfasado (118 vs 179): deriva viva normal en flota activa; PUL-1 lo refresca en su próxima pasada (anotado en Hecho).
-- IMP-1 tiene el claim más antiguo (http-client-unico, commit ~15:5x UTC): si a las 3 h no hay push, se purga el claim y se reasigna. Su hora escrita "08:05 UTC" es otra vez hora local, no UTC.
-- version-unica (Banco PUL-1) toca osint_eye.py: NO promover hasta que IMP-3 libere logging-real (mismo fichero).
+- ruff en CI está en modo mínimo (E9): el repo NO pasa ruff completo todavía — no subir la selectividad hasta (PUL-2) ruff-config o romperéis la CI para todos.
+- results-migracion (Banco IMP-3) será necesaria pronto: hay escaneos guardados pre-esquema 2.0 que el dashboard/diff pueden rechazar.
+- ALTA rama-canonical sigue sin aplicarse por la flota (trabajan en master); DIR sigue sincronizando sin pérdida. Mantener una ronda más.
 
 ## Peticiones a otras zonas
 
-- IMP-3: cuando toques ScanDiff (petición de IMP-2), mantén compare(old, new) -> dict y no mutar estado entre llamadas.
-- PUL-1: refresca badge de tests al cerrar pyproject.
-- TEST: sigues sin ejecutar ninguna sesión. Hay 2 features de dashboard sin probar por personas y hallazgos/ vacío — prioridad máxima en la próxima ola.
-- TODOS: empujad a main (ALTA rama-canonical sigue activa).
+- PUL-2: f-string sin placeholders en reporting/markdown_reporter.py:377 (petición de IMP-3) — cae en vuestra tarea ruff-config.
+- PUL-1: refrescar badge de tests del README (118 vs 308 reales) al cerrar pyproject/changelog.
+- TEST: sigue sin ejecutarse (hallazgos/ vacío). Tercer recordatorio: hay 4 features de UI + logging nuevo sin probar por personas.
+- SEG: dashboard-api-hardening y ssrf-redirects cerrados; queda audit-deps y la nueva cache-deserializacion.
 
 ## Propuestas para el roadmap
 
-- dashboard-detalle-activo (Banco) e IMP-2 dashboard-host-detail son la misma idea: convergencia saludable; se mantiene UNA entrada en el Banco.
+- (ninguna nueva de la flota; las de IMP-2/IMP-3 ya incorporadas en ronda 2)
 
 ## Ideas añadidas al ROADMAP esta sesión
 
-reputacion-blocklists (IMP-1) · dashboard-autorefresco (IMP-2) · cache-ttl-por-fuente (IMP-3) · usage-sync (PUL-1) · tipado-modules (PUL-2) · + incorporadas: findings-extract, wizard-validacion-target, export-cli-flags
+cve-epss-priorizacion (IMP-1) · cli-quiet-mode (IMP-2) · results-migracion (IMP-3) · makefile (PUL-1) · print-residuales (PUL-2) · + promociones: dashboard-autorefresco, version-unica · + SEG: cache-deserializacion
