@@ -57,6 +57,14 @@ Reglas del equipo (PROTOCOLO §3):
   firma SHA-1) y cadena verificada contra el almacén del sistema; hallazgos explicables con
   severidad, score 0-100 y nota A-F. Solo stdlib (`ssl`/`socket`), degradación grácil sin conexión
   y respetando el scope (`modules/certs/tls_audit.py`).
+- **Capturas demo reales de la UI actual (docs/assets/)**: `dashboard-dark.png` (dashboard con el
+  fixture cargado: grafo, filtros del explorer, timeline), `cli-progress.png` (tracker real de
+  progreso-por-módulo), `wizard-auth.png` (gate de autorización del wizard), `report-pdf.png`
+  (primera página del PDF), `graph-view.png` (grafo de superficie), y demo animada
+  `demo-scan.gif`/`demo-scan.mp4` (14 s: CLI → navegación del dashboard). Todo generado 100 %
+  offline contra 127.0.0.1 con fixture example.com (dashboard Flask local + navegador headless,
+  wizard real abortado en el gate de autorización, PDF con reporting/pdf_reporter); sustituirá a
+  los assets antiguos cuando PUL-1 los cablee en los README.
 - **Grafo avanzado**: la leyenda del grafo es ahora una barra de filtros por tipo de nodo (chips
   que atenúan lo excluido), búsqueda de nodos con resaltado, botón «Attack paths» que ilumina los
   caminos más cortos del target hacia los nodos de riesgo (CVEs/buckets, fallback puertos) vía BFS,
