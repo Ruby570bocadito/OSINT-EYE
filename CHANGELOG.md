@@ -190,6 +190,9 @@ Reglas del equipo (PROTOCOLO §3):
   los badges del README dejan de derivarse a mano (fin del desfase tipo «706 vs 767»).
 
 ### Cambiado
+- **Fuente única de versión**: `core/__init__.py` define `__version__` (2.1.1); el banner de la CLI
+  lo importa (antes decía "v2.1" fijo), `pyproject.toml` lo deriva vía `setuptools.dynamic` y el job
+  de badges del CI lo lee de ahí — la versión ya no puede divergir entre banner, paquete y badges.
 - **Dependencias depuradas**: se eliminan `nvdlib`, `waybackpy`, `beautifulsoup4` y `lxml`
   (cero imports en producto, verificado con venv limpio y suite completa) y se declara `urllib3`
   (import directo en `modules/_http.py`) — installs más ligeros y contrato honesto.

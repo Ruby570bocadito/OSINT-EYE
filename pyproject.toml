@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osint-eye"
-version = "2.1.1"
+# Versión única en core/__init__.py (tarea version-unica): se deriva vía attr.
+# El literal no se repite aquí para que no pueda volver a divergir.
+dynamic = ["version"]
 description = "AI-Powered Attack Surface Intelligence — plataforma OSINT y reconocimiento de superficie de ataque"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -58,6 +60,9 @@ Changelog = "https://github.com/Ruby570bocadito/OSINT-EYE/blob/main/CHANGELOG.md
 
 [tool.setuptools]
 py-modules = ["osint_eye"]
+
+[tool.setuptools.dynamic]
+version = { attr = "core.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["ai", "ai.*", "core", "core.*", "graph", "graph.*", "modules", "modules.*", "reporting", "reporting.*", "ui", "ui.*"]

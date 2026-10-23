@@ -1,4 +1,4 @@
-"""OSINT EYE v2.1 - Main Entry Point with Async, Cache & Multi-Target"""
+"""OSINT EYE - Main Entry Point with Async, Cache & Multi-Target"""
 
 import argparse
 import sys
@@ -22,6 +22,7 @@ from modules.network import NetworkScanner
 from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
+from core import __version__
 from core.correlator import AssetCorrelator
 from core.config import (
     VALID_EXPORT_FORMATS as _EXPORT_FORMATS,
@@ -1132,7 +1133,7 @@ def _print_module_catalog():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="OSINT EYE v2.1 - AI-Powered Attack Surface Intelligence",
+        description=f"OSINT EYE v{__version__} - AI-Powered Attack Surface Intelligence",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
