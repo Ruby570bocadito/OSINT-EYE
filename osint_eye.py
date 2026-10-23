@@ -22,6 +22,7 @@ from modules.web import WaybackScanner
 from modules.web.web_scanner import WebScanner, EndpointDiscovery
 from modules.network import NetworkScanner
 from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
+from modules.osint.shodan_censys import ShodanCensysCollector
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
 from core import __version__
@@ -285,6 +286,7 @@ class OSINTEye:
         self.email_enumerator = EmailEnumerator()
         self.cdn_detector = CDNDetector()
         self.cve_scanner = CVEScanner()
+        self.host_intel = ShodanCensysCollector()
         self.correlator = AssetCorrelator()
         self.graph_builder = GraphBuilder()
         self.graph_analyzer = None
@@ -396,6 +398,13 @@ class OSINTEye:
         self.results["modules"]["tls_audit"] = result
         grade = result.get("grade") or "n/a"
         self._print(f"  TLS grade {grade} (score {result.get('score')})")
+
+    def run_shodan_censys(self):
+        self._print("Querying host intelligence (Shodan/Censys/FOFA)...")
+        result = self._safe_run("shodan_censys", self.host_intel.scan, self.target)
+        self.results["modules"]["shodan_censys"] = result
+        used = ", ".join(result.get("summary", {}).get("providers_used", [])) or "none (set keys via OSINT_EYE_* env)"
+        self._print(f"  Providers used: {used}")
 
     def run_wayback(self):
         self._print("Running Wayback Machine...")
@@ -959,6 +968,7 @@ def scan_targets(targets: list, args):
                     "dns": engine.run_dns,
                     "certs": engine.run_certs,
                     "tls_audit": engine.run_tls_audit,
+                    "shodan_censys": engine.run_shodan_censys,
                     "wayback": engine.run_wayback,
                     "network": engine.run_network,
                     "whois": engine.run_whois,
@@ -1144,6 +1154,7 @@ MODULE_CATALOG = {
     "dns": "DNS record enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA) + subdomain brute-force",
     "certs": "Certificate transparency (crt.sh) subdomain discovery",
     "tls_audit": "TLS protocol versions, weak ciphers, certificate expiry and chain (stdlib ssl)",
+    "shodan_censys": "Host intelligence from Shodan/Censys/FOFA (optional keys via OSINT_EYE_* env vars; skipped without them)",
     "wayback": "Wayback Machine URL history and snapshot timeline",
     "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
     "whois": "Domain registration and ownership data",

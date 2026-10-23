@@ -9,6 +9,13 @@ Reglas del equipo (PROTOCOLO §3):
 
 ## [Unreleased]
 
+### Añadido
+- **Módulo `shodan_censys`**: inteligencia de hosts desde Shodan/Censys/FOFA, totalmente opcional
+  (claves del usuario vía `OSINT_EYE_SHODAN_KEY`, `OSINT_EYE_CENSYS_API_ID/SECRET`,
+  `OSINT_EYE_FOFA_EMAIL/KEY`): sin clave cada proveedor se marca `skipped` y el escaneo sigue;
+  con clave fusiona IPs/puertos/servicios/subdominios en `results["modules"]["shodan_censys"]`.
+  Disponible vía `--modules shodan_censys` (o en el catálogo `--modules`).
+
 ### Cambiado
 - **README.es.md**: la galería Demo apunta al nuevo set de capturas regeneradas con fixtures 100 % offline
   (`demo-scan.gif`, `wizard-auth`, `cli-progress`, `dashboard-dark`, `graph-view`, `report-pdf`); los
