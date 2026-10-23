@@ -235,6 +235,27 @@
   td.diff-del { color: var(--danger); font-weight: 600; }
   td.diff-chg { color: var(--warn); font-weight: 600; }
 
+  /* ---------- auto-refresh (monitor mode) ---------- */
+  .live-chip {
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); border-radius: 20px;
+    padding: 5px 12px; font-size: 12px; font-weight: 700;
+    letter-spacing: .6px; color: var(--ok); background: rgba(16,185,129,.08);
+  }
+  .live-chip[hidden] { display: none; }
+  .live-chip.paused { color: var(--warn); background: rgba(245,158,11,.08); }
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    animation: live-pulse 1.6s ease-out infinite;
+  }
+  .live-chip.paused .live-dot { animation: none; }
+  .live-chip button {
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 12px; font-size: 11px; padding: 1px 8px; cursor: pointer;
+  }
+  .live-chip button:hover { color: var(--text); border-color: var(--border-strong); }
+  @keyframes live-pulse { 0% { opacity: 1; } 50% { opacity: .25; } 100% { opacity: 1; } }
+
   /* ---------- empty states ---------- */
   .empty {
     display: grid; place-items: center; gap: 6px;
@@ -262,6 +283,11 @@
     <div class="score-chip">
       <span class="num" id="score-num">–</span>
       <span class="lbl" id="score-sev">risk</span>
+    </div>
+    <div class="live-chip" id="live-chip" hidden>
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="live-label">LIVE</span>
+      <button type="button" id="live-toggle">pause</button>
     </div>
     <div class="export-group" id="export-group">
       <span class="f-label">Export</span>
@@ -376,7 +402,7 @@ async function getJSON(url) {
 /* ---------- topbar / targets ---------- */
 let currentTarget = null;
 
-async function loadTargets() {
+async function loadTargets(keepTarget) {
   const data = await getJSON("/api/scans");
   if (!data) return;
 
@@ -398,7 +424,8 @@ async function loadTargets() {
   });
 
   if ((data.scans || []).length > 0) {
-    selectTarget(data.scans[0].target);
+    const keep = keepTarget && (data.scans || []).some((s) => s.target === keepTarget);
+    selectTarget(keep ? keepTarget : data.scans[0].target);
   } else {
     setEmpty($("ports-body"), "No scans loaded");
     setEmpty($("tech-body"), "No scans loaded");
@@ -937,7 +964,78 @@ async function renderGraph(target) {
   requestAnimationFrame(tick);
 }
 
+/* ---------- auto-refresh (monitor mode) ---------- */
+const live = { enabled: false, paused: false, intervalS: 60, timer: null, failures: 0, lastKey: "" };
+
+async function initLiveRefresh() {
+  const cfg = await getJSON("/api/dashboard/config");
+  if (!cfg || !cfg.auto_refresh) return;
+  live.enabled = true;
+  live.intervalS = Math.max(5, Math.min(3600, cfg.interval_s | 0 || 60));
+  $("live-label").textContent = "LIVE · " + live.intervalS + "s";
+  $("live-chip").hidden = false;
+  $("live-toggle").addEventListener("click", toggleLive);
+  document.addEventListener("visibilitychange", () => {
+    if (!live.enabled || live.paused) return;
+    if (document.hidden) stopTimer(); else startTimer();
+  });
+  startTimer();
+}
+
+function startTimer() {
+  stopTimer();
+  live.timer = setInterval(pollTick, live.intervalS * 1000);
+  $("live-chip").classList.remove("paused");
+  $("live-toggle").textContent = "pause";
+}
+
+function stopTimer() {
+  if (live.timer) { clearInterval(live.timer); live.timer = null; }
+}
+
+function toggleLive() {
+  live.paused = !live.paused;
+  if (live.paused) {
+    stopTimer();
+    $("live-chip").classList.add("paused");
+    $("live-label").textContent = "PAUSED";
+    $("live-toggle").textContent = "resume";
+  } else {
+    $("live-label").textContent = "LIVE · " + live.intervalS + "s";
+    startTimer();
+    pollTick();
+  }
+}
+
+function scansKeyOf(data) {
+  return JSON.stringify(
+    (data.scans || []).map((s) => [s.target, s.date, s.refreshed_at || ""])
+  );
+}
+
+async function pollTick() {
+  const data = await getJSON("/api/scans");
+  if (!data) {
+    live.failures += 1;
+    if (live.failures >= 3) {
+      stopTimer();
+      live.enabled = false;
+      $("live-chip").classList.add("paused");
+      $("live-label").textContent = "OFFLINE";
+      $("live-toggle").textContent = "resume";
+    }
+    return;
+  }
+  live.failures = 0;
+  const key = scansKeyOf(data);
+  if (key === live.lastKey) return;
+  live.lastKey = key;
+  // Soft reload: loadTargets(keepTarget) preserves the user's selection.
+  await loadTargets(currentTarget);
+}
+
 loadTargets();
+initLiveRefresh();
 </script>
 </body>
 </html>

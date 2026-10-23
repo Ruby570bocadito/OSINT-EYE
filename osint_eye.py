@@ -682,6 +682,30 @@ def scan_targets(targets: list, args):
         webhook_url = getattr(args, "webhook", None)
         _print_monitor_panel(console, targets, interval, webhook_url)
 
+        # Wiring mínimo (OWNERSHIP — excepción IMP-2): --dashboard en modo
+        # monitor lanza el dashboard con auto-refresco en un hilo daemon, así
+        # la página hace polling de la API cada --monitor-interval mientras
+        # el daemon corre. No se toca nada más del flujo del monitor.
+        if getattr(args, "dashboard", False):
+            try:
+                import threading as _threading
+
+                from ui.dashboard import start_dashboard as _start_dash
+
+                dash_thread = _threading.Thread(
+                    target=_start_dash,
+                    kwargs={"monitor": True, "interval": interval},
+                    daemon=True,
+                    name="oe-dashboard",
+                )
+                dash_thread.start()
+                console.print(
+                    "  [green]✔[/green] Dashboard en vivo en http://127.0.0.1:5000 "
+                    "(auto-refresco cada %ss)" % interval
+                )
+            except Exception as exc:
+                console.print(f"  [yellow]⚠ Dashboard no disponible: {exc}[/yellow]")
+
         monitor = SubdomainMonitor(
             targets, check_interval=args.monitor_interval, cache=not args.no_cache
         )

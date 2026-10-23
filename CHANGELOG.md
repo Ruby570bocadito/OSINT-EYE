@@ -10,6 +10,13 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Auto-refresco del dashboard (modo monitor)**: el dashboard puede vivir actualizándose —
+  `GET /api/dashboard/config` entrega la configuración al cliente; con `--monitor --dashboard` la
+  página hace polling de la API cada `--monitor-interval` (límites 5–3600 s), muestra un badge
+  «LIVE · Ns» con pausa/reanudar, se detiene tras 3 fallos seguidos («OFFLINE») y se pausa con la
+  pestaña oculta. El servidor recarga los ficheros vigilados solo cuando cambian en disco
+  (`reload_scan_results` actualiza la entrada del historial con `refreshed_at`, sin duplicados) y
+  el refresco suave preserva el target seleccionado. Todo sin CDN y vía `textContent`.
 - **Configuración TOML (`osint_eye.toml`, `--config`, `--profile`)**: `[scan]` (depth, stealth, no_ai,
   no_cache, módulos por defecto), `[timeouts]`, `[scope]` (includes/excludes) y `[exports].formats`
   (subconjunto de exportadores); perfiles `[profiles.<nombre>]` que sobreescriben secciones; precedencia

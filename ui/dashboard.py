@@ -14,6 +14,8 @@ import json
 import os
 import re
 import tempfile
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -61,6 +63,28 @@ SCAN_HISTORY = []
 
 # Message shown in the web UI when a scan file could not be located.
 LAST_LOAD_WARNING = None
+
+# --- auto-refresh (dashboard-autorefresco) -----------------------------------
+# When enabled (monitor mode / watched files), the client polls the API every
+# interval seconds and the server re-reads watched scan files so /api/* serve
+# fresh data. Defaults keep today's behavior: a static dashboard, no polling.
+DASHBOARD_CONFIG = {
+    "auto_refresh": False,
+    "interval_s": 60,
+    "watch_paths": [],
+}
+
+_MIN_REFRESH_INTERVAL = 5
+_MAX_REFRESH_INTERVAL = 3600
+
+
+def _clamp_interval(seconds) -> int:
+    """Keep the poll interval sane regardless of what the caller passes."""
+    try:
+        value = int(seconds)
+    except (TypeError, ValueError):
+        return 60
+    return max(_MIN_REFRESH_INTERVAL, min(_MAX_REFRESH_INTERVAL, value))
 
 
 # --- shape guards -----------------------------------------------------------
@@ -273,6 +297,19 @@ def list_scans():
             "scans": SCAN_HISTORY,
             "total": len(SCAN_HISTORY),
             "warning": LAST_LOAD_WARNING,
+            "auto_refresh": DASHBOARD_CONFIG["auto_refresh"],
+            "interval_s": DASHBOARD_CONFIG["interval_s"],
+        }
+    )
+
+
+@app.route("/api/dashboard/config", methods=["GET"])
+def dashboard_config():
+    """Client boot config for the auto-refresh loop (never 500s)."""
+    return jsonify(
+        {
+            "auto_refresh": bool(DASHBOARD_CONFIG["auto_refresh"]),
+            "interval_s": _clamp_interval(DASHBOARD_CONFIG["interval_s"]),
         }
     )
 
@@ -586,6 +623,33 @@ def _resolve_results_path(filepath: str):
     return None
 
 
+def _store_scan(data: dict) -> str:
+    """Store one scan payload and upsert its history entry.
+
+    Reloading the same target (auto-refresh) replaces the previous history
+    entry instead of appending duplicates; ``refreshed_at`` marks the last
+    time the payload changed so clients can detect fresh data cheaply.
+    """
+    target = str(data.get("target") or "unknown")
+    SCAN_RESULTS[target] = data
+    now_iso = datetime.now().isoformat()
+    entry = {
+        "target": target,
+        "date": data.get("scan_date") or now_iso,
+        "depth": data.get("depth") or "unknown",
+        "demo": bool(data.get("demo")),
+        "warning": LAST_LOAD_WARNING,
+        "refreshed_at": now_iso,
+    }
+    for i, existing in enumerate(SCAN_HISTORY):
+        if existing.get("target") == target:
+            SCAN_HISTORY[i] = entry
+            break
+    else:
+        SCAN_HISTORY.append(entry)
+    return target
+
+
 def load_scan_results(filepath: str) -> str:
     """Load scan results from a JSON file — never raises.
 
@@ -637,23 +701,79 @@ def load_scan_results(filepath: str) -> str:
             LAST_LOAD_WARNING = f"Loaded {resolved} (requested: '{filepath}')"
             print(f"[*] {LAST_LOAD_WARNING}")
 
-    target = str(data.get("target") or "unknown")
-    SCAN_RESULTS[target] = data
-    SCAN_HISTORY.append(
-        {
-            "target": target,
-            "date": data.get("scan_date") or datetime.now().isoformat(),
-            "depth": data.get("depth") or "unknown",
-            "demo": bool(data.get("demo")),
-            "warning": LAST_LOAD_WARNING,
-        }
+    return _store_scan(data)
+
+
+def reload_scan_results(filepath: str):
+    """Re-read a watched scan file (auto-refresh) — never raises.
+
+    Same tolerant loading as ``load_scan_results``; history is upserted, so
+    repeated reloads refresh the entry instead of growing the list.
+    """
+    try:
+        return load_scan_results(filepath)
+    except Exception as exc:  # a hostile file must not kill the watcher
+        global LAST_LOAD_WARNING
+        LAST_LOAD_WARNING = f"Reload of '{filepath}' failed: {exc}"
+        return None
+
+
+def _watch_loop(paths, interval: int, stop_event: threading.Event):
+    """Daemon loop: re-read watch paths every ``interval`` seconds.
+
+    Reload only happens when a file's mtime moved, so idle monitoring costs
+    nothing. Every error is swallowed (worst case: stale data + warning).
+    """
+    interval = _clamp_interval(interval)
+    mtimes = {}
+    while not stop_event.is_set():
+        if stop_event.wait(timeout=interval):
+            break
+        for path in paths:
+            try:
+                p = Path(path)
+                if not p.is_file():
+                    continue
+                mtime = p.stat().st_mtime
+                if mtimes.get(str(p)) == mtime:
+                    continue
+                mtimes[str(p)] = mtime
+                reload_scan_results(str(p))
+            except OSError:
+                continue
+
+
+def start_dashboard(host="127.0.0.1", port=5000, debug=False,
+                    monitor=False, interval=None, watch_paths=None):
+    """Start the web dashboard (binds to localhost by default).
+
+    ``monitor=True`` (or explicit ``watch_paths``) enables the client
+    auto-refresh loop: the page polls the API every ``interval`` seconds
+    and the server re-reads the watched files when they change on disk.
+    """
+    DASHBOARD_CONFIG["auto_refresh"] = bool(monitor) or bool(watch_paths)
+    DASHBOARD_CONFIG["interval_s"] = _clamp_interval(
+        interval if interval is not None else 60
     )
-    return target
+    paths = [str(p) for p in (watch_paths or []) if str(p).strip()]
+    DASHBOARD_CONFIG["watch_paths"] = paths
 
+    if DASHBOARD_CONFIG["auto_refresh"] and paths:
+        stop_event = threading.Event()
+        watcher = threading.Thread(
+            target=_watch_loop,
+            args=(paths, DASHBOARD_CONFIG["interval_s"], stop_event),
+            daemon=True,
+            name="oe-dashboard-watch",
+        )
+        watcher.start()
 
-def start_dashboard(host="127.0.0.1", port=5000, debug=False):
-    """Start the web dashboard (binds to localhost by default)."""
     print(f"[*] Starting OSINT EYE Dashboard at http://{host}:{port}")
+    if DASHBOARD_CONFIG["auto_refresh"]:
+        print(
+            f"[*] Auto-refresh ON — polling every "
+            f"{DASHBOARD_CONFIG['interval_s']}s"
+        )
     app.run(host=host, port=port, debug=debug)
 
 
