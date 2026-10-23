@@ -30,13 +30,10 @@ classifiers = [
 # flask/textual aquí fuera y dejar el base mínimo.
 dependencies = [
     "aiohttp>=3.9.0",
-    "beautifulsoup4>=4.12.0",
     "dnspython>=2.4.0",
     "flask>=3.0.0",
     "ipwhois>=1.2.0",
-    "lxml>=4.9.0",
     "networkx>=3.0",
-    "nvdlib>=0.6.0",
     "pyvis>=0.3.2",
     "python-nmap>=0.7.1",
     "python-whois>=0.9.0",
@@ -44,7 +41,7 @@ dependencies = [
     "requests>=2.31.0",
     "rich>=13.0.0",
     "textual>=0.40.0",
-    "waybackpy>=3.0.0",
+    "urllib3>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -57,7 +54,7 @@ osint-eye = "osint_eye:main"
 
 [project.urls]
 Repository = "https://github.com/Ruby570bocadito/OSINT-EYE"
-Changelog = "https://github.com/Ruby570bocadito/OSINT-EYE/blob/master/CHANGELOG.md"
+Changelog = "https://github.com/Ruby570bocadito/OSINT-EYE/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 py-modules = ["osint_eye"]

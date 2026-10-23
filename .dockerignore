@@ -14,7 +14,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+coverage.xml
 htmlcov/
+dist/
+build/
+*.egg-info/
 
 # Salidas de escaneo y borradores de agentes (se montan como volumen)
 output/

@@ -9,6 +9,7 @@ dist/
 build/
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 .mypy_cache/
 .ruff_cache/
@@ -39,6 +40,8 @@ Thumbs.db
 /osint_eye_*_graph.html
 /osint_eye_*_burp.xml
 /osint_eye_*_msf.json
+/osint_eye_*.sarif
+/osint_eye_*.csv
 /bounty_report_*.md
 /attack_surface_*.html
 output/
