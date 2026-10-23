@@ -19,11 +19,11 @@ class BaseModule(ABC):
     requires_api_key: bool = False
 
     @abstractmethod
-    async def run(self, target: str, **kwargs) -> dict[str, Any]:
+    async def run(self, target: str, **kwargs: Any) -> dict[str, Any]:
         """Execute the module against a target"""
         raise NotImplementedError
 
-    def get_info(self) -> dict:
+    def get_info(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -48,7 +48,7 @@ class _UnavailableBuiltin:
         self.requires_api_key = False
         self._reason = reason
 
-    def get_info(self) -> dict:
+    def get_info(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -57,7 +57,7 @@ class _UnavailableBuiltin:
             "requires_api_key": self.requires_api_key,
         }
 
-    async def run(self, target: str, **kwargs) -> dict[str, Any]:
+    async def run(self, target: str, **kwargs: Any) -> dict[str, Any]:
         return {
             "target": target,
             "error": f"Module '{self.name}' is unavailable: {self._reason}",
@@ -68,11 +68,11 @@ class _UnavailableBuiltin:
 class PluginManager:
     """Manage and load OSINT EYE plugins"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.plugins: dict[str, Any] = {}
-        self._builtin_plugins = []
+        self._builtin_plugins: list[Any] = []
 
-    def register(self, plugin: Any):
+    def register(self, plugin: Any) -> None:
         """Register a plugin instance (must expose ``name`` and ``run``)"""
         name = getattr(plugin, "name", None)
         if not name or not callable(getattr(plugin, "run", None)):
@@ -83,12 +83,12 @@ class PluginManager:
             return
         self.plugins[name] = plugin
 
-    def unregister(self, name: str):
+    def unregister(self, name: str) -> None:
         """Unregister a plugin"""
         if name in self.plugins:
             del self.plugins[name]
 
-    def load_builtin(self):
+    def load_builtin(self) -> None:
         """Load all built-in modules.
 
         A built-in whose constructor fails (e.g. NetworkScanner without the
@@ -131,7 +131,7 @@ class PluginManager:
                 print(f"[!] Built-in '{name}' unavailable: {reason}")
                 self.plugins[name] = _UnavailableBuiltin(name, reason)
 
-    def load_from_directory(self, plugin_dir: str):
+    def load_from_directory(self, plugin_dir: str) -> None:
         """Load plugins from a directory.
 
         Broken plugin files (syntax errors, missing imports, bad classes) are
@@ -182,9 +182,9 @@ class PluginManager:
                 # Never leave broken modules registered under sys.modules.
                 sys.modules.pop(module_name, None)
 
-    def list_plugins(self) -> list[dict]:
+    def list_plugins(self) -> list[dict[str, Any]]:
         """List all loaded plugins"""
-        result = []
+        result: list[dict[str, Any]] = []
         for name, p in self.plugins.items():
             if hasattr(p, "get_info"):
                 result.append({**p.get_info(), "loaded": True})
@@ -218,7 +218,7 @@ class PluginTemplate(BaseModule):
     author = "built-in"
     requires_api_key = False
 
-    async def run(self, target: str, **kwargs) -> dict[str, Any]:
+    async def run(self, target: str, **kwargs: Any) -> dict[str, Any]:
         """Implement your scanning logic here"""
         results = {
             "target": target,

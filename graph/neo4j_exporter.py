@@ -1,9 +1,10 @@
 """OSINT EYE - Neo4j Cypher Graph Exporter"""
 
 import re
+from typing import Any
 
 
-def _cypher_str(value) -> str:
+def _cypher_str(value: Any) -> str:
     """Escape a Python value as a single-quoted Cypher string literal."""
     if value is None:
         return ""
@@ -13,7 +14,7 @@ def _cypher_str(value) -> str:
     return s.replace("\\", "\\\\").replace("'", "\\'")
 
 
-def _neo4j_label(value, default: str = "Unknown") -> str:
+def _neo4j_label(value: Any, default: str = "Unknown") -> str:
     """Sanitize a node type into a valid Neo4j label (PascalCase-ish)."""
     text = str(value or default).strip()
     # Keep only word characters; Neo4j labels cannot contain spaces/symbols.
@@ -23,7 +24,7 @@ def _neo4j_label(value, default: str = "Unknown") -> str:
     return text[0].upper() + text[1:]
 
 
-def _neo4j_rel_type(value, default: str = "RELATED_TO") -> str:
+def _neo4j_rel_type(value: Any, default: str = "RELATED_TO") -> str:
     """Sanitize an edge label into a valid Neo4j relationship type (UPPER_SNAKE)."""
     text = str(value or "").strip().upper()
     text = re.sub(r"[^\w]", "_", text)
@@ -34,9 +35,9 @@ def _neo4j_rel_type(value, default: str = "RELATED_TO") -> str:
 class Neo4jExporter:
     """Exports OSINT EYE Graph to Neo4j Cypher queries (Neo4j 5+ syntax)."""
 
-    def __init__(self, graph_data: dict):
-        self.nodes: list[dict] = graph_data.get("nodes") or []
-        self.edges: list[dict] = graph_data.get("edges") or []
+    def __init__(self, graph_data: dict[str, Any]):
+        self.nodes: list[dict[str, Any]] = graph_data.get("nodes") or []
+        self.edges: list[dict[str, Any]] = graph_data.get("edges") or []
 
     def generate_cypher(self) -> str:
         """Generates the full .cypher import script"""
@@ -72,11 +73,11 @@ class Neo4jExporter:
 
         # 3. Add Edges (edges whose endpoints were skipped are ignored)
         queries.append("// --- Edges ---")
-        node_by_id = {}
+        node_by_id: dict[str, dict[str, Any]] = {}
         for n in self.nodes:
-            nid = n.get("id")
-            if nid is not None and nid != "":
-                node_by_id[str(nid)] = n
+            raw_nid: Any = n.get("id")
+            if raw_nid is not None and raw_nid != "":
+                node_by_id[str(raw_nid)] = n
         for edge in self.edges:
             # GraphBuilder uses "source"/"target"; AssetCorrelator graphs use
             # "from"/"to" (with integer ids). Accept both.

@@ -6,7 +6,8 @@ import ssl
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from types import TracebackType
+from typing import Any, ClassVar, cast
 
 import aiohttp
 
@@ -21,10 +22,12 @@ class AsyncConfig:
     retries: int = 2
     stealth: bool = False
     paranoid: bool = False
-    proxy: str = None
+    proxy: str | None = None
     tor: bool = False
 
-    USER_AGENTS = [
+    # ClassVar: atributo de clase, no campo del dataclass (sin anotación no
+    # sería campo, y anotarlo sin ClassVar lo convertiría en campo mutable).
+    USER_AGENTS: ClassVar[list[str]] = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/605.1.15 Safari/605.1.15",
         "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
@@ -58,18 +61,18 @@ class AsyncSession:
     able to probe misconfigured/self-signed lab hosts).
     """
 
-    def __init__(self, config: AsyncConfig = None):
+    def __init__(self, config: AsyncConfig | None = None):
         self.config = config or AsyncConfig()
-        self._session = None
+        self._session: aiohttp.ClientSession | None = None
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent)
-        self._last_request = 0
+        self._last_request: float = 0
         # aiohttp only accepts a proxy per-request, never on ClientSession().
         self._proxy = self.config.proxy
         if not self._proxy and self.config.tor:
             self._proxy = "socks5://127.0.0.1:9050"
-        self.stats = {"requests": 0, "errors": 0, "retries": 0}
+        self.stats: dict[str, int] = {"requests": 0, "errors": 0, "retries": 0}
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AsyncSession":
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -89,18 +92,23 @@ class AsyncSession:
         )
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self._session:
             await self._session.close()
 
-    async def _apply_rate_limit(self):
+    async def _apply_rate_limit(self) -> None:
         delay = self.config.get_delay()
         elapsed = time.time() - self._last_request
         if elapsed < delay:
             await asyncio.sleep(delay - elapsed)
         self._last_request = time.time()
 
-    def _merge_headers(self, kwargs: dict) -> dict:
+    def _merge_headers(self, kwargs: dict[str, Any]) -> dict[str, str]:
         """Merge per-request headers (popped once, before any retry)."""
         headers = {"User-Agent": self.config.get_ua()}
         custom = kwargs.pop("headers", None)
@@ -108,7 +116,9 @@ class AsyncSession:
             headers.update(custom)
         return headers
 
-    async def get(self, url: str, **kwargs) -> aiohttp.ClientResponse | None:
+    async def get(
+        self, url: str, **kwargs: Any
+    ) -> aiohttp.ClientResponse | None:
         async with self._semaphore:
             await self._apply_rate_limit()
             headers = self._merge_headers(kwargs)
@@ -116,9 +126,9 @@ class AsyncSession:
             for attempt in range(self.config.retries + 1):
                 try:
                     self.stats["requests"] += 1
-                    resp = await self._session.get(
-                        url, headers=headers, proxy=self._proxy, **kwargs
-                    )
+                    resp = await cast(
+                        aiohttp.ClientSession, self._session
+                    ).get(url, headers=headers, proxy=self._proxy, **kwargs)
                     return resp
                 except (aiohttp.ClientError, asyncio.TimeoutError):
                     self.stats["errors"] += 1
@@ -127,8 +137,13 @@ class AsyncSession:
                         await asyncio.sleep(2**attempt)
                     else:
                         return None
+            # Alcanzable solo con AsyncConfig(retries=-1) (range vacío); el
+            # código original devolvía None implícito.
+            return None
 
-    async def post(self, url: str, **kwargs) -> aiohttp.ClientResponse | None:
+    async def post(
+        self, url: str, **kwargs: Any
+    ) -> aiohttp.ClientResponse | None:
         async with self._semaphore:
             await self._apply_rate_limit()
             headers = self._merge_headers(kwargs)
@@ -136,9 +151,9 @@ class AsyncSession:
             for attempt in range(self.config.retries + 1):
                 try:
                     self.stats["requests"] += 1
-                    resp = await self._session.post(
-                        url, headers=headers, proxy=self._proxy, **kwargs
-                    )
+                    resp = await cast(
+                        aiohttp.ClientSession, self._session
+                    ).post(url, headers=headers, proxy=self._proxy, **kwargs)
                     return resp
                 except (aiohttp.ClientError, asyncio.TimeoutError):
                     self.stats["errors"] += 1
@@ -147,8 +162,11 @@ class AsyncSession:
                         await asyncio.sleep(2**attempt)
                     else:
                         return None
+            # Alcanzable solo con AsyncConfig(retries=-1) (range vacío); el
+            # código original devolvía None implícito.
+            return None
 
-    async def get_text(self, url: str, **kwargs) -> str | None:
+    async def get_text(self, url: str, **kwargs: Any) -> str | None:
         resp = await self.get(url, **kwargs)
         if resp:
             try:
@@ -157,11 +175,12 @@ class AsyncSession:
                 return None
         return None
 
-    async def get_json(self, url: str, **kwargs) -> dict | None:
+    async def get_json(self, url: str, **kwargs: Any) -> dict[str, Any] | None:
         resp = await self.get(url, **kwargs)
         if resp:
             try:
-                return await resp.json()
+                data: dict[str, Any] = await resp.json()
+                return data
             except Exception:
                 return None
         return None
@@ -170,20 +189,25 @@ class AsyncSession:
 class AsyncTaskRunner:
     """Run async tasks with progress tracking"""
 
-    def __init__(self, config: AsyncConfig = None):
+    def __init__(self, config: AsyncConfig | None = None):
         self.config = config or AsyncConfig()
-        self.results = []
-        self.errors = []
+        self.results: list[Any] = []
+        self.errors: list[dict[str, Any]] = []
 
     async def run_batch(
-        self, func: Callable, items: list, *args, **kwargs
-    ) -> list:
+        self, func: Callable[..., Any], items: list[Any], *args: Any, **kwargs: Any
+    ) -> list[Any]:
         """Run function on all items concurrently"""
         return await self.run_batch_with_progress(func, items, None, *args, **kwargs)
 
     async def run_batch_with_progress(
-        self, func: Callable, items: list, progress_cb: Callable = None, *args, **kwargs
-    ) -> list:
+        self,
+        func: Callable[..., Any],
+        items: list[Any],
+        progress_cb: Callable[..., Any] | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> list[Any]:
         """Run function with progress callback"""
         self.results = []
         self.errors = []
@@ -192,7 +216,7 @@ class AsyncTaskRunner:
 
         semaphore = asyncio.Semaphore(self.config.max_concurrent)
 
-        async def _run(item):
+        async def _run(item: Any) -> Any:
             nonlocal completed
             async with semaphore:
                 try:
@@ -205,7 +229,7 @@ class AsyncTaskRunner:
                     return None
                 finally:
                     completed += 1
-                    if progress_cb:
+                    if progress_cb is not None:
                         progress_cb(completed, total)
 
         tasks = [_run(item) for item in items]
@@ -214,18 +238,20 @@ class AsyncTaskRunner:
         return self.results
 
 
-async def async_get_many(urls: list[str], config: AsyncConfig = None) -> dict[str, Any]:
+async def async_get_many(
+    urls: list[str], config: AsyncConfig | None = None
+) -> dict[str, Any]:
     """Fetch multiple URLs concurrently"""
     config = config or AsyncConfig()
-    results = {}
+    results: dict[str, Any] = {}
 
     async with AsyncSession(config) as session:
 
-        async def fetch(url):
+        async def fetch(url: str) -> tuple[str, str | None]:
             text = await session.get_text(url)
             return url, text
 
-        done = await asyncio.gather(
+        done: list[Any] = await asyncio.gather(
             *(fetch(url) for url in urls), return_exceptions=True
         )
 
@@ -246,7 +272,7 @@ async def async_get_many(urls: list[str], config: AsyncConfig = None) -> dict[st
 
 if __name__ == "__main__":
 
-    async def main():
+    async def main() -> None:
         config = AsyncConfig(max_concurrent=20, stealth=True)
 
         async with AsyncSession(config) as session:

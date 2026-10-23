@@ -50,7 +50,7 @@ dependencies = [
 [project.optional-dependencies]
 ui = ["flask>=3.0.0", "textual>=0.40.0"]
 pdf = ["reportlab>=4.0.0"]
-dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "ruff>=0.4.0"]
+dev = ["mypy>=1.8.0", "pytest>=8.0.0", "pytest-cov>=4.1.0", "ruff>=0.4.0"]
 
 [project.scripts]
 osint-eye = "osint_eye:main"
@@ -84,3 +84,25 @@ select = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["ai", "core", "graph", "modules", "reporting", "ui"]
+
+[tool.mypy]
+# type-hints-core (PUL-2): adopción incremental de strict. Fase 1a estricta:
+# core.async_engine, core.plugins, graph.neo4j_exporter. Los módulos aún sin
+# tipar se relajan temporalmente en los overrides; cada fase posterior quita
+# entradas de esa lista al tipar su zona hasta dejar core/ y graph/ completos.
+python_version = "3.10"
+strict = true
+
+[[tool.mypy.overrides]]
+# Zonas pendientes de tipar (fases 1b/1c/2 de type-hints-core, IMP activo en
+# modules/): errors silenciados aquí, no en los ficheros ya estrictos.
+module = [
+    "core.correlator",
+    "core.logging_config",
+    "core.scan_diff",
+    "core.session_cache",
+    "graph.builder",
+    "modules",
+    "modules.*",
+]
+ignore_errors = true
