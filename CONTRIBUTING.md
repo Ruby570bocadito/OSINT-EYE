@@ -19,6 +19,14 @@ make coverage       # suite with coverage report
 make docker         # image build + --help smoke test
 ```
 
+Optional but recommended — git hooks that catch trailing whitespace, missing
+newlines at EOF and syntax errors before you commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
 Manual equivalent of `make install`, if you prefer:
 
 ```bash

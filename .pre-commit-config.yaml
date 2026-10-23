@@ -1,0 +1,24 @@
+# Hooks de pre-commit — OSINT EYE
+# Actívalos una vez por clon:  pip install pre-commit && pre-commit install
+#
+# El hook de ruff corre la MISMA puerta que el CI (E9). Cuando (PUL-2) ruff-config
+# deje el repo a 0 avisos con el ruleset completo de pyproject.toml, se puede
+# quitar el --select de aquí y de .github/workflows/ci.yml a la vez.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+        # data/wordlists/ es zona de IMP-1: sus ficheros se tocan en su zona.
+        exclude: ^data/
+      - id: trailing-whitespace
+        # Markdown usa espacios finales dobles como salto duro: no tocar.
+        exclude: ^data/|\.md$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.2
+    hooks:
+      - id: ruff
+        # El hook ya es "ruff check"; solo pasamos la puerta de CI.
+        args: ["--select", "E9", "--no-fix"]
