@@ -14,6 +14,11 @@ Reglas del equipo (PROTOCOLO §3):
 - **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
 - **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
 - **Empaquetado estándar**: `pyproject.toml` con metadatos completos, dependencias en paridad con `requirements.txt`, extras (`[ui]`, `[pdf]`, `[dev]`), entry point `osint-eye` y `pip install -e .` verificado desde cero.
+- **Control de scope (`--scope FILE` / `--exclude`)**: autorización explícita por dominio, wildcard
+  (`*.dominio`), IP o CIDR (IPv4/IPv6); los excludes siempre ganan; targets y candidatos fuera de scope
+  se omiten y quedan registrados en `results["scope"]["discarded"]` (target, módulo, motivo, timestamp).
+  Gateo activo en el orquestador (targets de CLI, candidatos de permutación y sondas de takeover);
+  archivo de scope inválido = error de uso limpio antes de escanear.
 - **Logging real de librería (`--log-level`, `--log-file`)**: `core/`, `graph/` y `reporting/` ya no usan
   `print()` — registran por el árbol `osint_eye` (`core/logging_config.py`, idempotente, stderr + fichero
   en modo append); Rich sigue siendo la única salida de usuario. Nivel por defecto INFO; nivel inválido es
