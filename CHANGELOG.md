@@ -57,6 +57,11 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Quickstart en el dashboard vacío/demo (dashboard-vacio-guiado)**: cuando el dashboard no tiene
+  escaneos o solo muestra datos demo, un panel «No scan data yet» ofrece los 3 comandos exactos del
+  CLI con botón de copiado (`--dashboard`, `--dashboard --monitor`, `--rich`); se oculta en cuanto
+  hay datos reales. Solo textContent/addEventListener (compatible CSP), sin recursos externos,
+  funciona en ambos temas.
 - **Tema claro en el dashboard**: el dashboard sigue `prefers-color-scheme` — paleta clara completa
   (tokens redefinidos en `@media (prefers-color-scheme: light)`, `color-scheme` coherente) con el
   oscuro como estado por defecto intacto; el topbar deja su rgba fijo por `--topbar-bg`, el anillo
