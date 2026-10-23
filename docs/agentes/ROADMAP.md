@@ -19,7 +19,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 ### IMP-1 — Colectores
 
 - [ ] (IMP-1) scope-collectores — aplicar `Scope.allows()`/`filter_targets()` (core/scope.py) a las URLs derivadas dentro de cada módulo: dns brute-force de wordlist, endpoints, cloud (petición de IMP-3, ronda 4) — modules/
-- [ ] (IMP-1) security-headers — auditoría de cabeceras (CSP, HSTS, XFO, CORS permisivo, cookies sin Secure/HttpOnly) con severidad — modules/web/headers_audit.py
 - [ ] (IMP-1) tls-audit — versión TLS, cifrados débiles, caducidad y cadena del certificado con ssl de la stdlib — modules/certs/tls_audit.py
 - [ ] (IMP-1) js-secrets — extracción de secretos/endpoints/claves en ficheros JS (regex + entropía) con verificación de falsos positivos — modules/web/ (promocionada del Siguiente, ronda 4)
 - [ ] (IMP-1) favicon-hash — hash mmh3 del favicon para pivotar tecnologías y hosts relacionados — modules/web/ (promocionada del Siguiente, ronda 4)
@@ -165,3 +164,4 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - v2.2 ronda 4 — exit-codes-ci: --fail-on low|medium|high con decide_exit_code() y códigos 0/1/2/3 documentados en --help y CHANGELOG; verificado por DIR.
 - v2.2 ronda 4 — sarif-export: reporting/sarif.py (SARIF 2.1 con partialFingerprints estables, niveles error/warning/note) + test_reporting_sarif.py; verificado por DIR.
 - v2.2 ronda 4 — changelog-unreleased: reglas de equipo bajo el formato Keep a Changelog + sección [Unreleased] viva (la flota la usa en cada entrega); verificado por DIR.
+- v2.2 ronda 4 (tardía) — security-headers: modules/web/headers_audit.py (CORS, cookies Secure/HttpOnly, severidades, CSP/HSTS/XFO) + integración web_scanner + 210 líneas de tests; verificado por DIR (547 tests en verde).
