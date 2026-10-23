@@ -168,6 +168,72 @@ class TestAssetsEndpoint:
         assert {a["name"] for a in assets} == {"React", "Nginx"}
 
 
+class TestTechnologiesShapes:
+    """Every technologies payload shape seen in the wild must surface techs.
+
+    Regression: only the double-wrapper shape rendered techs — a REAL
+    web_scanner payload ({"url": ..., "technologies": [...]}) showed 0
+    technologies in the summary, the explorer and the TUI.
+    """
+
+    SHAPES = {
+        "list-direct": {"web": {"technologies": ["Nginx", "React"]}},
+        "wrapper-dict": {"web": {"technologies":
+                                  {"technologies": {"Nginx": {}, "React": {}}}}},
+        "wrapper-list": {"web": {"technologies": {"technologies": ["Nginx"]}}},
+        "scanner-real": {"web": {"url": "http://example.com",
+                                 "technologies": ["Nginx", "React"],
+                                 "status_code": 200}},
+    }
+
+    def _load(self, dashboard, modules):
+        dashboard.SCAN_RESULTS.clear()
+        dashboard.SCAN_RESULTS["t"] = {"target": "t", "modules": modules}
+
+    EXPECT = {
+        "list-direct": ["Nginx", "React"],
+        "wrapper-dict": ["Nginx", "React"],
+        "wrapper-list": ["Nginx"],
+        "scanner-real": ["Nginx", "React"],
+    }
+
+    def test_summary_accepts_every_shape(self, dashboard, client):
+        for name, modules in self.SHAPES.items():
+            self._load(dashboard, modules)
+            data = client.get("/api/scan/t/summary").get_json()
+            assert data["technologies"] == self.EXPECT[name], name
+
+    def test_assets_accept_every_shape(self, dashboard, client):
+        for name, modules in self.SHAPES.items():
+            self._load(dashboard, modules)
+            assets = client.get("/api/scan/t/assets").get_json()["assets"]
+            techs = {a["name"] for a in assets if a["type"] == "tech"}
+            assert techs == set(self.EXPECT[name]), name
+
+    def test_wrapper_keys_never_leak_as_names(self, dashboard, client):
+        # url/status_code/technologies are payload keys, not tech names
+        self._load(dashboard, self.SHAPES["scanner-real"])
+        data = client.get("/api/scan/t/summary").get_json()
+        assert "url" not in data["technologies"]
+        assert "status_code" not in data["technologies"]
+        assert "technologies" not in data["technologies"]
+
+    def test_bare_dict_without_wrapper_yields_empty(self, dashboard, client):
+        # SEG contract: a dict of metadata without the inner "technologies"
+        # key is payload, not names ({"url": ...} must stay empty)
+        self._load(dashboard, {"web": {"technologies":
+                                        {"url": "http://127.0.0.1:8599"}}})
+        data = client.get("/api/scan/t/summary").get_json()
+        assert data["technologies"] == []
+
+    def test_junk_shapes_degrade_to_empty(self, dashboard, client):
+        self._load(dashboard, {"web": {"technologies": 42}})
+        assert client.get("/api/scan/t/summary").get_json()["technologies"] == []
+        self._load(dashboard, {"web": {"technologies": {"technologies": [1, None, {"x": 1}]}}})
+        assets = client.get("/api/scan/t/assets").get_json()["assets"]
+        assert [a for a in assets if a["type"] == "tech"] == []
+
+
 class TestTemplateFilters:
     def test_template_serves_filter_controls(self, client):
         resp = client.get("/")

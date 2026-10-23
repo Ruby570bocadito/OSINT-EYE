@@ -152,6 +152,50 @@ def _as_str_list(value):
 _SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
+def _tech_names(value):
+    """Normalize a technologies payload to a de-duplicated list of names.
+
+    Every shape seen in the wild is accepted:
+    - plain list of names                      ["Nginx", "React"]
+    - dict of name -> info                     {"Nginx": {...}, ...}
+    - wrapper dict with an inner list/dict     {"technologies": [...| {...}]}
+    - the real web_scanner payload             {"url": ..., "technologies":
+                                                [...], "status_code": 200}
+    Junk degrades to an empty list; it never raises.
+    """
+    out: list = []
+
+    def _push(name):
+        text = str(name).strip()
+        if text and text not in out:
+            out.append(text)
+
+    def _from_container(cand):
+        if isinstance(cand, str):
+            _push(cand)
+        elif isinstance(cand, list):
+            for item in cand:
+                if isinstance(item, str):
+                    _push(item)
+                elif isinstance(item, dict):
+                    _push(item.get("name") or item.get("technology") or "")
+        elif isinstance(cand, dict):
+            for key in cand:
+                _push(key)
+
+    if isinstance(value, dict) and "technologies" in value:
+        # Wrapper dict ({"technologies": ...} — including the full scanner
+        # payload with url/status_code): only the inner value is the list of
+        # names; the wrapper's own keys are NOT technology names.
+        _from_container(value.get("technologies"))
+    elif isinstance(value, (list, str)):
+        # A bare list of names (or a single name) is authoritative too.
+        _from_container(value)
+    # A bare dict WITHOUT the "technologies" key (e.g. {"url": ...}) holds
+    # payload metadata, not names — yields [] (SEG regression contract).
+    return out
+
+
 def _norm_sev(value, default="info"):
     """Normalize any severity label to one of the filterable buckets."""
     sev = str(value or "").strip().lower()
@@ -204,14 +248,8 @@ def _collect_assets(results):
         )
         add("port", name, "network", "info", detail)
 
-    # Technologies (web module) — list of strings or dict keys.
-    techs = _as_dict(_as_dict(modules.get("web")).get("technologies")).get("technologies")
-    if isinstance(techs, list):
-        tech_names = [t for t in techs if isinstance(t, str)]
-    elif isinstance(techs, dict):
-        tech_names = [str(k) for k in techs]
-    else:
-        tech_names = []
+    # Technologies (web module) — any shape (see _tech_names).
+    tech_names = _tech_names(_as_dict(modules.get("web")).get("technologies"))
     for tech in tech_names:
         add("tech", tech, "web", "info")
 
@@ -477,15 +515,7 @@ def get_summary(target):
         s for s in services
         if isinstance(s, dict) and s.get("state") == "open"
     ]
-    techs = _as_dict(_as_dict(modules.get("web")).get("technologies")).get(
-        "technologies"
-    )
-    if isinstance(techs, list):
-        tech_list = [t for t in techs if isinstance(t, str)]
-    elif isinstance(techs, dict):
-        tech_list = [str(k) for k in techs.keys()]
-    else:
-        tech_list = []
+    tech_list = _tech_names(_as_dict(modules.get("web")).get("technologies"))
 
     return jsonify(
         {

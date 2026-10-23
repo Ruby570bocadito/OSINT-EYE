@@ -25,6 +25,11 @@ Reglas del equipo (PROTOCOLO §3):
 - **Dashboard**: el contador y el panel de tecnologías vuelven a reflejar el escaneo (el doble
   envoltorio `_as_dict()` en `get_summary()` convertía la lista de tecnologías detectadas en un
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
+- **Dashboard (normalizador único)**: `_tech_names()` unifica summary y `_collect_assets` — aceptan
+  todas las formas en la naturaleza (lista directa, wrapper dict/lista y el payload real de
+  web_scanner con url/status_code, cuyas claves ya no se filtran como nombres); un dict de
+  metadatos sin la clave `technologies` sigue devolviendo vacío (contrato de la regresión SEG).
+  El TUI hereda el fix al reutilizar `_collect_assets`.
 
 ### Seguridad
 - **fix-h011 (DKIM p= vacío)**: la auditoría email-security ya no da por protegido un dominio cuyo
