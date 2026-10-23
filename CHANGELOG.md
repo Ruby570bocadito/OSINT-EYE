@@ -10,6 +10,11 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Módulo `social_footprint`**: cuentas de la organización en GitHub, GitLab, Docker Hub, npm y PyPI
+  usando solo APIs públicas sin clave (nombre de cuenta derivado del dominio, o pasado
+  explícitamente); perfil, repos/proyectos recientes y paquetes del scope. Cada plataforma degrada
+  por separado (404 → no encontrada, rate limit/red → error con motivo); respuestas malformadas se
+  toleran. Disponible vía `--modules social_footprint`.
 - **Módulo `reverse_ip`**: vecinos en la misma IP (fuente pública sin clave, solo inteligencia: nunca
   se contacta a los vecinos) + descubrimiento de virtual hosts sondando la IP del objetivo con
   cabeceras `Host:` derivadas del dominio (wordlist `data/wordlists/vhosts.txt`) o pasadas

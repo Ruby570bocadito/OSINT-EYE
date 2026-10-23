@@ -24,6 +24,7 @@ from modules.network import NetworkScanner
 from modules.network.reverse_ip import ReverseIPVHostScanner
 from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.shodan_censys import ShodanCensysCollector
+from modules.osint.social_footprint import SocialFootprintScanner
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
 from core import __version__
@@ -289,6 +290,7 @@ class OSINTEye:
         self.cdn_detector = CDNDetector()
         self.cve_scanner = CVEScanner()
         self.host_intel = ShodanCensysCollector()
+        self.social_scanner = SocialFootprintScanner()
         self.correlator = AssetCorrelator()
         self.graph_builder = GraphBuilder()
         self.graph_analyzer = None
@@ -418,6 +420,15 @@ class OSINTEye:
         self._print(
             f"  Neighbours: {summary.get('neighbors', 0)} | Virtual hosts: {summary.get('vhosts_found', 0)}"
         )
+
+    def run_social_footprint(self):
+        self._print("Searching organisation footprint (GitHub/GitLab/Docker Hub/npm/PyPI)...")
+        result = self._safe_run(
+            "social_footprint", self.social_scanner.scan, self.target, scope=self.scope
+        )
+        self.results["modules"]["social_footprint"] = result
+        found = result.get("summary", {}).get("platforms_found", []) or []
+        self._print(f"  Accounts found: {', '.join(found) if found else 'none'}")
 
     def run_wayback(self):
         self._print("Running Wayback Machine...")
@@ -983,6 +994,7 @@ def scan_targets(targets: list, args):
                     "tls_audit": engine.run_tls_audit,
                     "shodan_censys": engine.run_shodan_censys,
                     "reverse_ip": engine.run_reverse_ip,
+                    "social_footprint": engine.run_social_footprint,
                     "wayback": engine.run_wayback,
                     "network": engine.run_network,
                     "whois": engine.run_whois,
@@ -1170,6 +1182,7 @@ MODULE_CATALOG = {
     "tls_audit": "TLS protocol versions, weak ciphers, certificate expiry and chain (stdlib ssl)",
     "shodan_censys": "Host intelligence from Shodan/Censys/FOFA (optional keys via OSINT_EYE_* env vars; skipped without them)",
     "reverse_ip": "Reverse-IP neighbours (public keyless source, intelligence only) + virtual host discovery via Host-header probing of the target IP",
+    "social_footprint": "Organisation accounts on GitHub/GitLab/Docker Hub/npm/PyPI via public keyless APIs (name derived from the domain)",
     "wayback": "Wayback Machine URL history and snapshot timeline",
     "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
     "whois": "Domain registration and ownership data",
