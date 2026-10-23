@@ -19,6 +19,7 @@ from typing import List, Dict, Optional, Set
 
 import requests
 
+from modules._http import HTTPClient
 from modules.web.ssrf_guard import safe_get
 
 
@@ -565,6 +566,7 @@ class SubdomainTakeoverDetector:
     MAX_BODY_SCAN = 51200
 
     def __init__(self):
+        self.http = HTTPClient(timeout=10)
         self.takeover_signatures = {
             "AWS S3": ["NoSuchBucket", "The specified bucket does not exist"],
             "GitHub Pages": ["There isn't a GitHub Pages site here"],
@@ -596,13 +598,11 @@ class SubdomainTakeoverDetector:
         # serve the provider error page over one of the two schemes).
         for scheme in ("https", "http"):
             try:
-                with requests.Session() as session:
-                    response = safe_get(
-                        session,
-                        f"{scheme}://{subdomain}",
-                        timeout=10,
-                        headers={"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"},
-                    )
+                response = safe_get(
+                    self.http,
+                    f"{scheme}://{subdomain}",
+                    timeout=10,
+                )
             except requests.RequestException:
                 continue
             except Exception:

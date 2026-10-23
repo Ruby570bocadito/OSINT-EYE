@@ -5,7 +5,7 @@ import socket
 from typing import Dict, List, Set
 import concurrent.futures
 
-import requests
+from modules._http import HTTPClient
 
 from modules.web.ssrf_guard import safe_get
 
@@ -15,12 +15,7 @@ class CloudBucketDetector:
 
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
+        self.session = HTTPClient(timeout=10)
 
         self.bucket_patterns = {
             "aws_s3": [
@@ -213,12 +208,7 @@ class EmailEnumerator:
 
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
+        self.session = HTTPClient(timeout=10)
 
         self.email_pattern = re.compile(
             r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
@@ -391,12 +381,7 @@ class CDNDetector:
 
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
+        self.session = HTTPClient(timeout=10)
 
         self.cdn_headers = {
             "Cloudflare": [

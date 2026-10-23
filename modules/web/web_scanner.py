@@ -1,10 +1,11 @@
 """OSINT EYE - Web Technology Detection & Endpoint Discovery"""
 
-import requests
 import re
+import concurrent.futures
 from typing import Dict, List
 from urllib.parse import urljoin
-import concurrent.futures
+
+from modules._http import HTTPClient, get_client
 
 from .ssrf_guard import safe_get
 
@@ -14,12 +15,7 @@ class TechDetector:
 
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
+        self.session = HTTPClient(timeout=timeout)
 
         self.tech_signatures = {
             "headers": {
@@ -225,12 +221,7 @@ class EndpointDiscovery:
 
     def __init__(self, timeout: int = 5):
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
+        self.session = HTTPClient(timeout=timeout)
 
         # Ordered dedup: probing the same path twice just wastes requests.
         self.common_paths = list(dict.fromkeys(self._build_common_paths()))
@@ -701,20 +692,16 @@ class SensitiveDataDetector:
         result = {"url": url, "findings": {}, "status_code": None, "content_length": 0}
 
         try:
-            # Per-call session (closed eagerly — this method may be invoked
-            # many times in a loop and each open session pins sockets).
-            with requests.Session() as session:
-                session.headers.update(
-                    {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                    }
-                )
+            # Shared client + SSRF guard: no per-call session teardown,
+            # unified timeout/User-Agent/retry policy, every redirect hop
+            # validated before following it.
+            session = get_client()
 
-                response = safe_get(session, url, timeout=10)
-                result["status_code"] = response.status_code
-                result["content_length"] = len(response.content)
+            response = safe_get(session, url, timeout=10)
+            result["status_code"] = response.status_code
+            result["content_length"] = len(response.content)
 
-                result["findings"] = self.scan_content(response.text)
+            result["findings"] = self.scan_content(response.text)
 
         except Exception as e:
             result["error"] = str(e)
