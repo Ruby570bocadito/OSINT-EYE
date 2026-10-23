@@ -14,9 +14,13 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
   Conflicto del CHANGELOG con la consolidación de PUL-1 resuelto conservando ambas estructuras.
   356 tests en verde al subir.
 
+- [x] (IMP-3) sarif-export — `reporting/sarif.py` (SarifExporter, 5 reglas OE001-OE005, niveles por
+  severidad, partialFingerprints estables, tolerante a shapes corruptos); `export_all` emite
+  `<base>.sarif`. Tests: `tests/test_reporting_sarif.py`. 395 tests en verde al subir.
+
 ## En curso
 
-- (IMP-3) sarif-export — `reporting/sarif.py` (SARIF 2.1 para GitHub Code Scanning).
+- (IMP-3) exit-codes-ci — `--fail-on high|medium|low` con códigos de salida documentados.
 
 ## Bloqueado
 
