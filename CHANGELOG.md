@@ -10,6 +10,10 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Códigos de salida para CI (`--fail-on low|medium|high`)**: el peor `attack_surface_score.severity`
+  entre los escaneos se compara con el umbral y fija el exit code — `0` dentro del umbral, `1` umbral
+  alcanzado/superado, `2` error de uso, `3` ningún target escaneado (todo fuera de scope); códigos
+  documentados en `--help` y pensados para pipelines.
 - **Exportación SARIF 2.1 (`<base>.sarif`)**: hallazgos de takeover, buckets públicos, secretos de GitHub,
   CVEs y ficheros sensibles como resultados SARIF (niveles error/warning/note según severidad, con
   `partialFingerprints` estables) listos para GitHub Code Scanning; shapes corruptos se saltan sin romper
