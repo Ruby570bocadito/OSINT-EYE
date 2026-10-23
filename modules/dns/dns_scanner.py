@@ -9,7 +9,9 @@ Contract consumed by osint_eye.py:
     "spf"/"dmarc" dicts (always present, even on partial failures).
     In "full" mode "subdomains" additionally merges the passive sources
     from modules/dns/passive_sources.py (deduplicated) and the per-source
-    detail is exposed under "passive_subdomains".
+    detail is exposed under "passive_subdomains". Wildcard detection
+    runs before enumeration and is reported under "wildcard" (candidates
+    whose only answer is the wildcard IP set are dropped).
 """
 
 import socket
@@ -22,6 +24,7 @@ import dns.query
 import dns.zone
 
 from modules.dns.passive_sources import PassiveSubdomainEnumerator
+from modules.dns.wildcard import WildcardDetector
 
 
 class DNSResolver:
@@ -156,6 +159,8 @@ class SubdomainEnumerator:
         self.timeout = timeout
         self.resolver = DNSResolver(timeout=timeout)
         self.found_subdomains: Set[str] = set()
+        # Candidates discarded because their only answer is the wildcard.
+        self.wildcard_skipped = 0
 
     def load_wordlist(self) -> List[str]:
         """Load wordlist from file (module-relative); never fails hard.
@@ -396,10 +401,51 @@ class SubdomainEnumerator:
         except (socket.gaierror, socket.herror):
             return None
 
-    def enumerate(self, domain: str, progress_callback=None) -> List[str]:
-        """Enumerate subdomains using bruteforce (bounded thread pool)."""
+    def _check_subdomain_with_wildcard(
+        self, subdomain: str, domain: str, detector: WildcardDetector
+    ) -> Optional[str]:
+        """Resolve and discard answers explained by a DNS wildcard.
+
+        With ``*.domain`` active, every random candidate resolves to the
+        wildcard IP set: those answers are counted and skipped instead of
+        being reported as real subdomains.
+        """
+        full = f"{subdomain}.{domain}"
+        try:
+            ip = socket.gethostbyname(full)
+        except (socket.gaierror, socket.herror, OSError):
+            return None
+        if detector.is_false_positive([ip]):
+            self.wildcard_skipped += 1
+            return None
+        return full
+
+    def enumerate(
+        self,
+        domain: str,
+        progress_callback=None,
+        wildcard_detector: Optional[WildcardDetector] = None,
+    ) -> List[str]:
+        """Enumerate subdomains using bruteforce (bounded thread pool).
+
+        ``wildcard_detector`` is opt-in: when provided (and its detection
+        says the zone has a wildcard), candidates whose only answer is the
+        wildcard IP set are discarded instead of reported.
+        """
         wordlist = self.load_wordlist()
         self.found_subdomains = set()
+        self.wildcard_skipped = 0
+
+        active = (
+            wildcard_detector
+            if wildcard_detector is not None and wildcard_detector.last_detection.get("wildcard")
+            else None
+        )
+        check = (
+            (lambda sub, dom: self._check_subdomain_with_wildcard(sub, dom, active))
+            if active is not None
+            else self._check_subdomain
+        )
 
         total = len(wordlist)
 
@@ -407,7 +453,7 @@ class SubdomainEnumerator:
             max_workers=self.threads
         ) as executor:
             futures = {
-                executor.submit(self._check_subdomain, sub, domain): sub
+                executor.submit(check, sub, domain): sub
                 for sub in wordlist
             }
 
@@ -500,7 +546,7 @@ class DNSScanner:
     report generation never break on partial results.
     """
 
-    def __init__(self, wordlist_path: str = None, passive: bool = True):
+    def __init__(self, wordlist_path: str = None, passive: bool = True, wildcard: bool = True):
         self.resolver = DNSResolver()
         # Default wordlist is module-relative (works from any CWD).
         self.subenum = SubdomainEnumerator(wordlist_path)
@@ -508,6 +554,9 @@ class DNSScanner:
         # Passive sources (no API keys) merged in "full" mode; each source
         # degrades independently, so a dead source never breaks the scan.
         self.passive_enumerator = PassiveSubdomainEnumerator() if passive else None
+        # Wildcard detection runs before bruteforce/permutations so that
+        # wildcard answers are filtered instead of reported (opt-out flag).
+        self.wildcard_detector = WildcardDetector() if wildcard else None
 
     def scan(self, domain: str, scan_type: str = "basic") -> Dict:
         """Perform a DNS scan; each step degrades independently on error."""
@@ -540,8 +589,32 @@ class DNSScanner:
 
         if scan_type in ("full", "subdomains"):
             print(f"[*] Enumerating subdomains for {domain}...")
+            # Wildcard detection first: with *.domain active, every random
+            # candidate resolves; the detector fingerprints the wildcard IP
+            # set so the enumerator can discard those false positives.
+            detector = None
+            results["wildcard"] = {
+                "domain": domain,
+                "wildcard": False,
+                "confidence": "none",
+                "wildcard_ips": [],
+                "probes": 0,
+                "resolved": 0,
+            }
+            if self.wildcard_detector is not None:
+                try:
+                    results["wildcard"] = self.wildcard_detector.detect(domain)
+                    if results["wildcard"].get("wildcard"):
+                        detector = self.wildcard_detector
+                except Exception as e:
+                    results["wildcard"]["error"] = str(e)
+                    print(f"[!] Wildcard detection failed for {domain}: {e}")
             try:
-                results["subdomains"] = self.subenum.enumerate(domain)
+                results["subdomains"] = self.subenum.enumerate(
+                    domain, wildcard_detector=detector
+                )
+                if detector is not None:
+                    results["wildcard"]["skipped"] = self.subenum.wildcard_skipped
             except Exception as e:
                 print(f"[!] Subdomain enumeration failed for {domain}: {e}")
 

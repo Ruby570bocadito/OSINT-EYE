@@ -55,6 +55,11 @@ Reglas del equipo (PROTOCOLO §3):
   escaneo DNS en modo `full` (merge con fuerza bruta/CT, detalle por fuente en
   `results["modules"]["dns"]["passive_subdomains"]`); cualquier fuente caída degrada a `status=error`
   sin romper el escaneo.
+- **Detección de DNS wildcard (`modules/dns/wildcard.py`)**: antes de la enumeración por fuerza bruta
+  y permutaciones se resuelven sondas aleatorias inexistentes; si responden, la zona tiene wildcard y
+  los candidatos cuya única respuesta es el set de IPs wildcard se descartan (con contador
+  `wildcard.skipped`) en vez de reportar miles de falsos positivos; detalle en
+  `results["modules"]["dns"]["wildcard"]` (confianza high/medium, IPs de la huella).
 - **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
   alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
   exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.
