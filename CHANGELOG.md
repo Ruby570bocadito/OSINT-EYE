@@ -10,6 +10,14 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Códigos de salida para CI (`--fail-on low|medium|high`)**: el peor `attack_surface_score.severity`
+  entre los escaneos se compara con el umbral y fija el exit code — `0` dentro del umbral, `1` umbral
+  alcanzado/superado, `2` error de uso, `3` ningún target escaneado (todo fuera de scope); códigos
+  documentados en `--help` y pensados para pipelines.
+- **Exportación SARIF 2.1 (`<base>.sarif`)**: hallazgos de takeover, buckets públicos, secretos de GitHub,
+  CVEs y ficheros sensibles como resultados SARIF (niveles error/warning/note según severidad, con
+  `partialFingerprints` estables) listos para GitHub Code Scanning; shapes corruptos se saltan sin romper
+  el log. Cableado en `export_all` y `SarifExporter` en `reporting/sarif.py`.
 - **CI de lint y cobertura**: job `lint` (ruff, gate de sintaxis E9) y job `coverage` (pytest-cov sobre `core/modules/graph/reporting/ui/ai`, `coverage.xml` como artifact y subida a Codecov); badge de cobertura en el README.
 - **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
 - **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
@@ -63,9 +71,18 @@ Reglas del equipo (PROTOCOLO §3):
   escaneo DNS en modo `full` (merge con fuerza bruta/CT, detalle por fuente en
   `results["modules"]["dns"]["passive_subdomains"]`); cualquier fuente caída degrada a `status=error`
   sin romper el escaneo.
+- **Detección de DNS wildcard (`modules/dns/wildcard.py`)**: antes de la enumeración por fuerza bruta
+  y permutaciones se resuelven sondas aleatorias inexistentes; si responden, la zona tiene wildcard y
+  los candidatos cuya única respuesta es el set de IPs wildcard se descartan (con contador
+  `wildcard.skipped`) en vez de reportar miles de falsos positivos; detalle en
+  `results["modules"]["dns"]["wildcard"]` (confianza high/medium, IPs de la huella).
 - **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
   alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
   exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.
+- **Dashboard — exportación del escaneo abierto**: botones JSON/CSV/MD en la barra superior que
+  descargan el escaneo activo (`GET /api/scan/<target>/export?format=…`); el CSV usa las filas del
+  explorador de hallazgos con neutralización de fórmulas, el MD reutiliza `MarkdownReporter` y los
+  nombres de descarga están saneados (sin path traversal ni inyección de cabeceras).
 
 ### Documentación
 - README fiel: badges de versión (2.1.1) y de tests sincronizados con el recuento real de la suite, árbol actualizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.

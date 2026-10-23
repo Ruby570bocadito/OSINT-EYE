@@ -20,6 +20,7 @@ from typing import List, Dict, Optional, Set
 import requests
 
 from modules._http import HTTPClient
+from modules.dns.wildcard import WildcardDetector
 from modules.web.ssrf_guard import safe_get
 
 
@@ -31,6 +32,8 @@ class SubdomainPermutator:
         self.threads = max(1, min(threads, 200))
         self.timeout = timeout
         self.found: Set[str] = set()
+        # Candidates discarded because their only answer is the wildcard.
+        self.wildcard_skipped = 0
 
         self.prefixes = [
             "www",
@@ -436,6 +439,20 @@ class SubdomainPermutator:
         except (socket.gaierror, socket.herror, OSError):
             return None
 
+    def _check_subdomain_with_wildcard(
+        self, subdomain: str, domain: str, detector: WildcardDetector
+    ) -> Optional[str]:
+        """Resolve and discard answers explained by a DNS wildcard."""
+        full = f"{subdomain}.{domain}"
+        try:
+            ip = socket.gethostbyname(full)
+        except (socket.gaierror, socket.herror, OSError):
+            return None
+        if detector.is_false_positive([ip]):
+            self.wildcard_skipped += 1
+            return None
+        return full
+
     def generate_permutations(
         self, domain: str, base_names: Optional[List[str]] = None
     ) -> List[str]:
@@ -509,8 +526,14 @@ class SubdomainPermutator:
         domain: str,
         discovered: Optional[List[str]] = None,
         wordlist: Optional[List[str]] = None,
+        wildcard_detector: Optional[WildcardDetector] = None,
     ) -> List[str]:
-        """Full permutation enumeration"""
+        """Full permutation enumeration.
+
+        ``wildcard_detector`` is opt-in: when provided (and its detection
+        says the zone has a wildcard), candidates whose only answer is the
+        wildcard IP set are discarded instead of reported.
+        """
         all_permutations = set()
 
         all_permutations.update(self.generate_permutations(domain))
@@ -524,12 +547,24 @@ class SubdomainPermutator:
         print(f"[*] Testing {len(all_permutations)} permutations for {domain}...")
 
         found: Set[str] = set()
+        self.wildcard_skipped = 0
+
+        active = (
+            wildcard_detector
+            if wildcard_detector is not None and wildcard_detector.last_detection.get("wildcard")
+            else None
+        )
+        check = (
+            (lambda sub, dom: self._check_subdomain_with_wildcard(sub, dom, active))
+            if active is not None
+            else self._check_subdomain
+        )
 
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=self.threads
         ) as executor:
             futures = {
-                executor.submit(self._check_subdomain, sub, domain): sub
+                executor.submit(check, sub, domain): sub
                 for sub in all_permutations
             }
 
