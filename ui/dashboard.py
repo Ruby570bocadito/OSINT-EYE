@@ -52,6 +52,121 @@ def _as_str_list(value):
     return out
 
 
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+
+def _norm_sev(value, default="info"):
+    """Normalize any severity label to one of the filterable buckets."""
+    sev = str(value or "").strip().lower()
+    return sev if sev in _SEVERITY_RANK else default
+
+
+def _collect_assets(results):
+    """Flatten a scan into filterable asset rows for the findings explorer.
+
+    Every extraction is defensive: missing keys, wrong types and malformed
+    entries are skipped instead of raising. Severity is normalized to
+    critical/high/medium/low/info so dashboard filters stay predictable.
+    """
+    modules = _as_dict(results.get("modules"))
+    assets = []
+    seen = set()
+
+    def add(atype, name, module, severity, detail=""):
+        name = str(name or "").strip()
+        if not name:
+            return
+        key = (atype, name, module)
+        if key in seen:
+            return
+        seen.add(key)
+        assets.append(
+            {
+                "type": atype,
+                "name": name,
+                "module": module,
+                "severity": _norm_sev(severity),
+                "detail": str(detail or "").strip(),
+            }
+        )
+
+    # Subdomains (dns / certs / permutation) — module kept per source.
+    for key in ("dns", "certs", "permutation"):
+        for sub in _as_str_list(_as_dict(modules.get(key)).get("subdomains")):
+            add("subdomain", sub, key, "info")
+
+    # Open ports (network module).
+    for svc in _as_list(_as_dict(modules.get("network")).get("services")):
+        if not isinstance(svc, dict) or svc.get("state") != "open":
+            continue
+        if svc.get("port") in (None, ""):
+            continue
+        name = f"{svc['port']}/{svc.get('protocol') or 'tcp'}"
+        detail = " ".join(
+            str(part) for part in (svc.get("service"), svc.get("version")) if part
+        )
+        add("port", name, "network", "info", detail)
+
+    # Technologies (web module) — list of strings or dict keys.
+    techs = _as_dict(_as_dict(modules.get("web")).get("technologies")).get("technologies")
+    if isinstance(techs, list):
+        tech_names = [t for t in techs if isinstance(t, str)]
+    elif isinstance(techs, dict):
+        tech_names = [str(k) for k in techs]
+    else:
+        tech_names = []
+    for tech in tech_names:
+        add("tech", tech, "web", "info")
+
+    # Emails.
+    for mail in _as_str_list(_as_dict(modules.get("emails")).get("emails_found")):
+        add("email", mail, "emails", "info")
+
+    # CVEs — severity from the first CVSS entry; description kept as detail.
+    for cve in _as_list(_as_dict(modules.get("cve")).get("cves")):
+        if not isinstance(cve, dict):
+            continue
+        ident = cve.get("id") or cve.get("cve_id") or cve.get("cve")
+        severity_list = _as_list(cve.get("severity"))
+        sev, score = "", ""
+        if severity_list and isinstance(severity_list[0], dict):
+            sev = severity_list[0].get("severity") or ""
+            score = severity_list[0].get("score")
+        detail = f"CVSS {score}" if score not in ("", None) else ""
+        desc = cve.get("description") or cve.get("summary")
+        if isinstance(desc, str) and desc.strip():
+            short = " ".join(desc.split())[:140]
+            if len(" ".join(desc.split())) > 140:
+                short += "…"
+            detail = f"{detail} — {short}" if detail else short
+        add("cve", ident, "cve", sev, detail)
+
+    # Cloud buckets — public exposure ranks high.
+    buckets = _as_dict(modules.get("cloud_buckets"))
+    for bucket in _as_list(buckets.get("found")):
+        if not isinstance(bucket, dict):
+            continue
+        url = bucket.get("url") or bucket.get("bucket") or bucket.get("name")
+        severity = "high" if bucket.get("public") else "info"
+        detail = str(bucket.get("provider") or "")
+        if bucket.get("listable"):
+            detail = (detail + " listable").strip()
+        add("bucket", url, "cloud", severity, detail)
+
+    # MITRE ATT&CK mappings.
+    for finding in _as_list(_as_dict(results.get("mitre")).get("findings")):
+        if not isinstance(finding, dict):
+            continue
+        name = f"{finding.get('technique_id') or ''} {finding.get('technique_name') or ''}".strip()
+        name = name or finding.get("technique") or ""
+        add("technique", name, "mitre", finding.get("severity"), finding.get("tactic") or "")
+
+    assets.sort(
+        key=lambda a: (_SEVERITY_RANK[a["severity"]], a["type"], a["name"].lower())
+    )
+    return assets
+
+
 # --- API --------------------------------------------------------------------
 
 @app.route("/")
@@ -155,6 +270,15 @@ def get_chains(target):
 
     results = SCAN_RESULTS[target]
     return jsonify(_as_list(results.get("attack_chains")))
+
+
+@app.route("/api/scan/<target>/assets", methods=["GET"])
+def get_assets(target):
+    if target not in SCAN_RESULTS:
+        return jsonify({"error": "Scan not found"}), 404
+
+    assets = _collect_assets(SCAN_RESULTS[target])
+    return jsonify({"target": target, "assets": assets, "count": len(assets)})
 
 
 @app.route("/api/scan/<target>/summary", methods=["GET"])

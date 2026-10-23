@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Añadido
+- **Dashboard — explorador de hallazgos con búsqueda y filtros**: nueva tabla unificada de activos
+  (subdominios, puertos, tecnologías, emails, CVEs, buckets y técnicas MITRE) con búsqueda de texto,
+  filtros por severidad, tipo de activo y módulo de origen; API `GET /api/scan/<target>/assets`
+  tolerante a datos malformados (nunca 500) y renderizado 100 % offline vía `textContent`.
+
 ## [2.1.1] - 2026-09-11
 
 ### Dashboard rediseñado

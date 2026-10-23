@@ -167,6 +167,40 @@
   }
   .g-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
 
+  /* ---------- filter bar (findings explorer) ---------- */
+  .filter-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .filter-bar input[type="search"] {
+    flex: 1 1 220px; min-width: 160px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 7px 12px; font: inherit; font-size: 13px; outline: none;
+    transition: border-color .15s;
+  }
+  .filter-bar input[type="search"]::placeholder { color: var(--faint); }
+  .filter-bar input[type="search"]:focus { border-color: var(--accent); }
+  .filter-bar select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 7px 10px; font: inherit; font-size: 13px; outline: none; cursor: pointer;
+    transition: border-color .15s;
+  }
+  .filter-bar select:focus { border-color: var(--accent); }
+  .filter-bar button {
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer;
+    transition: border-color .15s;
+  }
+  .filter-bar button:hover { border-color: var(--accent); }
+  .assets-note {
+    padding: 10px 18px; color: var(--faint); font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
   /* ---------- empty states ---------- */
   .empty {
     display: grid; place-items: center; gap: 6px;
@@ -235,6 +269,18 @@
       <div class="panel">
         <div class="panel-h"><h2>Attack Chains</h2><span class="meta" id="chains-meta"></span></div>
         <div id="chains-body"></div>
+      </div>
+
+      <div class="panel span-2">
+        <div class="panel-h"><h2>Findings Explorer</h2><span class="meta" id="assets-meta"></span></div>
+        <div class="filter-bar">
+          <input type="search" id="f-search" placeholder="Search asset or detail…" autocomplete="off" spellcheck="false">
+          <select id="f-severity" aria-label="Filter by severity"></select>
+          <select id="f-type" aria-label="Filter by asset type"></select>
+          <select id="f-module" aria-label="Filter by module"></select>
+          <button type="button" id="f-clear">Reset</button>
+        </div>
+        <div id="assets-body"></div>
       </div>
     </section>
 
@@ -342,6 +388,7 @@ async function selectTarget(target) {
   renderMitre(target);
   renderChains(target);
   renderGraph(target);
+  renderAssetsFor(target);
 }
 
 /* ---------- ports ---------- */
@@ -466,6 +513,104 @@ async function renderChains(target) {
     body.appendChild(box);
   });
 }
+
+/* ---------- findings explorer (search + filters) ---------- */
+let ASSETS = [];
+const ASSET_RENDER_CAP = 200;
+const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+function populateSelect(sel, values, label) {
+  const previous = sel.value;
+  clear(sel);
+  const all = el("option", null, label + ": all");
+  all.value = "all";
+  sel.appendChild(all);
+  values.forEach((v) => {
+    const opt = el("option", null, v);
+    opt.value = v;
+    sel.appendChild(opt);
+  });
+  const has = Array.from(sel.options).some((o) => o.value === previous);
+  sel.value = has ? previous : "all";
+}
+
+function assetPasses(a) {
+  const q = $("f-search").value.trim().toLowerCase();
+  if (q && !(a.name + " " + a.detail).toLowerCase().includes(q)) return false;
+  if ($("f-severity").value !== "all" && a.severity !== $("f-severity").value) return false;
+  if ($("f-type").value !== "all" && a.type !== $("f-type").value) return false;
+  if ($("f-module").value !== "all" && a.module !== $("f-module").value) return false;
+  return true;
+}
+
+function renderAssets() {
+  const body = $("assets-body");
+  const rows = ASSETS.filter(assetPasses);
+  $("assets-meta").textContent = ASSETS.length
+    ? rows.length + " of " + ASSETS.length + " shown"
+    : "";
+  if (!ASSETS.length) {
+    setEmpty(body, "No findings for this scan");
+    return;
+  }
+  if (!rows.length) {
+    setEmpty(body, "No findings match the current filters");
+    return;
+  }
+
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Severity", "Type", "Asset", "Module", "Detail"].forEach((h) => hr.appendChild(el("th", null, h)));
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  rows.slice(0, ASSET_RENDER_CAP).forEach((a) => {
+    const tr = el("tr");
+    const tdSev = el("td");
+    tdSev.appendChild(el("span", "sev " + a.severity, a.severity));
+    tr.appendChild(tdSev);
+    tr.appendChild(el("td", "muted", a.type));
+    tr.appendChild(el("td", "mono", a.name));
+    tr.appendChild(el("td", "muted", a.module));
+    tr.appendChild(el("td", "muted", a.detail || "—"));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  clear(body);
+  body.appendChild(table);
+  if (rows.length > ASSET_RENDER_CAP) {
+    const note = el("div", "assets-note",
+      "Showing first " + ASSET_RENDER_CAP + " of " + rows.length + " — refine the filters to narrow it down");
+    body.appendChild(note);
+  }
+}
+
+async function renderAssetsFor(target) {
+  const data = await getJSON(`/api/scan/${encodeURIComponent(target)}/assets`);
+  ASSETS = (data && data.assets) || [];
+
+  const uniq = (key) => [...new Set(ASSETS.map((a) => a[key]))];
+  populateSelect($("f-severity"),
+    uniq("severity").sort((x, y) => (SEV_ORDER[x] ?? 9) - (SEV_ORDER[y] ?? 9)), "Severity");
+  populateSelect($("f-type"), uniq("type").sort(), "Type");
+  populateSelect($("f-module"), uniq("module").sort(), "Module");
+  renderAssets();
+}
+
+(function wireAssetFilters() {
+  $("f-search").addEventListener("input", renderAssets);
+  ["f-severity", "f-type", "f-module"].forEach((id) => {
+    $(id).addEventListener("change", renderAssets);
+  });
+  $("f-clear").addEventListener("click", () => {
+    $("f-search").value = "";
+    ["f-severity", "f-type", "f-module"].forEach((id) => { $(id).value = "all"; });
+    renderAssets();
+  });
+})();
 
 /* ---------- graph (self-contained force layout, no CDN) ---------- */
 const NODE_COLORS = {
