@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Añadido
+- **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
+- **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
 - **Empaquetado estándar**: `pyproject.toml` con metadatos completos, dependencias en paridad con `requirements.txt`, extras (`[ui]`, `[pdf]`, `[dev]`), entry point `osint-eye` y `pip install -e .` verificado desde cero.
 
 ### Seguridad

@@ -1,0 +1,38 @@
+# Control de versiones y CI (no se necesitan dentro de la imagen)
+.git
+.github/
+.gitignore
+.dockerignore
+
+# Entornos virtuales y cachés de herramientas
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Salidas de escaneo y borradores de agentes (se montan como volumen)
+output/
+reports/
+downloads/
+.agent-tmp/
+.osint_eye/
+*.db
+
+# Documentación y assets (peso muerto en el contexto de build)
+docs/
+
+# Tests: la imagen ejecuta la herramienta, no la suite
+tests/
+
+# Secretos locales
+.env
+.env.local
+*.key
+*.pem
+secrets/
