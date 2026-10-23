@@ -7,7 +7,7 @@ self-contained (no CDN) and renders all scan data through textContent —
 never innerHTML — so scan results can never inject markup.
 """
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, Response, jsonify, request
 import json
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +16,39 @@ from core.scan_diff import ScanDiff
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
+
+# Upper bound for scan JSON files loaded from disk (memory-exhaustion guard:
+# a corrupted or hostile file must not pin the dashboard).
+MAX_SCAN_FILE_BYTES = 64 * 1024 * 1024
+
+# The page is fully self-contained (inline script/style, no CDN); the policy
+# forbids every external load and frames, so even injected markup could not
+# pull remote resources. Inline attributes stay allowed until the template
+# adopts per-request nonces (see Peticiones in estado/SEG.md).
+CSP_POLICY = (
+    "default-src 'none'; "
+    "script-src 'unsafe-inline'; "
+    "style-src 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "font-src 'self'; "
+    "base-uri 'none'; "
+    "form-action 'none'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.after_request
+def _security_headers(response):
+    """Attach hardening headers to every response, API and page alike."""
+    response.headers["Content-Security-Policy"] = CSP_POLICY
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 SCAN_RESULTS = {}
 SCAN_HISTORY = []
@@ -222,7 +255,9 @@ def _scan_diff(base_results, against_results):
 
 @app.route("/")
 def dashboard():
-    return render_template_string(_template())
+    # The template is static HTML (no Jinja placeholders): serve it verbatim
+    # instead of executing it through the Jinja engine.
+    return Response(_template(), mimetype="text/html")
 
 
 @app.route("/api/scans", methods=["GET"])
@@ -478,16 +513,26 @@ def load_scan_results(filepath: str) -> str:
     resolved = _resolve_results_path(filepath)
     if resolved is not None:
         try:
-            with open(resolved, encoding="utf-8") as f:
-                loaded = json.load(f)
-            if isinstance(loaded, dict):
-                data = loaded
-            else:
-                LAST_LOAD_WARNING = (
-                    f"{resolved} does not contain a JSON object; showing demo data."
-                )
-        except (OSError, ValueError) as exc:
-            LAST_LOAD_WARNING = f"Could not read {resolved}: {exc}"
+            too_big = resolved.stat().st_size > MAX_SCAN_FILE_BYTES
+        except OSError:
+            too_big = False
+        if too_big:
+            LAST_LOAD_WARNING = (
+                f"{resolved} is larger than {MAX_SCAN_FILE_BYTES} bytes; "
+                "refusing to load it — showing empty demo data."
+            )
+        else:
+            try:
+                with open(resolved, encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    data = loaded
+                else:
+                    LAST_LOAD_WARNING = (
+                        f"{resolved} does not contain a JSON object; showing demo data."
+                    )
+            except (OSError, ValueError, RecursionError) as exc:
+                LAST_LOAD_WARNING = f"Could not read {resolved}: {exc}"
     else:
         LAST_LOAD_WARNING = (
             f"Scan file '{filepath}' (or any matching .json) not found — "

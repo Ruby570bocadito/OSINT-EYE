@@ -16,6 +16,10 @@
   `CDNDetector` y `SubdomainTakeoverDetector` ya no siguen redirecciones a IP privadas/loopback/link-local
   (metadatos cloud 169.254.169.254 incluidos): cada hop se valida por esquema y direcciones resueltas, y el
   hop rechazado se reporta como error sin interrumpir el escaneo.
+- **Dashboard API endurecido**: cabeceras de seguridad en todas las respuestas (CSP que bloquea toda carga
+  externa y frames, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`), `Cache-Control: no-store`
+  en `/api/*`, límite de 64 MB por fichero de escaneo cargado y rechazo controlado de JSON con anidamiento
+  profundo; la plantilla se sirve verbatim sin pasar por el motor Jinja.
 
 ### Añadido
 - **Contrato de resultados versionado (`core/schema.py`)**: `SCHEMA_VERSION` ("2.0") embebido en cada
