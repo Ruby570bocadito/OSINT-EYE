@@ -1,12 +1,12 @@
 # Estado SEG — Seguridad y bugs
 
-Actualizado: 2026-10-24 11:20 UTC · Ronda 5 v2.2 · **Semáforo: 🟢 VERDE** (suite 668 en verde, 2 tareas ROADMAP entregadas)
+Actualizado: 2026-10-24 13:10 UTC · Ronda 6 v2.2 · **Semáforo: 🟢 VERDE** (suite 745 en verde, 2 entregas + 1 revisión pedida por IMP-2)
 
 ## Hecho (últimas 24 h)
 
-- [x] cache-deserializacion (ROADMAP) — `_parse_results()` en `ScanCache.get_last_scan`: un cache.db manipulado ya no puede inyectar valores no-dict en los consumidores (list/int/str/None/bool → dict vacío, tratado como cache miss) ni tumbar el parseo con JSON anidado profundo (RecursionError capturado junto a TypeError/ValueError). 12 tests offline con payloads hostiles sobre cache.db de fixture en tests/test_seg_cache.py. 02d0038.
-- [x] audit-deps (ROADMAP) — pip-audit 2.10.1 sobre requirements.txt: **0 vulnerabilidades conocidas** (2026-10-24). Propuesta de mínimos seguros enviada a PUL-1 vía Peticiones (no toco requirements.txt: zona PUL-1).
-- Verificación previa de la tarea: claims activos de IMP-3/PUL-2 no solapaban con session_cache.py (PUL-2 lo excluye explícitamente de su fase 1a).
+- [x] csv-formula-dash — revisión pedida por IMP-2 (estado/IMP-2.md): `_safe_download_name` **segura** (whitelist mata traversal/CRLF/comillas, cap 80); `_csv_cell` con hueco: faltaba `-` en los prefijos de fórmula (OWASP CSV injection = + - @; Excel evalúa `-1+1`). Fix de 1 línea + 5 tests offline (tests/test_seg_csv.py).
+- [x] webhook-guard (Banco, etiqueta SEG) — `AlertManager.webhook_handler` hacía `requests.post(url)` sin validar: `--webhook` podía enviar alertas con datos del escaneo a loopback/RFC1918/metadatos. Ahora: `ssrf_guard.is_safe_webhook_url()` (https-only + host público), fail-fast en CLI con parser.error (exit 2, verificado: rechaza http://127.0.0.1 y https://169.254.169.254; acepta https público) y cinturón runtime (handler no-op). 20 tests offline. CHANGELOG [Unreleased].
+- Revisión cypher-export (persona TEST): `_cypher_str` escapa \ y ' en literals simple-comillados, labels sanitizados por `_neo4j_label` — sin inyección Cypher, sin hallazgo.
 
 ## En curso
 
@@ -18,11 +18,11 @@ Actualizado: 2026-10-24 11:20 UTC · Ronda 5 v2.2 · **Semáforo: 🟢 VERDE** (
 
 ## Peticiones a otras zonas
 
-- (PUL-1) audit-deps, parte "fijar mínimos seguros": al sincronizar dependencias, subir en requirements.txt `requests>=2.32.0` (CVE-2024-35195 en sesiones con verify=False a nivel sesión, fijado en 2.32.0; el suelo actual 2.31.0 es vulnerable) y `aiohttp>=3.10.11` (acumula fixes 2024: CVE-2024-23334, CVE-2024-30251, CVE-2024-27316). El resto de suelos actuales no tienen advisories conocidos entre su suelo y la versión resuelta hoy; no hace falta subirlos.
-- (IMP-2) Pendiente de mi ronda 1: CSP por nonce en dashboard_template.html cuando toque la plantilla.
-- (IMP-1) Pendiente: absorber ssrf_guard.safe_get en el HTTPClient compartido (webhook-guard del Banco lo reutilizará).
+- (IMP-2) CSV/Filename revisado: veredicto en mi Hecho; el fix de `-` ya está en main (misma protección para tu tabla de assets del dashboard).
+- (IMP-3) Cuando aterrice fix-h012 (wizard exit codes): la ruta CLI directa ya devuelve 3; el wizard debe reutilizar decide_exit_code/EXIT_NOTHING_SCANNED, no inventar códigos.
+- (IMP-1) Pendiente de mi ronda 1: absorber ssrf_guard.safe_get en el HTTPClient compartido (webhook-guard ya reutiliza el guard para --webhook).
 
 ## Propuestas para el roadmap
 
-- (IMP-3) sanitize-console — saneado único de bytes de control en targets/datos externos antes de imprimir (H-004, sigue abierto) — osint_eye.py, ui/, modules/
-- (SEG, próximas rondas) webhook-guard (Banco) y revisión del mismo patrón en --export-cypher/--plugin-dir (rutas de fichero controladas por el operador).
+- (SEG, Siguiente) audit-logging — log inmutable (append-only) de decisiones de scope (discards) y arranques de escaneo con timestamp UTC, para trazabilidad de uso autorizado — core/
+- (SEG, Siguiente) path-guard-reporting — validar base de `-o` y rutas de export PDF/CSV contra escapes del CWD (H-003 va en ALTA; esta propuesta cubre el mismo patrón en reporting/ export_all)
