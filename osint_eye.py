@@ -37,7 +37,6 @@ from graph.builder import GraphBuilder, GraphAnalyzer
 from reporting.markdown_reporter import MarkdownReporter
 from reporting.mitre_mapper import MitreMapper
 from reporting.export import CSVExporter, HTMLReporter
-from reporting.pdf_reporter import PDFReporter
 from reporting.export_tools import BurpExporter, MetasploitExporter
 from reporting.sarif import SarifExporter
 from ui.rich_cli import RichCLI, instrument_engine
@@ -133,10 +132,10 @@ class OSINTEye:
         self.mitre_mapper = MitreMapper()
         self.csv_exporter = CSVExporter()
         self.html_reporter = HTMLReporter()
-        self.pdf_reporter = PDFReporter()
         self.burp_exporter = BurpExporter()
         self.msf_exporter = MetasploitExporter()
         self.sarif_exporter = SarifExporter()
+        self._pdf_reporter = None  # lazy: reportlab is the [pdf] extra
         self.chain_builder = AttackChainBuilder()
         self.bounty_reporter = BountyReporter()
         self.cli = RichCLI()
@@ -162,6 +161,15 @@ class OSINTEye:
             self.results["errors"].append(error_msg)
             print(f"[!] {error_msg}")
             return {}
+
+    @property
+    def pdf_reporter(self):
+        """Deferred PDFReporter so `import osint_eye` never pulls reportlab."""
+        if self._pdf_reporter is None:
+            from reporting.pdf_reporter import PDFReporter
+
+            self._pdf_reporter = PDFReporter()
+        return self._pdf_reporter
 
     def _print(self, msg):
         print(f"[*] {msg}")
