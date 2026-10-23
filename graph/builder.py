@@ -1,16 +1,17 @@
 """OSINT EYE - Attack Surface Graph Builder & Visualizer"""
 
-from core.logging_config import get_logger
-
-import networkx as nx
-from pyvis.network import Network
-from typing import Dict, List, Set
 from datetime import datetime
+from typing import Any
+
+import networkx as nx  # type: ignore[import-untyped]  # sin stubs oficiales; propuesta types-networkx en estado PUL-2
+from pyvis.network import Network  # type: ignore[import-untyped]  # pyvis no publica py.typed
+
+from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def _node_tech_set(raw) -> Set[str]:
+def _node_tech_set(raw: Any) -> set[str]:
     """Normalize a technologies payload (dict/list/set) into a set of strings."""
     if isinstance(raw, dict):
         return set(raw.get("technologies") or [])
@@ -19,7 +20,7 @@ def _node_tech_set(raw) -> Set[str]:
     return set()
 
 
-def _cve_score(cve: Dict) -> float:
+def _cve_score(cve: dict[str, Any]) -> float:
     """Extract the CVSS score from a CVE entry ([{"score": x, ...}])."""
     severity = cve.get("severity")
     if isinstance(severity, list) and severity and isinstance(severity[0], dict):
@@ -30,7 +31,7 @@ def _cve_score(cve: Dict) -> float:
 class GraphBuilder:
     """Build attack surface graph from OSINT data"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.graph = nx.DiGraph()
         self.node_colors = {
             "domain": "#3498db",
@@ -71,7 +72,7 @@ class GraphBuilder:
             "waf": 25,
         }
 
-    def ingest_all(self, scan_results: Dict):
+    def ingest_all(self, scan_results: dict[str, Any]) -> None:
         """Ingest all scan results into graph"""
         modules = scan_results.get("modules", {})
 
@@ -105,7 +106,9 @@ class GraphBuilder:
         if "cdn_waf" in modules:
             self._ingest_cdn_waf(modules["cdn_waf"])
 
-    def _add_node(self, node_id: str, node_type: str, label: str = None, **kwargs):
+    def _add_node(
+        self, node_id: str, node_type: str, label: str | None = None, **kwargs: Any
+    ) -> None:
         """Add a node to the graph"""
         if not self.graph.has_node(node_id):
             self.graph.add_node(
@@ -117,7 +120,7 @@ class GraphBuilder:
                 **kwargs,
             )
 
-    def _add_edge(self, source: str, target: str, label: str = ""):
+    def _add_edge(self, source: str, target: str, label: str = "") -> None:
         """Add an edge to the graph.
 
         Endpoints are auto-registered as generic nodes if unseen, so edges
@@ -132,7 +135,7 @@ class GraphBuilder:
         if not self.graph.has_edge(source, target):
             self.graph.add_edge(source, target, label=label, title=label)
 
-    def _ingest_dns(self, dns_data: Dict):
+    def _ingest_dns(self, dns_data: dict[str, Any]) -> None:
         """Ingest DNS data"""
         domain = dns_data.get("domain", "")
         if not domain:
@@ -157,7 +160,7 @@ class GraphBuilder:
                     self._add_node(value, "nameserver", value)
                     self._add_edge(domain, value, "nameserver")
 
-    def _ingest_permutation(self, permutation_data: Dict):
+    def _ingest_permutation(self, permutation_data: dict[str, Any]) -> None:
         """Ingest resolved permutation subdomains (verified hosts).
 
         osint_eye stores them under modules["permutation"]; without this
@@ -176,7 +179,7 @@ class GraphBuilder:
             self._add_node(subdomain, "subdomain", subdomain)
             self._add_edge(domain, subdomain, "has_subdomain")
 
-    def _ingest_certs(self, cert_data: Dict):
+    def _ingest_certs(self, cert_data: dict[str, Any]) -> None:
         """Ingest certificate data"""
         for cert in cert_data.get("certificates", []):
             cert_domain = cert.get("domain", "")
@@ -190,7 +193,7 @@ class GraphBuilder:
                 self._add_node(issuer, "issuer", issuer[:50])
                 self._add_edge(cert_domain, issuer, "issued_by")
 
-    def _ingest_network(self, network_data: Dict):
+    def _ingest_network(self, network_data: dict[str, Any]) -> None:
         """Ingest network scan data"""
         host = network_data.get("host", "")
         if not host:
@@ -215,7 +218,7 @@ class GraphBuilder:
                     self._add_node(version_key, "technology", version_key)
                     self._add_edge(port_key, version_key, "version")
 
-    def _ingest_whois(self, whois_data: Dict):
+    def _ingest_whois(self, whois_data: dict[str, Any]) -> None:
         """Ingest WHOIS data"""
         domain = whois_data.get("domain", "")
         if not domain:
@@ -232,12 +235,12 @@ class GraphBuilder:
             self._add_node(ns, "nameserver", ns)
             self._add_edge(domain, ns, "nameserver")
 
-    def _ingest_web(self, web_data: Dict):
+    def _ingest_web(self, web_data: dict[str, Any]) -> None:
         """Ingest web scan data"""
         for tech in _node_tech_set(web_data.get("technologies")):
             self._add_node(tech, "technology", tech)
 
-    def _ingest_cloud(self, cloud_data: Dict):
+    def _ingest_cloud(self, cloud_data: dict[str, Any]) -> None:
         """Ingest cloud bucket data"""
         for bucket in cloud_data.get("found", []):
             bucket_url = bucket.get("url", "")
@@ -248,7 +251,7 @@ class GraphBuilder:
                     self._add_node(provider, "technology", provider)
                     self._add_edge(bucket_url, provider, "hosted_on")
 
-    def _ingest_emails(self, email_data: Dict):
+    def _ingest_emails(self, email_data: dict[str, Any]) -> None:
         """Ingest email data"""
         domain = email_data.get("domain", "") or ""
         for email in email_data.get("emails_found") or []:
@@ -258,7 +261,7 @@ class GraphBuilder:
             if domain:
                 self._add_edge(domain, email, "contact_email")
 
-    def _ingest_cves(self, cve_data: Dict):
+    def _ingest_cves(self, cve_data: dict[str, Any]) -> None:
         """Ingest CVE data"""
         for cve in (cve_data.get("cves") or [])[:20]:
             cve_id = cve.get("id", "")
@@ -266,7 +269,7 @@ class GraphBuilder:
                 score = _cve_score(cve)
                 self._add_node(cve_id, "vulnerability", cve_id, score=score)
 
-    def _ingest_cdn_waf(self, cdn_data: Dict):
+    def _ingest_cdn_waf(self, cdn_data: dict[str, Any]) -> None:
         """Ingest CDN/WAF data"""
         if cdn_data.get("cdn"):
             self._add_node(cdn_data["cdn"], "cdn", cdn_data["cdn"])
@@ -274,9 +277,9 @@ class GraphBuilder:
         if cdn_data.get("waf"):
             self._add_node(cdn_data["waf"], "waf", cdn_data["waf"])
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict[str, Any]:
         """Get graph statistics"""
-        type_counts = {}
+        type_counts: dict[str, int] = {}
         for _, data in self.graph.nodes(data=True):
             node_type = data.get("type", "unknown")
             type_counts[node_type] = type_counts.get(node_type, 0) + 1
@@ -288,9 +291,9 @@ class GraphBuilder:
             "density": nx.density(self.graph),
         }
 
-    def find_critical_paths(self) -> List[Dict]:
+    def find_critical_paths(self) -> list[dict[str, Any]]:
         """Find critical attack paths"""
-        paths = []
+        paths: list[dict[str, Any]] = []
 
         domains = [
             n for n, d in self.graph.nodes(data=True) if d.get("type") == "domain"
@@ -319,13 +322,13 @@ class GraphBuilder:
 
         return sorted(paths, key=lambda x: x["length"])[:10]
 
-    def export_json(self) -> Dict:
+    def export_json(self) -> dict[str, Any]:
         """Export graph as JSON"""
-        nodes = []
+        nodes: list[dict[str, Any]] = []
         for node, data in self.graph.nodes(data=True):
             nodes.append({"id": node, **data})
 
-        edges = []
+        edges: list[dict[str, Any]] = []
         for source, target, data in self.graph.edges(data=True):
             edges.append({"source": source, "target": target, **data})
 
@@ -337,7 +340,7 @@ class GraphBuilder:
             "generated_at": datetime.now().isoformat(),
         }
 
-    def export_html(self, filename=None):
+    def export_html(self, filename: str | None = None) -> None:
         """Export interactive HTML visualization.
 
         Uses pyvis with inline (bundled) JS so the file is self-contained:
@@ -428,7 +431,7 @@ class GraphBuilder:
         try:
             import re
 
-            with open(filename, "r", encoding="utf-8") as f:
+            with open(filename, encoding="utf-8") as f:
                 html = f.read()
             cleaned = re.sub(
                 r"<(?:script|link)[^>]*bootstrap[^>]*>(?:\s*</script>)?",
@@ -448,15 +451,15 @@ class GraphBuilder:
 class GraphAnalyzer:
     """Analyze attack surface graph"""
 
-    def __init__(self, graph_builder: GraphBuilder):
+    def __init__(self, graph_builder: GraphBuilder) -> None:
         self.graph = graph_builder.graph
 
-    def get_central_nodes(self, top_n: int = 10) -> List[Dict]:
+    def get_central_nodes(self, top_n: int = 10) -> list[dict[str, Any]]:
         """Get most connected nodes"""
         centrality = nx.degree_centrality(self.graph)
         sorted_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)
 
-        results = []
+        results: list[dict[str, Any]] = []
         for node, score in sorted_nodes[:top_n]:
             data = self.graph.nodes[node]
             results.append(
@@ -470,11 +473,11 @@ class GraphAnalyzer:
 
         return results
 
-    def find_clusters(self) -> List[Dict]:
+    def find_clusters(self) -> list[dict[str, Any]]:
         """Find clusters in the graph"""
         try:
             components = list(nx.weakly_connected_components(self.graph))
-            clusters = []
+            clusters: list[dict[str, Any]] = []
 
             for i, component in enumerate(components):
                 clusters.append(
@@ -489,9 +492,9 @@ class GraphAnalyzer:
         except Exception:
             return []
 
-    def get_attack_surface_summary(self) -> Dict:
+    def get_attack_surface_summary(self) -> dict[str, Any]:
         """Get attack surface summary"""
-        type_counts = {}
+        type_counts: dict[str, int] = {}
         for _, data in self.graph.nodes(data=True):
             node_type = data.get("type", "unknown")
             type_counts[node_type] = type_counts.get(node_type, 0) + 1
@@ -509,7 +512,7 @@ if __name__ == "__main__":
 
     builder = GraphBuilder()
 
-    test_data = {
+    test_data: dict[str, Any] = {
         "modules": {
             "dns": {
                 "domain": "example.com",

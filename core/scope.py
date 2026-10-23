@@ -20,7 +20,10 @@ punycode). An empty include set means unrestricted: only excludes apply.
 """
 
 import ipaddress
+from collections.abc import Iterable
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 
@@ -63,7 +66,7 @@ def _normalise_target(value: str) -> str:
     return candidate
 
 
-def _is_ip(host: str):
+def _is_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     try:
         return ipaddress.ip_address(host)
     except ValueError:
@@ -95,13 +98,19 @@ class _DomainRule:
 class Scope:
     """In-memory scope: includes, excludes and the discard audit log."""
 
-    def __init__(self, includes=None, excludes=None):
-        self._domains = []  # list[_DomainRule], includes
-        self._excluded_domains = []
-        self._networks = []  # list[ipaddress._BaseNetwork], includes
-        self._excluded_networks = []
+    def __init__(
+        self,
+        includes: list[str] | None = None,
+        excludes: list[str] | None = None,
+    ) -> None:
+        self._domains: list[_DomainRule] = []
+        self._excluded_domains: list[_DomainRule] = []
+        self._networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+        self._excluded_networks: list[
+            ipaddress.IPv4Network | ipaddress.IPv6Network
+        ] = []
         self.unrestricted = not includes
-        self.discarded = []  # audit log of out-of-scope attempts
+        self.discarded: list[dict[str, str]] = []
 
         for entry in includes or []:
             self._add_entry(entry, excluded=False)
@@ -109,7 +118,7 @@ class Scope:
             self._add_entry(entry, excluded=True)
 
     # ── construction ────────────────────────────────────────────────────
-    def _add_entry(self, entry: str, excluded: bool):
+    def _add_entry(self, entry: str, excluded: bool) -> None:
         if not isinstance(entry, str) or not entry.strip():
             raise ScopeError(f"entrada de scope vacía: {entry!r}")
         cleaned = entry.strip()
@@ -123,14 +132,16 @@ class Scope:
         host = _normalise_target(cleaned)
         ip = _is_ip(host)
         if ip is not None:
-            network = ipaddress.ip_network(f"{ip}/32" if ip.version == 4 else f"{ip}/128")
+            network = ipaddress.ip_network(
+                f"{ip}/32" if ip.version == 4 else f"{ip}/128"
+            )
             (self._excluded_networks if excluded else self._networks).append(network)
             return
         rule = _DomainRule(host)
         (self._excluded_domains if excluded else self._domains).append(rule)
 
     @classmethod
-    def from_file(cls, path, excludes=None) -> "Scope":
+    def from_file(cls, path: str | Path, excludes: list[str] | None = None) -> "Scope":
         """Build a Scope from a text file (one entry per line).
 
         Blank lines and ``#`` comments are ignored. Any unparsable entry
@@ -138,8 +149,8 @@ class Scope:
         that into a clean usage error before a scan starts.
         """
         includes = []
-        with open(path, "r", encoding="utf-8") as handle:
-            for line_number, raw in enumerate(handle, start=1):
+        with open(path, encoding="utf-8") as handle:
+            for _line_number, raw in enumerate(handle, start=1):
                 line = raw.strip()
                 if not line or line.startswith("#"):
                     continue
@@ -191,7 +202,7 @@ class Scope:
         return "fuera de scope"
 
     # ── audit ───────────────────────────────────────────────────────────
-    def discard(self, target: str, module: str = "") -> dict:
+    def discard(self, target: str, module: str = "") -> dict[str, str]:
         """Record (and return) one out-of-scope attempt."""
         entry = {
             "target": str(target),
@@ -202,12 +213,12 @@ class Scope:
         self.discarded.append(entry)
         return entry
 
-    def filter_targets(self, targets, module: str = ""):
+    def filter_targets(self, targets: Iterable[str], module: str = "") -> list[str]:
         """Return the subset of ``targets`` inside scope, logging the rest.
 
         Order is preserved; every rejected target gets a discard entry.
         """
-        allowed = []
+        allowed: list[str] = []
         for target in targets:
             if self.allows(target):
                 allowed.append(target)
@@ -215,7 +226,7 @@ class Scope:
                 self.discard(target, module)
         return allowed
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Summary embedded in ``results["scope"]`` (JSON-safe)."""
         return {
             "unrestricted": self.unrestricted,
@@ -225,7 +236,10 @@ class Scope:
         }
 
 
-def ip_in_network(ip, network) -> bool:
+def ip_in_network(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    network: ipaddress.IPv4Network | ipaddress.IPv6Network,
+) -> bool:
     """Containment check that never raises on version mismatch."""
     try:
         return ip in network

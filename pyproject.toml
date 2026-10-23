@@ -96,12 +96,11 @@ python_version = "3.10"
 strict = true
 
 [[tool.mypy.overrides]]
-# Zonas pendientes de tipar (fases 1b/1c/2 de type-hints-core, IMP activo en
+# Zonas pendientes de tipar (fases 1d/2 de type-hints-core, IMP activo en
 # modules/): errors silenciados aquí, no en los ficheros ya estrictos.
 module = [
-    "core.logging_config",
+    "core.monitor",
     "core.scan_diff",
-    "graph.builder",
     "modules",
     "modules.*",
 ]
