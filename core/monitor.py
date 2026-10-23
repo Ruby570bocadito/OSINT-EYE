@@ -104,6 +104,16 @@ Data: {json.dumps(data, indent=2)}
 
     @staticmethod
     def webhook_handler(url: str):
+        from modules.web.ssrf_guard import is_safe_webhook_url
+
+        if not is_safe_webhook_url(url):
+            logger.error(
+                "Webhook URL refused (https and public host required; "
+                "private/metadata IPs are blocked): %s",
+                url,
+            )
+            return lambda *args, **kwargs: None
+
         def handler(alert_type, message, severity, data):
             try:
                 import requests

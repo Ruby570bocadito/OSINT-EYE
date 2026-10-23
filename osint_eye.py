@@ -1259,6 +1259,18 @@ Exit codes (CI):
         _print_module_catalog()
         return 0
 
+    # --webhook: outbound fetch of the operator's machine (monitor alerts).
+    # Fail fast like scope/config: https-only, public host (no loopback,
+    # RFC1918 or cloud metadata), so a typo never leaks scan data inwards.
+    if getattr(args, "webhook", None):
+        from modules.web.ssrf_guard import is_safe_webhook_url
+
+        if not is_safe_webhook_url(args.webhook):
+            parser.error(
+                "webhook: URL rechazada - exige https y un host público "
+                "(loopback, IPs privadas y metadatos cloud están bloqueados)"
+            )
+
     if not getattr(args, "targets", None):
         parser.error(
             "no targets given - pass one or more domains/IPs, or run without "

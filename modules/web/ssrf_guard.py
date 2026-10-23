@@ -120,6 +120,23 @@ def is_public_http_url(url: str, resolve: bool = True) -> bool:
     return all(not _is_non_public(addr) for addr in addresses)
 
 
+def is_safe_webhook_url(url: str) -> bool:
+    """https-only webhook URL whose host resolves to public address space.
+
+    The webhook is operator-supplied, but it is still an outbound fetch of
+    the operator's machine: a mistyped or hostile URL must not hand scan
+    data to loopback, RFC1918 space or the cloud metadata service. Stricter
+    than `is_public_http_url` on purpose: scheme is pinned to https.
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    return is_public_http_url(url)
+
+
 def safe_get(session: "requests.Session", url: str,
              timeout: float = 10, max_redirects: int = MAX_REDIRECTS,
              **kwargs) -> "requests.Response":

@@ -9,6 +9,12 @@ Reglas del equipo (PROTOCOLO §3):
 
 ## [Unreleased]
 
+### Seguridad
+- **webhook-guard**: `--webhook` valida la URL antes de arrancar el monitor (exige https y host
+  público; loopback, IPs privadas y metadatos cloud bloqueados reutilizando ssrf_guard); el
+  handler del monitor rechaza también en runtime — un typo nunca filtra datos del escaneo hacia
+  la red interna.
+
 ### Añadido
 - **Grafo avanzado**: la leyenda del grafo es ahora una barra de filtros por tipo de nodo (chips
   que atenúan lo excluido), búsqueda de nodos con resaltado, botón «Attack paths» que ilumina los
