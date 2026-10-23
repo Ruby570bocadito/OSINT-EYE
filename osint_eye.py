@@ -34,6 +34,7 @@ from reporting.mitre_mapper import MitreMapper
 from reporting.export import CSVExporter, HTMLReporter
 from reporting.pdf_reporter import PDFReporter
 from reporting.export_tools import BurpExporter, MetasploitExporter
+from reporting.sarif import SarifExporter
 from ui.rich_cli import RichCLI, instrument_engine
 from ai import AIEngine
 
@@ -130,6 +131,7 @@ class OSINTEye:
         self.pdf_reporter = PDFReporter()
         self.burp_exporter = BurpExporter()
         self.msf_exporter = MetasploitExporter()
+        self.sarif_exporter = SarifExporter()
         self.chain_builder = AttackChainBuilder()
         self.bounty_reporter = BountyReporter()
         self.cli = RichCLI()
@@ -623,6 +625,11 @@ class OSINTEye:
 
         msf_path = self.msf_exporter.export(self.results, output_base + "_msf.json")
         exports["metasploit"] = msf_path
+
+        sarif_path = self.sarif_exporter.export(
+            self.results, output_base + ".sarif"
+        )
+        exports["sarif"] = sarif_path
 
         return exports
 
