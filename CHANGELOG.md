@@ -51,6 +51,9 @@ Reglas del equipo (PROTOCOLO §3):
   escaneo DNS en modo `full` (merge con fuerza bruta/CT, detalle por fuente en
   `results["modules"]["dns"]["passive_subdomains"]`); cualquier fuente caída degrada a `status=error`
   sin romper el escaneo.
+- **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
+  alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
+  exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.
 
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
