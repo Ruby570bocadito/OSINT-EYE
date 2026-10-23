@@ -9,6 +9,11 @@ Reglas del equipo (PROTOCOLO §3):
 
 ## [Unreleased]
 
+### Cambiado
+- **README.es.md**: la galería Demo apunta al nuevo set de capturas regeneradas con fixtures 100 % offline
+  (`demo-scan.gif`, `wizard-auth`, `cli-progress`, `dashboard-dark`, `graph-view`, `report-pdf`); los
+  `demo_*.png`/`demo.gif` legacy (solo referenciados desde README.es.md) se eliminan del repo.
+
 ### Corregido
 - **Dashboard**: el contador y el panel de tecnologías vuelven a reflejar el escaneo (el doble
   envoltorio `_as_dict()` en `get_summary()` convertía la lista de tecnologías detectadas en un
