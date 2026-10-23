@@ -126,16 +126,29 @@ class ScanCache:
             row = cursor.fetchone()
 
             if row:
-                try:
-                    results = json.loads(row["results"]) if row["results"] else {}
-                except (TypeError, json.JSONDecodeError):
-                    results = {}
+                results = self._parse_results(row["results"])
                 return {
                     "timestamp": row["timestamp"],
                     "depth": row["depth"],
                     "results": results,
                 }
         return None
+
+    @staticmethod
+    def _parse_results(raw: str) -> dict:
+        """Deserialize the results column defensively.
+
+        The cache file lives on disk and can be manipulated: treat anything
+        that is not a JSON object as a cache miss (empty dict) so a tampered
+        or corrupt row never injects a non-dict into consumers.
+        """
+        try:
+            results = json.loads(raw) if raw else {}
+        except (TypeError, ValueError, RecursionError):
+            return {}
+        if not isinstance(results, dict):
+            return {}
+        return results
 
     def add_subdomain(self, target: str, subdomain: str, source: str, ip: str = None):
         """Add or update a subdomain"""
