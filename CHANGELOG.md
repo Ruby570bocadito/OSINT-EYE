@@ -16,6 +16,13 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Benchmarks offline reproducibles (`tests/bench/`)**: runner standalone (`python tests/bench/bench_runner.py`,
+  sin dependencias nuevas, sin red, no se recolecta por pytest) que mide 8 casos de core sobre datos
+  sintéticos — `Scope.allows()`/`filter_targets()`, ingest y consultas del `AssetCorrelator`,
+  `extract_findings` sobre ~1 500 hallazgos, `validate_results`, ciclo completo de `ScanCache` en
+  SQLite y parseo de `osint_eye.toml` — y compara cada caso contra su suelo en `floors.json`
+  (márgenes generosos): una caída por debajo del suelo sale con código 1 para pillar regresiones
+  groseras de rendimiento antes del release.
 - **Grafo avanzado**: la leyenda del grafo es ahora una barra de filtros por tipo de nodo (chips
   que atenúan lo excluido), búsqueda de nodos con resaltado, botón «Attack paths» que ilumina los
   caminos más cortos del target hacia los nodos de riesgo (CVEs/buckets, fallback puertos) vía BFS,

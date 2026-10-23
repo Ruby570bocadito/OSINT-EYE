@@ -1,0 +1,10 @@
+{
+  "scope_allows": 13062.76,
+  "scope_filter_targets": 22.47,
+  "correlator_ingest": 105.54,
+  "correlator_queries": 44.81,
+  "extract_findings": 21.04,
+  "schema_validate": 7128.13,
+  "cache_roundtrip": 238.89,
+  "config_parse": 746.78
+}
