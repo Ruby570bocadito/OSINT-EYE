@@ -173,6 +173,9 @@ Reglas del equipo (PROTOCOLO §3):
 - README fiel: badges de versión (2.1.1) y de tests sincronizados con el recuento real de la suite, árbol actualizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
 - docs/USAGE.md sincronizada con la CLI real: scope y autorización, modo CI con exit codes,
   logging de librería, configuración TOML, dashboard y variables de entorno `OSINT_EYE_*`.
+- Guías de contribución: `CONTRIBUTING.md` (setup con Makefile, reglas de suite offline y de
+  escaneo autorizado, checklist de PR), `SECURITY.md` (divulgación privada vía GitHub) y
+  plantillas de issue (bug/feature) y de pull request.
 
 ### Corregido
 - **Permutador DNS sondeaba FQDN duplicados**: los candidatos de `generate_*` ya son FQDN completos

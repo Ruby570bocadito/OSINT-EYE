@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a capability — start from the recon problem it solves.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The recon problem
+      description: What are you trying to learn about an authorized target that OSINT EYE cannot tell you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: The capability you would like, ideally with the module/flag/CLI surface you imagine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other tools, manual steps or workarounds you use today.
+  - type: checkboxes
+    id: zero-config
+    attributes:
+      label: Configuration cost
+      description: Features that work with zero configuration are preferred; sources needing keys must degrade gracefully when the key is absent.
+      options:
+        - label: This can work without any API key (or degrades gracefully without one)
+  - type: checkboxes
+    id: ethics
+    attributes:
+      label: Responsible use
+      description: OSINT EYE only collects from public sources and authorized targets.
+      options:
+        - label: This feature only queries public sources / targets the operator is authorized to test
+          required: true

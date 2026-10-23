@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/Ruby570bocadito/OSINT-EYE#readme
+    about: README and docs/USAGE.md cover installation, flags and the dashboard.
+  - name: Security report
+    url: https://github.com/Ruby570bocadito/OSINT-EYE/security/advisories/new
+    about: Vulnerabilities go through private reporting (see SECURITY.md), never public issues.

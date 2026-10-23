@@ -1,0 +1,68 @@
+name: Bug report
+description: Something broke or produced wrong output — tell us what, where and how to reproduce it offline.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reproduce the bug against `example.com`, `localhost` or a fixture — **never scan a
+        third-party target while debugging**, and redact real domains/IPs from anything you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Expected behavior vs actual behavior.
+      placeholder: "Expected: exit code 0 and a JSON report. Actual: traceback from modules/…"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Full command to reproduce
+      description: The exact command, run against example.com/localhost/fixture, plus the relevant output.
+      placeholder: "osint-eye example.com --depth quick --output scan.json"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: "`pip show osint-eye` or the commit hash of your checkout."
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - CLI (osint_eye.py)
+        - Collector module (modules/)
+        - Core (correlator, cache, scope, findings)
+        - Dashboard / Rich CLI / wizard (ui/)
+        - Reporting / exports (reporting/)
+        - Graph (graph/)
+        - AI (ai/)
+        - Docs
+        - Packaging / install
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS, Python version (python --version)."
+      placeholder: "Debian 12, Python 3.11.9"
+    validations:
+      required: true
+  - type: checkboxes
+    id: offline
+    attributes:
+      label: Offline confirmation
+      options:
+        - label: I reproduced this without scanning any third-party target
+          required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Logs (with `--log-level debug` if relevant), screenshots of your own dashboard, suspected cause.
