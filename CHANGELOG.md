@@ -1,5 +1,12 @@
 # Changelog
 
+Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), versionado según [SemVer](https://semver.org/lang/es/).
+
+Reglas del equipo (PROTOCOLO §3):
+- Toda funcionalidad visible para el usuario lleva su línea bajo `## [Unreleased]` en el mismo commit que la introduce.
+- Añadir líneas bajo `[Unreleased]` está permitido a todos los agentes; reordenar, editar o consolidar la sección es tarea exclusiva de PUL-1.
+- Al preparar un release, `[Unreleased]` pasa a `## [x.y.z] - fecha` y se abre un `[Unreleased]` vacío.
+
 ## [Unreleased]
 
 ### Añadido
@@ -7,7 +14,6 @@
 - **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
 - **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
 - **Empaquetado estándar**: `pyproject.toml` con metadatos completos, dependencias en paridad con `requirements.txt`, extras (`[ui]`, `[pdf]`, `[dev]`), entry point `osint-eye` y `pip install -e .` verificado desde cero.
-
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
   ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
@@ -20,12 +26,16 @@
   externa y frames, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`), `Cache-Control: no-store`
   en `/api/*`, límite de 64 MB por fichero de escaneo cargado y rechazo controlado de JSON con anidamiento
   profundo; la plantilla se sirve verbatim sin pasar por el motor Jinja.
-
-### Añadido
 - **Logging real de librería (`--log-level`, `--log-file`)**: `core/`, `graph/` y `reporting/` ya no usan
   `print()` — registran por el árbol `osint_eye` (`core/logging_config.py`, idempotente, stderr + fichero
   en modo append); Rich sigue siendo la única salida de usuario. Nivel por defecto INFO; nivel inválido es
   error de uso limpio. La salida del monitor (alertas, ciclos) pasa a `logging` y desaparece de stdout.
+- **Cliente HTTP compartido (`modules/_http.py`)**: todos los colectores salen ahora por un único
+  `HTTPClient` con timeout por defecto (nunca peticiones colgadas), reintentos con backoff exponencial
+  en errores de conexión y respuestas transitorias (429/5xx, respetando `Retry-After`), User-Agent
+  identificable `OSINT-EYE/…` configurable (`OSINT_EYE_USER_AGENT`), rate-limit por host
+  (`OSINT_EYE_RATE_LIMIT`) y proxy opcional (`OSINT_EYE_PROXY`); migrados los `requests` sueltos de
+  `modules/` (web, wayback, certs, nvd, github, google, cloud, dns avanzado, takeover).
 - **Contrato de resultados versionado (`core/schema.py`)**: `SCHEMA_VERSION` ("2.0") embebido en cada
   escaneo (`results.schema_version`), TypedDicts (`ScanResults`, `ModuleResult`), `validate_results()`
   con validadores por módulo y `require_valid_results()`; validación no fatal en `run_all()` y
@@ -38,19 +48,19 @@
   escaneos cargados y API `GET /api/scan/<target>/diff?against=<otro>` (reutiliza `core/scan_diff.ScanDiff`);
   muestra subdominios/puertos/servicios/tecnologías/emails/CVEs/buckets añadidos o eliminados, servicios
   con versión cambiada y evolución del score de superficie, con entrada sanitizada (nunca 500).
-- **Cliente HTTP compartido (`modules/_http.py`)**: todos los colectores salen ahora por un único
-  `HTTPClient` con timeout por defecto (nunca peticiones colgadas), reintentos con backoff exponencial
-  en errores de conexión y respuestas transitorias (429/5xx, respetando `Retry-After`), User-Agent
-  identificable `OSINT-EYE/…` configurable (`OSINT_EYE_USER_AGENT`), rate-limit por host
-  (`OSINT_EYE_RATE_LIMIT`) y proxy opcional (`OSINT_EYE_PROXY`); migrados los `requests` sueltos de
-  `modules/` (web, wayback, certs, nvd, github, google, cloud, dns avanzado, takeover).
 - **CLI — progreso en vivo por módulo**: tabla `Module Progress` (Rich Live) con estado
   (pending/running/done/error), duración, nº de hallazgos y errores de cada módulo durante el escaneo
   (`run_all` y `--modules`); la salida impresa de los módulos se re-renderiza sobre la tabla sin
   corromperse y en tuberías/CI el tracker degrada a impresión normal.
+- **Subdominios pasivos sin API key (`modules/dns/passive_sources.py`)**: 5 fuentes públicas
+  (HackerTarget, AlienVault OTX, Anubis/jldc, RapidDNS, CertSpotter) consultadas en paralelo con
+  deduplicación y validación estricta de cada hostname (entrada remota hostil); integradas en el
+  escaneo DNS en modo `full` (merge con fuerza bruta/CT, detalle por fuente en
+  `results["modules"]["dns"]["passive_subdomains"]`); cualquier fuente caída degrada a `status=error`
+  sin romper el escaneo.
 
 ### Documentación
-- README fiel: badges de versión (2.1.1) y tests (118 passing) reales, árbol sincronizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
+- README fiel: badges de versión (2.1.1) y de tests sincronizados con el recuento real de la suite, árbol actualizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
 
 ## [2.1.1] - 2026-09-11
 

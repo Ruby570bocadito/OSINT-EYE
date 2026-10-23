@@ -7,6 +7,9 @@ Contract consumed by osint_eye.py:
     DNSScanner().scan(target, "basic") -> dict with keys "domain",
     "subdomains" (list), "records" (dict per record type) and
     "spf"/"dmarc" dicts (always present, even on partial failures).
+    In "full" mode "subdomains" additionally merges the passive sources
+    from modules/dns/passive_sources.py (deduplicated) and the per-source
+    detail is exposed under "passive_subdomains".
 """
 
 import socket
@@ -17,6 +20,8 @@ from typing import Dict, List, Optional, Set
 import dns.resolver
 import dns.query
 import dns.zone
+
+from modules.dns.passive_sources import PassiveSubdomainEnumerator
 
 
 class DNSResolver:
@@ -495,11 +500,14 @@ class DNSScanner:
     report generation never break on partial results.
     """
 
-    def __init__(self, wordlist_path: str = None):
+    def __init__(self, wordlist_path: str = None, passive: bool = True):
         self.resolver = DNSResolver()
         # Default wordlist is module-relative (works from any CWD).
         self.subenum = SubdomainEnumerator(wordlist_path)
         self.zonetransfer = ZoneTransfer()
+        # Passive sources (no API keys) merged in "full" mode; each source
+        # degrades independently, so a dead source never breaks the scan.
+        self.passive_enumerator = PassiveSubdomainEnumerator() if passive else None
 
     def scan(self, domain: str, scan_type: str = "basic") -> Dict:
         """Perform a DNS scan; each step degrades independently on error."""
@@ -543,6 +551,25 @@ class DNSScanner:
                 results["zone_transfer"] = self.zonetransfer.check_axfr_enabled(domain)
             except Exception as e:
                 print(f"[!] Zone transfer check failed for {domain}: {e}")
+
+            if self.passive_enumerator is not None:
+                print(f"[*] Querying passive subdomain sources for {domain}...")
+                try:
+                    passive = self.passive_enumerator.enumerate(domain)
+                    results["passive_subdomains"] = passive
+                    # Merge + dedupe with the brute-force/CT findings.
+                    merged = set(results.get("subdomains", []))
+                    merged.update(passive.get("subdomains", []))
+                    results["subdomains"] = sorted(merged)
+                except Exception as e:
+                    results["passive_subdomains"] = {
+                        "domain": domain,
+                        "subdomains": [],
+                        "per_source": {},
+                        "total": 0,
+                        "error": str(e),
+                    }
+                    print(f"[!] Passive enumeration failed for {domain}: {e}")
 
         return results
 
