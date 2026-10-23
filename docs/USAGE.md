@@ -59,6 +59,40 @@ Compara la peor severidad del `attack_surface_score` con el umbral y fija el exi
 | `2` | Error de uso (argumentos, archivo de scope inválido…) |
 | `3` | Ningún target escaneado (todo fuera de scope) |
 
+## Configuración TOML (`--config` / `--profile`)
+
+```bash
+python osint_eye.py example.com --config mi_config.toml
+python osint_eye.py example.com --config mi_config.toml --profile deep
+```
+
+Si existe `osint_eye.toml` en el directorio actual se lee por defecto. Documento soportado:
+
+```toml
+[scan]
+depth = "normal"            # quick | normal | deep | full
+stealth = false
+no_ai = false
+no_cache = false
+modules = ["dns", "certs"]  # set de módulos por defecto (como --modules)
+
+[timeouts]
+monitor_interval = 3600     # segundos entre ciclos del monitor
+
+[scope]
+includes = ["example.com"]  # misma sintaxis que --scope
+excludes = ["10.0.0.0/8"]
+
+[exports]
+formats = ["json", "sarif"] # subconjunto del catálogo de exportadores
+
+[profiles.deep]             # perfiles con nombre
+[profiles.deep.scan]
+depth = "full"
+```
+
+Precedencia: los flags CLI ganan siempre al fichero; dentro del fichero, el perfil seleccionado sobreescribe las tablas de primer nivel. Secciones o claves desconocidas se rechazan al cargar (los typos nunca se ignoran en silencio). Requiere `tomllib` (Python 3.11+); en 3.10 el resto de la herramienta funciona igual sin TOML.
+
 ## Logging de librería
 
 ```bash

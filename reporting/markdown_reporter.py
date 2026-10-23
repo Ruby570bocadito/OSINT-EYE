@@ -43,6 +43,15 @@ class MarkdownReporter:
         """Load scan results (None-safe; non-dict input is ignored)."""
         self.report_data = results if isinstance(results, dict) else {}
 
+    def build_text(self) -> str:
+        """Build the full Markdown report and return it as text.
+
+        In-memory variant of :meth:`generate` for consumers that don't
+        want a file on disk (dashboard downloads, email bodies, API
+        responses). Same output byte-for-byte as generate() writes.
+        """
+        return self._build_report()
+
     def generate(self, output_file=None) -> str:
         """Generate the Markdown report and return the output path."""
         if not output_file:
@@ -50,7 +59,7 @@ class MarkdownReporter:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = f"report_{target}_{timestamp}.md"
 
-        report = self._build_report()
+        report = self.build_text()
 
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(report)
@@ -374,7 +383,7 @@ The following key findings were identified:
 
         stats = _d(_d(corr.get("attack_graph")).get("stats"))
         if stats:
-            lines.append(f"\n### Attack Graph")
+            lines.append("\n### Attack Graph")
             lines.append(f"- **Nodes**: {stats.get('total_nodes', 0)}")
             lines.append(f"- **Edges**: {stats.get('total_edges', 0)}")
 

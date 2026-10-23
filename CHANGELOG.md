@@ -51,26 +51,6 @@ Reglas del equipo (PROTOCOLO §3):
   se omiten y quedan registrados en `results["scope"]["discarded"]` (target, módulo, motivo, timestamp).
   Gateo activo en el orquestador (targets de CLI, candidatos de permutación y sondas de takeover);
   archivo de scope inválido = error de uso limpio antes de escanear.
-### Corregido
-- **Targets con `/` inalcanzables en el dashboard (H-005)**: las rutas `/api/scan/...` usan el
-  converter `<path:target>` (el cliente ya codificaba con `encodeURIComponent`, Werkzeug decodifica
-  `%2F` tras el routing), así escaneos con target tipo URL (`http://127.0.0.1:8599`) o JSON hostil
-  con barras sirven por todos los endpoints. `merge_slashes` desactivado (sin 308 a otra clave) y
-  handler 404 con JSON uniforme en `/api/*` — nunca HTML de error ni 500; residuales documentados
-  (targets que empiezan por `/`, colisión con ancla de subruta).
-
-### Seguridad
-- **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
-  ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
-  degradar la sonda ante objetivos hostiles (riesgo MITM).
-- **Guard SSRF en redirecciones**: nuevo `modules/web/ssrf_guard.py`; `TechDetector`, `SensitiveDataDetector`,
-  `CDNDetector` y `SubdomainTakeoverDetector` ya no siguen redirecciones a IP privadas/loopback/link-local
-  (metadatos cloud 169.254.169.254 incluidos): cada hop se valida por esquema y direcciones resueltas, y el
-  hop rechazado se reporta como error sin interrumpir el escaneo.
-- **Dashboard API endurecido**: cabeceras de seguridad en todas las respuestas (CSP que bloquea toda carga
-  externa y frames, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`), `Cache-Control: no-store`
-  en `/api/*`, límite de 64 MB por fichero de escaneo cargado y rechazo controlado de JSON con anidamiento
-  profundo; la plantilla se sirve verbatim sin pasar por el motor Jinja.
 - **Logging real de librería (`--log-level`, `--log-file`)**: `core/`, `graph/` y `reporting/` ya no usan
   `print()` — registran por el árbol `osint_eye` (`core/logging_config.py`, idempotente, stderr + fichero
   en modo append); Rich sigue siendo la única salida de usuario. Nivel por defecto INFO; nivel inválido es
@@ -126,8 +106,36 @@ Reglas del equipo (PROTOCOLO §3):
   explorador de hallazgos con neutralización de fórmulas, el MD reutiliza `MarkdownReporter` y los
   nombres de descarga están saneados (sin path traversal ni inyección de cabeceras).
 
+### Cambiado
+- **Dependencias depuradas**: se eliminan `nvdlib`, `waybackpy`, `beautifulsoup4` y `lxml`
+  (cero imports en producto, verificado con venv limpio y suite completa) y se declara `urllib3`
+  (import directo en `modules/_http.py`) — installs más ligeros y contrato honesto.
+
 ### Documentación
 - README fiel: badges de versión (2.1.1) y de tests sincronizados con el recuento real de la suite, árbol actualizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
+- docs/USAGE.md sincronizada con la CLI real: scope y autorización, modo CI con exit codes,
+  logging de librería, configuración TOML, dashboard y variables de entorno `OSINT_EYE_*`.
+
+### Corregido
+- **Targets con `/` inalcanzables en el dashboard (H-005)**: las rutas `/api/scan/...` usan el
+  converter `<path:target>` (el cliente ya codificaba con `encodeURIComponent`, Werkzeug decodifica
+  `%2F` tras el routing), así escaneos con target tipo URL (`http://127.0.0.1:8599`) o JSON hostil
+  con barras sirven por todos los endpoints. `merge_slashes` desactivado (sin 308 a otra clave) y
+  handler 404 con JSON uniforme en `/api/*` — nunca HTML de error ni 500; residuales documentados
+  (targets que empiezan por `/`, colisión con ancla de subruta).
+
+### Seguridad
+- **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
+  ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
+  degradar la sonda ante objetivos hostiles (riesgo MITM).
+- **Guard SSRF en redirecciones**: nuevo `modules/web/ssrf_guard.py`; `TechDetector`, `SensitiveDataDetector`,
+  `CDNDetector` y `SubdomainTakeoverDetector` ya no siguen redirecciones a IP privadas/loopback/link-local
+  (metadatos cloud 169.254.169.254 incluidos): cada hop se valida por esquema y direcciones resueltas, y el
+  hop rechazado se reporta como error sin interrumpir el escaneo.
+- **Dashboard API endurecido**: cabeceras de seguridad en todas las respuestas (CSP que bloquea toda carga
+  externa y frames, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`), `Cache-Control: no-store`
+  en `/api/*`, límite de 64 MB por fichero de escaneo cargado y rechazo controlado de JSON con anidamiento
+  profundo; la plantilla se sirve verbatim sin pasar por el motor Jinja.
 
 ## [2.1.1] - 2026-09-11
 

@@ -5,12 +5,13 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 
 class ScanCache:
     """SQLite-based cache for scan results"""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None):
         if not db_path:
             cache_dir = Path.home() / ".osint_eye" / "cache"
             cache_dir.mkdir(parents=True, exist_ok=True)
@@ -27,7 +28,7 @@ class ScanCache:
         """
         return sqlite3.connect(self.db_path, timeout=30)
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         """Initialize database tables"""
         with self._connect() as conn:
             conn.execute("""
@@ -91,10 +92,10 @@ class ScanCache:
             """)
 
     def save_scan(
-        self, target: str, scan_type: str, results: dict, depth: str = "normal"
-    ):
+        self, target: str, scan_type: str, results: dict[str, Any], depth: str = "normal"
+    ) -> None:
         """Save a complete scan result"""
-        def _json_fallback(obj):
+        def _json_fallback(obj: Any) -> Any:
             if isinstance(obj, set):
                 return list(obj)
             return str(obj)
@@ -112,7 +113,7 @@ class ScanCache:
                 ),
             )
 
-    def get_last_scan(self, target: str, max_age_hours: int = 24) -> dict | None:
+    def get_last_scan(self, target: str, max_age_hours: int = 24) -> dict[str, Any] | None:
         """Get the most recent scan if within age limit"""
         cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
 
@@ -135,7 +136,7 @@ class ScanCache:
         return None
 
     @staticmethod
-    def _parse_results(raw: str) -> dict:
+    def _parse_results(raw: str) -> dict[str, Any]:
         """Deserialize the results column defensively.
 
         The cache file lives on disk and can be manipulated: treat anything
@@ -150,7 +151,9 @@ class ScanCache:
             return {}
         return results
 
-    def add_subdomain(self, target: str, subdomain: str, source: str, ip: str = None):
+    def add_subdomain(
+        self, target: str, subdomain: str, source: str, ip: str | None = None
+    ) -> None:
         """Add or update a subdomain"""
         now = datetime.now().isoformat()
 
@@ -163,7 +166,7 @@ class ScanCache:
                 (target, subdomain, source, now, now, ip, now, ip),
             )
 
-    def get_subdomains(self, target: str, source: str = None) -> list[dict]:
+    def get_subdomains(self, target: str, source: str | None = None) -> list[dict[str, Any]]:
         """Get all known subdomains for a target"""
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
@@ -198,10 +201,10 @@ class ScanCache:
         target: str,
         host: str,
         port: int,
-        service: str = None,
-        version: str = None,
+        service: str | None = None,
+        version: str | None = None,
         protocol: str = "tcp",
-    ):
+    ) -> None:
         """Add or update a port"""
         now = datetime.now().isoformat()
 
@@ -226,7 +229,7 @@ class ScanCache:
                 ),
             )
 
-    def get_ports(self, target: str) -> list[dict]:
+    def get_ports(self, target: str) -> list[dict[str, Any]]:
         """Get all known ports for a target"""
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
@@ -236,9 +239,9 @@ class ScanCache:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_diff(self, target: str, since: str) -> dict:
+    def get_diff(self, target: str, since: str) -> dict[str, Any]:
         """Get changes since last scan"""
-        diff = {
+        diff: dict[str, Any] = {
             "new_subdomains": self.get_new_subdomains(target, since),
             "new_ports": [],
             "changes": [],
@@ -253,7 +256,7 @@ class ScanCache:
 
         return diff
 
-    def get_stats(self, target: str) -> dict:
+    def get_stats(self, target: str) -> dict[str, Any]:
         """Get cache statistics for a target"""
         with self._connect() as conn:
             sub_count = conn.execute(
@@ -289,7 +292,7 @@ class ScanCache:
                 "sources": [r[0] for r in sources],
             }
 
-    def cleanup(self, max_age_days: int = 90):
+    def cleanup(self, max_age_days: int = 90) -> None:
         """Remove old entries"""
         cutoff = (datetime.now() - timedelta(days=max_age_days)).isoformat()
 
@@ -305,11 +308,11 @@ class ScanCache:
 class SessionManager:
     """Manage scan sessions with incremental updates"""
 
-    def __init__(self, cache: ScanCache = None):
+    def __init__(self, cache: ScanCache | None = None):
         self.cache = cache or ScanCache()
-        self.active_sessions = {}
+        self.active_sessions: dict[str, dict[str, Any]] = {}
 
-    def start_session(self, target: str, depth: str = "normal") -> dict:
+    def start_session(self, target: str, depth: str = "normal") -> dict[str, Any]:
         """Start a new scan session"""
         session_id = hashlib.md5(
             f"{target}{datetime.now().isoformat()}".encode()
@@ -317,7 +320,7 @@ class SessionManager:
 
         last_scan = self.cache.get_last_scan(target, max_age_hours=24)
 
-        session = {
+        session: dict[str, Any] = {
             "id": session_id,
             "target": target,
             "depth": depth,
@@ -336,7 +339,7 @@ class SessionManager:
 
         return session
 
-    def get_incremental_targets(self, session: dict) -> dict:
+    def get_incremental_targets(self, session: dict[str, Any]) -> dict[str, Any]:
         """Get only new targets to scan"""
         if not session["is_incremental"]:
             return {"full_scan": True}
@@ -351,7 +354,7 @@ class SessionManager:
             "last_scan_time": session["last_scan"]["timestamp"],
         }
 
-    def finalize_session(self, session_id: str, results: dict):
+    def finalize_session(self, session_id: str, results: dict[str, Any]) -> None:
         """Save session results to cache"""
         session = self.active_sessions.get(session_id)
         if not session:
@@ -376,7 +379,7 @@ class SessionManager:
         if session_id in self.active_sessions:
             del self.active_sessions[session_id]
 
-    def get_session_diff(self, session_id: str) -> dict:
+    def get_session_diff(self, session_id: str) -> dict[str, Any]:
         """Get what changed in this session"""
         session = self.active_sessions.get(session_id)
         if not session or not session["last_scan"]:

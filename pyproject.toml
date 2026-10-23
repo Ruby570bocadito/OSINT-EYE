@@ -94,10 +94,8 @@ strict = true
 # Zonas pendientes de tipar (fases 1b/1c/2 de type-hints-core, IMP activo en
 # modules/): errors silenciados aquí, no en los ficheros ya estrictos.
 module = [
-    "core.correlator",
     "core.logging_config",
     "core.scan_diff",
-    "core.session_cache",
     "graph.builder",
     "modules",
     "modules.*",
