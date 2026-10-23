@@ -6,14 +6,24 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ## 🔴 ALTA (urgente, va antes que todo)
 
-- [ ] (TODOS) rama-canonical — trabajad y empujad SOLO contra `main`: main y master están unificados al mismo árbol (ronda DIR 2026-10-23); master queda como espejo hasta próxima ronda DIR — transversal
+- [x] (TODOS) rama-canonical — CERRADA ronda 4: la flota empuja a `main` (verificado: findings/estados/hallazgos de la flota llegan por main); `master` queda como espejo alineado por DIR (--force-with-lease, contenido único de master verificado como ya integrado en main) — transversal
+- [ ] (IMP-3) fix-h003-path-traversal — H-003 de TEST: `-o` con path traversal escribe fuera del directorio previsto; sanear/validar ruta de salida — osint_eye.py, reporting/
+- [ ] (IMP-3) fix-h004-escape-injection — H-004 de TEST: caracteres de escape/inyección en el target llegan a salidas (CLI/HTML); escapar en el punto de render — osint_eye.py, ui/
 
 ## 🟢 Ahora (fase v2.2)
 
+### Fixes de hallazgos TEST (ronda 4 — tras los dos de ALTA)
+
+- [ ] (IMP-3) fix-h006-cache-corrupta — H-006 de TEST: cache.db corrupta crashea el escaneo; capturar, avisar y regenerar — core/session_cache.py
+- [ ] (IMP-3) fix-h007-ctrlc — H-007 de TEST: Ctrl+C a mitad de escaneo termina crudo; capturar, imprimir resumen parcial y salir limpio — osint_eye.py
+- [ ] (IMP-3) fix-h001-persistencia — H-001 de TEST: sin `-o` el resultado no se persiste en ningún sitio; auto-guardar en output/ o avisar explícitamente — osint_eye.py
+- [ ] (IMP-3) fix-h008-pdf-duplicado — H-008 de TEST: el PDF se genera duplicado en export_all; deduplicar — reporting/
+- [ ] (IMP-3) fix-h002-validacion-targets — H-002 de TEST: validar formato de target en la CLI (gemelo CLI de wizard-validacion-target); rechazar URLs como targets con mensaje accionable — osint_eye.py
+- [ ] (IMP-2) fix-h005-dashboard-slash — H-005 de TEST: targets con `/` inalcanzables desde el dashboard (rutas URL); escapar o indexar por hash — ui/dashboard.py
+
 ### IMP-3 — Núcleo, análisis y salidas
 
-- [ ] (IMP-3) findings-extract — extractor único de hallazgos (takeover, buckets públicos, secretos, CVE, ficheros sensibles) a lista canónica con severidad y evidencia, reutilizable por SARIF/exit-codes/risk-scoring — core/findings.py (propuesta IMP-3, ronda 2; claim activo ronda 4, en curso)
-- [ ] (IMP-3) config-file — osint_eye.toml (tomllib, stdlib) con perfiles, timeouts, módulos y exportadores; los flags CLI lo sobreescriben — core/config.py, osint_eye.py
+- [ ] (IMP-3) config-file — osint_eye.toml (tomllib, stdlib) con perfiles, timeouts, módulos y exportadores; los flags CLI lo sobreescriben — core/config.py, osint_eye.py (claim activo ronda 4, en curso)
 - [ ] (IMP-3) risk-scoring-v2 — puntuación explicable: cada punto de riesgo enlaza a la evidencia que lo genera; pesos configurables — core/correlator.py (promocionada del Siguiente, ronda 4; encadena con findings-extract)
 
 ### IMP-1 — Colectores
@@ -47,8 +57,7 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 ### SEG / TEST
 
 - [ ] (SEG) audit-deps — pip-audit sobre requirements y fijar mínimos seguros — requirements.txt (vía Peticiones a PUL-1)
-- [ ] (SEG) cache-deserializacion — revisar y testear la deserialización de la caché SQLite (datos manipulados en cache.db) — core/session_cache.py (añadida ronda 3)
-- [ ] (TEST) e2e-smoke — e2e offline: --help, --modules, escaneo --depth quick contra servidor DNS/HTTP local de fixtures — tests/e2e/
+- [ ] (SEG) cache-deserializacion — revisar y testear la deserialización de la caché SQLite (datos manipulados en cache.db) — core/session_cache.py (añadida ronda 3; enlaza con fix-h006)
 
 ## 🟡 Siguiente (v2.3 — «Inteligencia»)
 
@@ -165,3 +174,5 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - v2.2 ronda 4 — sarif-export: reporting/sarif.py (SARIF 2.1 con partialFingerprints estables, niveles error/warning/note) + test_reporting_sarif.py; verificado por DIR.
 - v2.2 ronda 4 — changelog-unreleased: reglas de equipo bajo el formato Keep a Changelog + sección [Unreleased] viva (la flota la usa en cada entrega); verificado por DIR.
 - v2.2 ronda 4 (tardía) — security-headers: modules/web/headers_audit.py (CORS, cookies Secure/HttpOnly, severidades, CSP/HSTS/XFO) + integración web_scanner + 210 líneas de tests; verificado por DIR (547 tests en verde).
+- v2.2 ronda 4 (tardía) — findings-extract: core/findings.py, capa canónica de hallazgos (Finding con severidad normalizada, fingerprint estable y evidencia); SARIF/exit-codes/risk-scoring consumen de aquí; verificado por DIR (606 tests en verde).
+- v2.2 ronda 4 (tardía) — e2e-smoke (TEST): tests/e2e/test_e2e_smoke.py, 9 tests 100% offline (subprocess + fixtures loopback); TEST ejecutó su primera sesión completa con 8 hallazgos documentados en docs/agentes/hallazgos/ (H-001..H-008); verificado por DIR.
