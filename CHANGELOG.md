@@ -159,6 +159,9 @@ Reglas del equipo (PROTOCOLO §3):
 - **Makefile de desarrollo**: atajos `make help/install/test/coverage/lint/docker/clean` que
   reflejan los comandos del protocolo y del CI (venv, suite offline, ruff, build + smoke test de la
   imagen), para onboarding de un solo comando.
+- **Badges dinámicos de tests y versión**: un job de CI regenera `.github/badges/tests.json` y
+  `version.json` en cada push a `main` (endpoint JSON de shields.io servido desde el propio repo);
+  los badges del README dejan de derivarse a mano (fin del desfase tipo «706 vs 767»).
 
 ### Cambiado
 - **Dependencias depuradas**: se eliminan `nvdlib`, `waybackpy`, `beautifulsoup4` y `lxml`

@@ -4,9 +4,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.1.1-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
+[![Version](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRuby570bocadito%2FOSINT-EYE%2Fmain%2F.github%2Fbadges%2Fversion.json&style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-706%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRuby570bocadito%2FOSINT-EYE%2Fmain%2F.github%2Fbadges%2Ftests.json&style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![Coverage](https://img.shields.io/codecov/c/github/Ruby570bocadito/OSINT-EYE?style=for-the-badge&logo=codecov&logoColor=white)](https://app.codecov.io/gh/Ruby570bocadito/OSINT-EYE)
 [![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
 
