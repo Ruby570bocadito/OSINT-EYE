@@ -22,6 +22,10 @@
   profundo; la plantilla se sirve verbatim sin pasar por el motor Jinja.
 
 ### Añadido
+- **Logging real de librería (`--log-level`, `--log-file`)**: `core/`, `graph/` y `reporting/` ya no usan
+  `print()` — registran por el árbol `osint_eye` (`core/logging_config.py`, idempotente, stderr + fichero
+  en modo append); Rich sigue siendo la única salida de usuario. Nivel por defecto INFO; nivel inválido es
+  error de uso limpio. La salida del monitor (alertas, ciclos) pasa a `logging` y desaparece de stdout.
 - **Contrato de resultados versionado (`core/schema.py`)**: `SCHEMA_VERSION` ("2.0") embebido en cada
   escaneo (`results.schema_version`), TypedDicts (`ScanResults`, `ModuleResult`), `validate_results()`
   con validadores por módulo y `require_valid_results()`; validación no fatal en `run_all()` y
