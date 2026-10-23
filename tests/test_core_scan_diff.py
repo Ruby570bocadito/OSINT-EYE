@@ -40,7 +40,9 @@ class TestScanDiffReuse:
 
         # Second comparison with DIFFERENT, smaller inputs on the same
         # instance: no residue from the first run.
-        second = differ.compare(_scan(["b.example.com"], [8080]))
+        second = differ.compare(
+            _scan([], []), _scan(["b.example.com"], [8080])
+        )
         assert second["new_subdomains"] == ["b.example.com"]
         assert second["new_ports"], "segunda comparación debe tener puertos nuevos"
         assert {p["port"] for p in second["new_ports"]} == {8080}
