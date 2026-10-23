@@ -3,15 +3,16 @@
 import threading
 from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
 
 class AssetCorrelator:
     """Correlate assets across all OSINT modules"""
 
-    def __init__(self):
-        self.assets = defaultdict(set)
-        self.relationships = []
-        self._rel_keys = set()
+    def __init__(self) -> None:
+        self.assets: defaultdict[str, set[str]] = defaultdict(set)
+        self.relationships: list[dict[str, Any]] = []
+        self._rel_keys: set[tuple[str, str, str]] = set()
         # Ingests run concurrently (scan phases share one correlator);
         # the relationship dedup set is check-then-add, so guard it.
         self._lock = threading.Lock()
@@ -21,7 +22,7 @@ class AssetCorrelator:
         return len(self.assets.get(key, ()))
 
     @staticmethod
-    def _anchor(data: dict) -> str:
+    def _anchor(data: dict[str, Any]) -> str:
         """Best-effort anchor (domain/target/url) to relate new assets to."""
         for key in ("domain", "target", "url"):
             value = data.get(key)
@@ -29,7 +30,7 @@ class AssetCorrelator:
                 return value
         return ""
 
-    def ingest_dns(self, dns_data: dict):
+    def ingest_dns(self, dns_data: dict[str, Any]) -> None:
         """Ingest DNS data"""
         domain = dns_data.get("domain", "") or ""
 
@@ -72,7 +73,7 @@ class AssetCorrelator:
                     elif "v=dmarc1" in value.lower():
                         self.assets["dmarc_records"].add(value)
 
-    def ingest_certs(self, cert_data: dict):
+    def ingest_certs(self, cert_data: dict[str, Any]) -> None:
         """Ingest certificate data"""
         for cert in cert_data.get("certificates") or []:
             domain = cert.get("domain", "")
@@ -84,7 +85,7 @@ class AssetCorrelator:
                     self.assets["issuers"].add(issuer)
                     self._add_relationship("issued_by", domain, issuer)
 
-    def ingest_network(self, network_data: dict):
+    def ingest_network(self, network_data: dict[str, Any]) -> None:
         """Ingest network scan data"""
         host = network_data.get("host", "") or ""
         if not host:
@@ -109,7 +110,7 @@ class AssetCorrelator:
                         "version_of", f"{service_name}:{version}", service_name
                     )
 
-    def ingest_wayback(self, wayback_data: dict):
+    def ingest_wayback(self, wayback_data: dict[str, Any]) -> None:
         """Ingest Wayback data"""
         domain = wayback_data.get("domain", "") or ""
 
@@ -131,7 +132,7 @@ class AssetCorrelator:
                 if domain:
                     self._add_relationship("path_of", path, domain)
 
-    def ingest_whois(self, whois_data: dict):
+    def ingest_whois(self, whois_data: dict[str, Any]) -> None:
         """Ingest WHOIS data"""
         domain = whois_data.get("domain") or ""
 
@@ -156,7 +157,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("contact_email", domain, email)
 
-    def ingest_cloud(self, cloud_data: dict):
+    def ingest_cloud(self, cloud_data: dict[str, Any]) -> None:
         """Ingest cloud bucket discovery data.
 
         ``found`` holds every bucket that answered and ``public`` the subset
@@ -166,7 +167,7 @@ class AssetCorrelator:
         """
         domain = cloud_data.get("domain", "") or ""
 
-        def _bucket_url(bucket) -> str:
+        def _bucket_url(bucket: Any) -> str:
             if isinstance(bucket, dict):
                 return bucket.get("url", "") or ""
             return str(bucket) if bucket else ""
@@ -187,7 +188,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("public_bucket", url, domain)
 
-    def ingest_emails(self, email_data: dict):
+    def ingest_emails(self, email_data: dict[str, Any]) -> None:
         """Ingest email enumeration data"""
         domain = email_data.get("domain", "") or ""
 
@@ -198,7 +199,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("email_reputation", email, domain)
 
-    def ingest_endpoints(self, endpoints_data: dict):
+    def ingest_endpoints(self, endpoints_data: dict[str, Any]) -> None:
         """Ingest endpoint discovery data (sensitive files included)"""
         target = endpoints_data.get("target", "") or ""
 
@@ -215,7 +216,7 @@ class AssetCorrelator:
             if url:
                 self.assets["endpoints"].add(url)
 
-    def ingest_takeover(self, takeover_data: dict):
+    def ingest_takeover(self, takeover_data: dict[str, Any]) -> None:
         """Ingest subdomain takeover results"""
         for item in takeover_data.get("vulnerable") or []:
             sub = (
@@ -230,7 +231,7 @@ class AssetCorrelator:
                     "takeover_fingerprint", sub, f"dangling:{service}"
                 )
 
-    def ingest_web(self, web_data: dict):
+    def ingest_web(self, web_data: dict[str, Any]) -> None:
         """Ingest web technology fingerprinting data.
 
         ``technologies`` may be the TechDetector dict shape
@@ -253,7 +254,7 @@ class AssetCorrelator:
             if anchor:
                 self._add_relationship("technology_on", anchor, str(tech))
 
-    def ingest_permutation(self, permutation_data: dict):
+    def ingest_permutation(self, permutation_data: dict[str, Any]) -> None:
         """Ingest subdomain permutation results (``{"subdomains": [...]}``)."""
         domain = permutation_data.get("domain", "") or ""
 
@@ -264,7 +265,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("subdomain_of", subdomain, domain)
 
-    def ingest_github(self, github_data: dict):
+    def ingest_github(self, github_data: dict[str, Any]) -> None:
         """Ingest GitHub dorking results (potential leaked secrets)."""
         domain = github_data.get("domain", "") or ""
 
@@ -279,7 +280,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("leak_related_to", str(label), domain)
 
-    def ingest_google(self, google_data: dict):
+    def ingest_google(self, google_data: dict[str, Any]) -> None:
         """Ingest Google dorking results (indexed pages per dork category)."""
         domain = google_data.get("domain", "") or ""
 
@@ -308,7 +309,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("subdomain_of", subdomain, domain)
 
-    def ingest_cve(self, cve_data: dict):
+    def ingest_cve(self, cve_data: dict[str, Any]) -> None:
         """Ingest CVE lookup results (``{"cves": [...]}``)."""
         for cve in cve_data.get("cves") or []:
             cve_id = cve.get("id", "") if isinstance(cve, dict) else str(cve)
@@ -316,7 +317,7 @@ class AssetCorrelator:
                 continue
             self.assets["vulnerabilities"].add(cve_id)
 
-    def ingest_cdn_waf(self, cdn_data: dict):
+    def ingest_cdn_waf(self, cdn_data: dict[str, Any]) -> None:
         """Ingest CDN/WAF fingerprinting data."""
         anchor = self._anchor(cdn_data)
 
@@ -332,7 +333,7 @@ class AssetCorrelator:
             if anchor:
                 self._add_relationship("protected_by_waf", anchor, str(waf))
 
-    def _add_relationship(self, rel_type: str, source: str, target: str):
+    def _add_relationship(self, rel_type: str, source: str, target: str) -> None:
         """Add a relationship between assets (deduplicated by type/source/target)"""
         key = (rel_type, source, target)
         with self._lock:
@@ -348,24 +349,24 @@ class AssetCorrelator:
                 }
             )
 
-    def find_shared_infrastructure(self) -> dict:
+    def find_shared_infrastructure(self) -> dict[str, Any]:
         """Find shared infrastructure across assets"""
-        ip_to_domains = defaultdict(set)
+        ip_to_domains: defaultdict[str, set[str]] = defaultdict(set)
 
         for rel in self.relationships:
             if rel["type"] == "resolves_to":
                 ip_to_domains[rel["target"]].add(rel["source"])
 
-        shared = {}
+        shared: dict[str, list[str]] = {}
         for ip, domains in ip_to_domains.items():
             if len(domains) > 1:
                 shared[ip] = sorted(list(domains))
 
         return shared
 
-    def find_hidden_relationships(self) -> list[dict]:
+    def find_hidden_relationships(self) -> list[dict[str, Any]]:
         """Find non-obvious relationships"""
-        findings = []
+        findings: list[dict[str, Any]] = []
 
         cdn_origins = self._detect_cdn_origins()
         if cdn_origins:
@@ -399,7 +400,7 @@ class AssetCorrelator:
 
         return findings
 
-    def _detect_cdn_origins(self) -> dict:
+    def _detect_cdn_origins(self) -> dict[str, Any]:
         """Detect if CDN origin IP is exposed"""
         cdn_indicators = ["cloudflare", "akamai", "fastly", "cloudfront", "incapsula"]
 
@@ -411,40 +412,40 @@ class AssetCorrelator:
 
         return {}
 
-    def _find_shared_mail_infrastructure(self) -> dict:
+    def _find_shared_mail_infrastructure(self) -> dict[str, Any]:
         """Find domains sharing mail servers"""
-        mail_servers = defaultdict(set)
+        mail_servers: defaultdict[str, set[str]] = defaultdict(set)
 
         for rel in self.relationships:
             if rel["type"] == "mail_server":
                 mail_servers[rel["target"]].add(rel["source"])
 
-        shared = {}
+        shared: dict[str, list[str]] = {}
         for server, domains in mail_servers.items():
             if len(domains) > 1:
                 shared[server] = sorted(list(domains))
 
         return shared
 
-    def _find_cert_overlap(self) -> dict:
+    def _find_cert_overlap(self) -> dict[str, Any]:
         """Find certificates that cover unexpected domain combinations"""
-        issuer_to_domains = defaultdict(set)
+        issuer_to_domains: defaultdict[str, set[str]] = defaultdict(set)
 
         for rel in self.relationships:
             if rel["type"] == "issued_by":
                 issuer_to_domains[rel["target"]].add(rel["source"])
 
-        overlap = {}
+        overlap: dict[str, list[str]] = {}
         for issuer, domains in issuer_to_domains.items():
             if len(domains) > 3:
                 overlap[issuer] = sorted(list(domains))
 
         return overlap
 
-    def calculate_attack_surface_score(self) -> dict:
+    def calculate_attack_surface_score(self) -> dict[str, Any]:
         """Calculate overall attack surface score"""
         score = 0
-        factors = []
+        factors: list[str] = []
 
         # NOTE: use _asset_count() (non-mutating) instead of self.assets[key]
         # to avoid injecting empty keys into the defaultdict.
@@ -501,11 +502,11 @@ class AssetCorrelator:
             "asset_counts": {k: len(v) for k, v in self.assets.items()},
         }
 
-    def generate_attack_graph(self) -> dict:
+    def generate_attack_graph(self) -> dict[str, Any]:
         """Generate attack surface graph data"""
-        nodes = []
-        edges = []
-        node_ids = {}
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        node_ids: dict[str, int] = {}
 
         node_counter = 0
 
@@ -566,7 +567,7 @@ class AssetCorrelator:
             },
         }
 
-    def export_report(self) -> dict:
+    def export_report(self) -> dict[str, Any]:
         """Export full correlation report"""
         return {
             "assets": {
