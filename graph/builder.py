@@ -1,9 +1,13 @@
 """OSINT EYE - Attack Surface Graph Builder & Visualizer"""
 
+from core.logging_config import get_logger
+
 import networkx as nx
 from pyvis.network import Network
 from typing import Dict, List, Set
 from datetime import datetime
+
+logger = get_logger(__name__)
 
 
 def _node_tech_set(raw) -> Set[str]:
@@ -436,9 +440,9 @@ class GraphBuilder:
                 with open(filename, "w", encoding="utf-8") as f:
                     f.write(cleaned)
         except OSError as e:
-            print(f"[!] Could not strip CDN tags from {filename}: {e}")
+            logger.warning("Could not strip CDN tags from %s: %s", filename, e)
 
-        print(f"[+] Graph exported to: {filename}")
+        logger.info("Graph exported to: %s", filename)
 
 
 class GraphAnalyzer:

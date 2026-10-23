@@ -1,9 +1,12 @@
 """OSINT EYE - CSV & HTML Export"""
 
 import csv
+from core.logging_config import get_logger
 from typing import Dict, List
 from datetime import datetime
 from html import escape as html_escape
+
+logger = get_logger(__name__)
 
 
 def _d(value) -> Dict:
@@ -162,7 +165,7 @@ class HTMLReporter:
         with open(filename, "w") as f:
             f.write(html)
 
-        print(f"[+] HTML report saved to: {filename}")
+        logger.info("HTML report saved to: %s", filename)
         return filename
 
     def _build_html(self, results: Dict) -> str:

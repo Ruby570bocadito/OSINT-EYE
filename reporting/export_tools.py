@@ -1,11 +1,14 @@
 """OSINT EYE - Burp Suite & Metasploit Export"""
 
 import json
+from core.logging_config import get_logger
 import re
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from typing import Dict, List
 from datetime import datetime
+
+logger = get_logger(__name__)
 
 # Control characters that are illegal in XML 1.0 content.
 _XML_BAD_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -66,7 +69,7 @@ class BurpExporter:
         with open(filename, "w", encoding="utf-8") as f:
             f.write(xml_str)
 
-        print(f"[+] Burp XML saved to: {filename}")
+        logger.info("Burp XML saved to: %s", filename)
         return filename
 
     def _add_issue(self, root, name, severity, url, description, remediation):
@@ -242,7 +245,7 @@ class MetasploitExporter:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(msf_data, f, indent=2, default=str)
 
-        print(f"[+] Metasploit JSON saved to: {filename}")
+        logger.info("Metasploit JSON saved to: %s", filename)
         return filename
 
 
@@ -265,7 +268,7 @@ class ConfigProfiles:
         config["created_at"] = datetime.now().isoformat()
         with open(path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, default=str)
-        print(f"[+] Profile saved: {path}")
+        logger.info("Profile saved: %s", path)
         return path
 
     def load(self, name: str) -> Dict:
