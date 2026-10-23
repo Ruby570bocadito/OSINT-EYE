@@ -8,6 +8,10 @@
   degradar la sonda ante objetivos hostiles (riesgo MITM).
 
 ### Añadido
+- **Contrato de resultados versionado (`core/schema.py`)**: `SCHEMA_VERSION` ("2.0") embebido en cada
+  escaneo (`results.schema_version`), TypedDicts (`ScanResults`, `ModuleResult`), `validate_results()`
+  con validadores por módulo y `require_valid_results()`; validación no fatal en `run_all()` y
+  `export_all()` (avisa sin perder el escaneo). Tests nuevos en `tests/test_core_schema.py`.
 - **Dashboard — explorador de hallazgos con búsqueda y filtros**: nueva tabla unificada de activos
   (subdominios, puertos, tecnologías, emails, CVEs, buckets y técnicas MITRE) con búsqueda de texto,
   filtros por severidad, tipo de activo y módulo de origen; API `GET /api/scan/<target>/assets`
