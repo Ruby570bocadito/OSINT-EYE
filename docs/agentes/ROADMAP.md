@@ -6,7 +6,7 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ## 🔴 ALTA (urgente, va antes que todo)
 
-(vacío — DIR pone aquí build roto, vulnerabilidades o hallazgos CRÍTICO/ALTO estancados)
+- [ ] (TODOS) rama-canonical — trabajad y empujad SOLO contra `main`: main y master están unificados al mismo árbol (ronda DIR 2026-10-23); master queda como espejo hasta próxima ronda DIR — transversal
 
 ## 🟢 Ahora (fase v2.2)
 
@@ -30,7 +30,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-2 — Interfaz
 
-- [ ] (IMP-2) dashboard-filtros — búsqueda y filtros (severidad, tipo de activo, módulo) en el dashboard, sin CDN — ui/dashboard.py, ui/dashboard_template.html
 - [ ] (IMP-2) dashboard-multiscan — selector de escaneos guardados + vista diff entre dos escaneos (reusa core/scan_diff.py) — ui/
 - [ ] (IMP-2) progreso-por-modulo — barra/tabla de progreso en vivo por módulo (estado, duración, nº de hallazgos, errores) — ui/rich_cli.py
 - [ ] (IMP-2) wizard-scope — el asistente pregunta scope/exclusiones y confirma autorización antes de módulos activos — ui/wizard.py
@@ -123,6 +122,10 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - (IMP-3) Base de datos de activos persistente por organización (no solo por escaneo).
 - (IMP-3) Deduplicación y normalización de activos (mayúsculas, puntos finales, IDN/punycode).
 - (IMP-3) Mapeo a OWASP / CWE además de MITRE ATT&CK.
+- (IMP-1) metadata-files — metadatos de documentos públicos enlazados desde el dominio (PDF/DOCX/XLSX: autor, software, rutas internas) — modules/web/metadata.py
+- (IMP-2) dashboard-detalle-activo — ficha de cada activo en el dashboard: módulos que lo reportan, evidencia y primera/última vez visto — ui/dashboard.py, ui/dashboard_template.html
+- (IMP-3) informe-integridad — sello de integridad (SHA-256 de resultados + timestamp UTC + versión de esquema) en todos los exportadores — reporting/
+- (IMP-3) monitor-metrics — métricas del modo monitor en formato Prometheus servidas por el dashboard local (127.0.0.1) — core/monitor.py, ui/dashboard.py
 
 ### Pulimiento
 
@@ -131,7 +134,11 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - (PUL-1) Matriz CI con Windows/macOS.
 - (PUL-2) Benchmarks reproducibles por módulo (tests/bench/) para evitar regresiones de rendimiento.
 - (PUL-2) Eliminar estado global/singletons y pasar dependencias explícitas.
+- (PUL-1) version-unica — única fuente de __version__ en core/ leída por banner CLI y CHANGELOG (hoy el banner dice v2.1 y el repo va por 2.1.1) — core/__init__.py, osint_eye.py
+- (PUL-1) gitignore-output — garantizar output/, .agent-tmp/ y volcados de escaneo en .gitignore (petición de IMP-1) — .gitignore
+- (PUL-2) excepciones-propias — jerarquía de errores (OsintEyeError/ModuleError) para sustituir los ~40 except Exception genéricos detectados — core/errors.py, core/, modules/
 
 ## ✅ Hecho (DIR mueve aquí lo verificado; se poda cada fase)
 
 - v2.1.1 — dashboard rediseñado, 15 fixes de QA, 118 tests offline.
+- v2.2 ronda 1 — dashboard-filtros: buscador y filtros por severidad/tipo/módulo, sin CDN; verificado por DIR en código (commit a3d61bf, suite en 128 tests en verde).
