@@ -1,20 +1,21 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=cylinder&color=0:0f172a,50:2563eb,100:7c3aed&height=220&section=header&text=OSINT%20EYE&fontSize=72&fontColor=fff&animation=blink&fontAlignY=35&desc=AI-Powered%20Attack%20Surface%20Intelligence&descAlignY=58&descAlign=50" width="100%" />
+<img src="docs/img/banner.png" alt="OSINT EYE — AI-powered attack-surface intelligence" width="100%" />
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Version](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRuby570bocadito%2FOSINT-EYE%2Fmain%2F.github%2Fbadges%2Fversion.json&style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FRuby570bocadito%2FOSINT-EYE%2Fmain%2F.github%2Fbadges%2Ftests.json&style=for-the-badge&logo=pytest&logoColor=white)](tests/)
-[![Coverage](https://img.shields.io/codecov/c/github/Ruby570bocadito/OSINT-EYE?style=for-the-badge&logo=codecov&logoColor=white)](https://app.codecov.io/gh/Ruby570bocadito/OSINT-EYE)
+[![Tests](https://img.shields.io/badge/Tests-863%20offline-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
 
+<br />
+
+**Automated recon from public sources · 100% free · Local AI via Ollama**
+
+*English README — reference in Spanish: [`README.es.md`](README.es.md)*
+
 </div>
-
-<h3 align="center">Automated recon from public sources · 100% free · Local AI via Ollama</h3>
-
-> 🇬🇧 Canonical README (written from scratch). Spanish version kept as a reference: [`README.es.md`](README.es.md).
 
 ---
 
@@ -26,15 +27,67 @@ Built for pentesters, bug-bounty hunters, SOC analysts and security researchers.
 
 **Every claim below is checkable**: flags against `python osint_eye.py --help`, the module list against `--modules`, the test count against the suite, and the export list against an actual `-o` run.
 
-### Highlights
+---
+
+## See it in action
+
+One command, real output — a live reconnaissance session against `mozilla.org` (passive modules only):
+
+<div align="center">
+
+![OSINT EYE CLI demo — real scan of mozilla.org](docs/img/demo-cli.gif)
+
+*Real `--rich` output: module progress, CT-subdomain discovery, attack-surface score and the full export catalogue. Rendered from an actual capture — not scripted.*
+
+</div>
+
+---
+
+## Highlights
 
 - **Zero friction** — `pip install -r requirements.txt` and go; no API key for any module.
-- **19 collector & analysis modules** — run them all, or pick exactly what you need with `--modules`.
+- **20 collector & analysis modules** — run them all, or pick exactly what you need with `--modules`.
 - **Authorization scope** — `--scope FILE` / `--exclude` gates every active probe; anything out of scope is skipped *and recorded*.
 - **CI-ready** — `--fail-on low|medium|high` turns the worst severity into an exit code your pipeline can gate on.
 - **Professional outputs** — JSON, Markdown, HTML, PDF, CSV, Burp XML, Metasploit JSON, MITRE Navigator, SARIF 2.1 and a self-contained HTML graph, all in one pass.
 - **Real logging** — `core/`, `graph/` and `reporting/` log through the `osint_eye` tree (`--log-level`, `--log-file`); Rich stays the only user-facing output.
-- **Tested** — 706 offline tests and CI on GitHub Actions against Python 3.10/3.11/3.12.
+- **Tested** — 863 offline tests and CI on GitHub Actions against Python 3.10/3.11/3.12.
+
+---
+
+## Web dashboard
+
+Launch it after a scan, or replay any previous one:
+
+```bash
+python osint_eye.py example.com --dashboard
+# or load a previous scan:
+python ui/dashboard.py output/my_scan.json   # → http://127.0.0.1:5000
+```
+
+Dark, minimalist UI that listens only on `127.0.0.1` and renders 100% offline (no CDN). KPIs, interactive attack-surface graph, findings explorer with full-text search and severity/type/module filters, multi-scan selector with diff view, and one-click JSON/CSV/MD export. All content is rendered via `textContent` (injection-proof) and the REST API never returns a 500 on malformed data.
+
+<div align="center">
+
+**Overview** — KPIs and the full attack-surface graph of a real `mozilla.org` scan (466 nodes · 464 edges):
+
+<img src="docs/img/dashboard-overview.png" alt="OSINT EYE dashboard overview" width="100%" />
+
+<br /><br />
+
+**Attack paths** — one click highlights routes from the domain hub to risky assets:
+
+<img src="docs/img/dashboard-graph.png" alt="Attack path highlighting in the dashboard graph" width="100%" />
+
+<br /><br />
+
+**Findings explorer** — 458 assets from one passive pass, filterable by severity, type and module:
+
+<img src="docs/img/dashboard-findings.png" alt="Findings explorer" width="100%" />
+
+</div>
+
+REST API: `/api/scans` and `/api/scan/<target>` with `/summary`, `/assets`, `/diff`, `/export`, `/subdomains`, `/ports`, `/graph`, `/mitre` and `/chains`.
 
 ---
 
@@ -155,13 +208,14 @@ example.com
 |--------|--------------|
 | `dns` | DNS enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA), SPF/DMARC, email-security audit (DKIM, MTA-STS, TLS-RPT, BIMI) with an explicable spoofing score, subdomain bruteforce + 5 passive sources (HackerTarget, AlienVault OTX, Anubis, RapidDNS, CertSpotter), wildcard detection and permutations |
 | `certs` | Certificate transparency via crt.sh |
+| `tls_audit` | TLS configuration audit with letter grade (protocol versions, cipher strength) |
 | `wayback` | Wayback Machine URL history and snapshot timeline |
 | `network` | Port & service scanning via nmap (optional; skipped with a notice if absent) |
 | `whois` | Domain registration and ownership data |
 | `github` | GitHub code dorking: API keys, secrets, exposed configs |
 | `google` | Google dorking: admin panels, sensitive files, backups |
 | `cve` | NVD/CVE lookup for discovered services |
-| `web` | HTTP technology fingerprinting |
+| `web` | HTTP technology fingerprinting + security-headers audit |
 | `endpoints` | JS/HTML endpoint discovery + sensitive-file probing |
 | `cloud` | Bucket discovery (S3/GCP/Azure) and public exposure |
 | `emails` | Email enumeration from WHOIS and public sources |
@@ -233,26 +287,6 @@ depth = "full"
 ```
 
 Precedence: CLI flags > selected profile > file. Unknown sections or keys are rejected at load time. Uses stdlib `tomllib` (Python 3.11+; on 3.10 everything else works, TOML is simply unavailable).
-
----
-
-## Web dashboard
-
-```bash
-python osint_eye.py example.com --dashboard
-# or load a previous scan:
-python ui/dashboard.py output/my_scan.json   # → http://127.0.0.1:5000
-```
-
-Dark, minimalist UI that listens only on `127.0.0.1` and renders 100% offline (no CDN). Includes KPIs, an interactive attack-surface graph, a findings explorer with full-text search and severity/type/module filters, a multi-scan selector with a diff view, and one-click JSON/CSV/MD export of the open scan. All content is rendered via `textContent` (injection-proof) and the REST API never returns a 500 on malformed data.
-
-REST API: `/api/scans` and `/api/scan/<target>` with `/summary`, `/assets`, `/diff`, `/export`, `/subdomains`, `/ports`, `/graph`, `/mitre` and `/chains`.
-
-| Dashboard (dark) | Graph view | CLI progress |
-|---|---|---|
-| ![Dashboard](docs/assets/dashboard-dark.png) | ![Graph](docs/assets/graph-view.png) | ![CLI](docs/assets/cli-progress.png) |
-
-> Screenshots of the current UI are being regenerated with offline fixtures (`demo-assets` task). Until they land, the paths above are placeholders.
 
 ---
 
@@ -336,7 +370,7 @@ osint_eye.py            # Orchestrator: phases, CLI, exports
 
 ## Testing & CI
 
-- **706 offline tests** — no network, no nmap, no Ollama; fixtures and monkeypatching only. Run with `PYTHONPATH=. pytest -q tests/`.
+- **863 offline tests** — no network, no nmap, no Ollama; fixtures and monkeypatching only. Run with `PYTHONPATH=. pytest -q tests/`.
 - **CI** (`.github/workflows/ci.yml`): ruff lint gate, pytest matrix on Python 3.10/3.11/3.12, coverage job (pytest-cov, Codecov) and a Docker build + smoke test.
 - Compile check: `python -m compileall -q osint_eye.py core graph ai modules ui reporting tests`.
 

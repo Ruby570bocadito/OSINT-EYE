@@ -152,6 +152,20 @@ def _as_str_list(value):
 _SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
+def _subdomain_count(modules):
+    """Unique subdomains across every passive source (dns/certs/permutation).
+
+    Mirrors ``_collect_assets``: the summary KPI must agree with the findings
+    explorer, so a scan whose subdomains came from certificate transparency
+    (``certs``) is counted too — not just the ``dns`` module.
+    """
+    names = set()
+    modules = _as_dict(modules)
+    for key in ("dns", "certs", "permutation"):
+        names.update(_as_str_list(_as_dict(modules.get(key)).get("subdomains")))
+    return len(names)
+
+
 def _norm_sev(value, default="info"):
     """Normalize any severity label to one of the filterable buckets."""
     sev = str(value or "").strip().lower()
@@ -492,7 +506,7 @@ def get_summary(target):
             "target": target,
             "date": results.get("scan_date"),
             "depth": results.get("depth"),
-            "subdomains": len(_as_str_list(_as_dict(modules.get("dns")).get("subdomains"))),
+            "subdomains": _subdomain_count(modules),
             "open_ports": len(open_ports),
             "technologies": tech_list,
             "emails": len(_as_str_list(_as_dict(modules.get("emails")).get("emails_found"))),

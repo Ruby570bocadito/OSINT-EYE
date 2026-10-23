@@ -13,6 +13,13 @@ Reglas del equipo (PROTOCOLO §3):
 - **Dashboard**: el contador y el panel de tecnologías vuelven a reflejar el escaneo (el doble
   envoltorio `_as_dict()` en `get_summary()` convertía la lista de tecnologías detectadas en un
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
+- **Dashboard**: el KPI "Subdomains" cuenta ahora los subdominios de TODAS las fuentes pasivas
+  (`dns` + `certs` + `permutation`, deduplicadas), en línea con el findings explorer — antes solo
+  leía `dns.subdomains` y mostraba "0" pese a cientos de entradas de certificate transparency.
+- **Grafo**: los subdominios descubiertos vía certificate transparency se conectan ahora al hub del
+  dominio (`has_subdomain`) en `_ingest_certs()` — antes quedaban como islas huérfanas y el grafo
+  interactivo se degradaba a un anillo de nodos sueltos (466 nodos / 9 aristas en un caso real;
+  ahora 464 aristas).
 
 ### Seguridad
 - **fix-h004 (escape injection)**: los targets y las rutas de salida suministradas por el usuario se

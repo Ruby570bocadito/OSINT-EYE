@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=cylinder&color=0:0f172a,50:2563eb,100:7c3aed&height=220&section=header&text=OSINT%20EYE&fontSize=72&fontColor=fff&animation=blink&fontAlignY=35&desc=AI-Powered%20Attack%20Surface%20Intelligence&descAlignY=58&descAlign=50" width="100%" />
+<img src="docs/img/banner.png" alt="OSINT EYE — AI-powered attack-surface intelligence" width="100%" />
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)

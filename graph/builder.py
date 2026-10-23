@@ -178,12 +178,25 @@ class GraphBuilder:
 
     def _ingest_certs(self, cert_data: Dict):
         """Ingest certificate data"""
+        # CT (certificate transparency) subdomains belong to the target's
+        # attack surface: link them to the domain hub, otherwise every CT
+        # entry renders as an orphan island and the interactive graph
+        # degrades into an unconnected ring of nodes.
+        parent_domain = (cert_data.get("domain") or "").strip().lower()
+
         for cert in cert_data.get("certificates", []):
             cert_domain = cert.get("domain", "")
             if not cert_domain:
                 continue
 
             self._add_node(cert_domain, "subdomain", cert_domain)
+
+            if (
+                parent_domain
+                and cert_domain != parent_domain
+                and cert_domain.endswith("." + parent_domain)
+            ):
+                self._add_edge(parent_domain, cert_domain, "has_subdomain")
 
             issuer = cert.get("issuer", "")
             if issuer:

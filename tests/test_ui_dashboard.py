@@ -85,3 +85,42 @@ class TestDashboard:
         summary = client.get("/api/scan/demo/summary").get_json()
         assert summary["subdomains"] == 0
         assert summary["open_ports"] == 0
+
+    def test_summary_subdomains_counts_certs_and_permutation(self):
+        """KPI 'Subdomains' must agree with the findings explorer.
+
+        Regression: the summary endpoint only counted ``dns.subdomains``, so a
+        scan whose subdomains came from certificate transparency (``certs``)
+        displayed 0 while the graph showed hundreds of subdomain nodes.
+        """
+        import json
+
+        from ui import dashboard
+
+        results = {
+            "target": "mozilla.org",
+            "scan_date": "2026-10-23T00:00:00",
+            "depth": "normal",
+            "modules": {
+                "dns": {"subdomains": ["a.mozilla.org", "b.mozilla.org"]},
+                "certs": {"subdomains": ["b.mozilla.org", "c.mozilla.org", "d.mozilla.org"]},
+                "permutation": {"subdomains": ["e.mozilla.org"]},
+            },
+        }
+        dashboard.SCAN_RESULTS["mozilla.org"] = results
+        client = dashboard.app.test_client()
+        summary = client.get("/api/scan/mozilla.org/summary").get_json()
+        # dedup across sources: a, b, c, d, e -> 5 (b counted once)
+        assert summary["subdomains"] == 5
+        # consistency with the canonical asset view
+        assets = dashboard._collect_assets(results)
+        subs_assets = [a for a in assets if a["type"] == "subdomain"]
+        assert summary["subdomains"] == len(set(a["name"] for a in subs_assets))
+
+    def test_subdomain_count_helper_defensive(self):
+        from ui import dashboard
+
+        assert dashboard._subdomain_count({}) == 0
+        assert dashboard._subdomain_count(None) == 0
+        assert dashboard._subdomain_count({"certs": {"subdomains": "not-a-list"}}) == 0
+        assert dashboard._subdomain_count({"dns": {"subdomains": [1, {"x": 2}, "ok.com"]}}) == 1
