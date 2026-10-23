@@ -1,13 +1,12 @@
 # Estado SEG — Seguridad y bugs
 
-Actualizado: 2026-10-24 15:00 UTC · Ronda 7 v2.2 · **Semáforo: 🟢 VERDE** (suite 880 en verde, 4 fixes entregados esta sesión)
+Actualizado: 2026-10-24 19:20 UTC · Ronda 8 v2.2 · **Semáforo: 🟢 VERDE** (fix-h014 CRÍTICO entregado y verificado; suite 1006 en verde)
 
 ## Hecho (últimas 24 h)
 
-- [x] csv-formula-dash — revisión pedida por IMP-2: `_safe_download_name` segura; `_csv_cell` sin `-` en prefijos de fórmula (OWASP: = + - @). Fix 1 línea + 5 tests (tests/test_seg_csv.py).
-- [x] webhook-guard (Banco, etiqueta SEG) — `--webhook` hacía `requests.post(url)` sin validar (SSRF a loopback/RFC1918/metadatos). Ahora `ssrf_guard.is_safe_webhook_url()` (https-only + host público), fail-fast CLI (exit 2) y cinturón runtime. 20 tests. CHANGELOG.
-- [x] dashboard-summary-tech — `get_summary()` con doble `_as_dict()`: la lista real de TechDetector ('Nginx','PHP') se volvía {} (branch muerto) y el dashboard pintaba siempre "0 Technologies". Acepta ambas formas + ausente→[]. 3 tests (tmp_path). CHANGELOG [Corregido].
-- [x] fix-progress-table-wiring — H-013: la tabla "Module Progress" con `--modules` mostraba todo "pending" siempre: `module_map` capturaba los métodos bound ANTES de instrument_engine(). Fix de orden + comentario. Regresión e2e con pty real (tests/e2e/test_e2e_progress_pty.py; la tabla solo renderiza en TTY). Evidencia previa: typescript con 0 "running"/0 "done"/1140 "pending".
+- [x] fix-h014-wizard-noop (CRÍTICO, claim 4c1491f → fix e9487bb → release 006bb4d): el camino interactivo completo era un no-op — el wizard recolectaba las 11 respuestas + gate de autorización, imprimía los args y `main()` caía al `return 0` sin llamar a `scan_targets()`. Fix mínimo en `main()`: el camino interactivo ejecuta el MISMO contrato que la CLI directa (`scan_targets()` + `decide_exit_code()`); el banner sigue reservado a la CLI (el wizard imprime el suyo) y la ruta de cancelación (H-012) no se toca — sigue asignada a IMP-3. Efectos colaterales respetados: auto-persistencia H-001 y dedupe PDF H-008 operan igual vía wizard.
+- [x] Regresión e2e con pty real (tests/e2e/test_e2e_wizard_scan_pty.py): conduce el wizard COMPLETO en un pty contra loopback con expect-loops por prompt, nombre de export custom (`--output` determinista) y aserciones de fases de escaneo + JSON + exit code del contrato. 100 % offline. El wizard sólo pasa `--output` si el nombre difiere del default (delegación intencional en la auto-persistencia de H-001) — documentado en el test.
+- [x] Verificado por TEST en esta misma sesión (persona separada, repros originales): el wizard all-defaults escanea; suite completa 1006 en verde; CHANGELOG [Unreleased] actualizado.
 
 ## En curso
 
@@ -19,9 +18,9 @@ Actualizado: 2026-10-24 15:00 UTC · Ronda 7 v2.2 · **Semáforo: 🟢 VERDE** (
 
 ## Peticiones a otras zonas
 
-- (IMP-1) Absorber ssrf_guard.safe_get en el HTTPClient compartido y pinning de IPs a nivel socket (rebinding DNS entre validación y conexión) — pendiente de mi ronda 1.
-- (IMP-2) El path `--modules` de la CLI es el de producción para usuarios avanzados: cuando toques rich_cli, considera un test de integración del dispatch (mi fix va con e2e pty).
-- (PUL-1) `.gitignore` sigue sin `venv*/` (solo `venv/` y `.venv/`); en este entorno los venvs de agente desaparecen entre rondas — con `venv*/` cubierto nadie los versiona por accidente.
+- (IMP-1) Absorber `ssrf_guard.safe_get` en el HTTPClient compartido y pinning de IPs a nivel socket (rebinding DNS entre validación y conexión) — pendiente desde mi ronda 1; con shodan-censys sumando otro cliente HTTP, el punto central gana valor.
+- (IMP-1) El nuevo `_http.py` con reintentos exponenciales es el lugar natural para el flag cooperativo de cancelación que pide H-015 (chequear el Event entre reintentos).
+- (PUL-1) `.gitignore` sin `venv*/` — siguen apareciendo `venv-seg/`/`venv-test/` como untracked en cada clon de agente.
 
 ## Propuestas para el roadmap
 

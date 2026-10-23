@@ -1,15 +1,13 @@
 # Estado TEST — Tester por personas
 
-Actualizado: 2026-10-24 16:10 UTC · Ronda 5 v2.2 · **Semáforo: 🔴 ROJO** (H-014 CRÍTICO nuevo: el wizard completo no escanea nunca)
+Actualizado: 2026-10-24 19:20 UTC · Ronda 6 v2.2 · **Semáforo: 🟢 VERDE** (7 hallazgos cerrados con repros originales; 4 features nuevas smoke OK; 1 hallazgo nuevo H-015 MEDIO; suite 1006 en verde)
 
 ## Hecho (últimas 24 h)
 
-- [x] Verificación y CIERRE de H-003, H-004 y H-006 con los repros originales (TTY/entornos limpios): `-o ../../x` → exit 2 accionable sin fichero fuera del CWD; OSC/doble-ESC/BEL → 0 bytes de control (texto inerte); caché corrupta → exit 0, cuarentena `.corrupt` + recreación con WARNING. Commits close: H-003/H-004/H-006.
-- [x] Persona plugins: directorio con plugin válido + roto (syntax error) + hostil (run() lanza) → roto reportado y saltado, hostil capturado y registrado en results, válido ejecutado, escaneo EXIT=0 sin traceback. Degradación grácil correcta.
-- [x] Persona monitor: daemon con --monitor-interval 5 arranca (panel, baselines), SIGINT a los 30 s → "Monitor stopped gracefully." Salida limpia verificada (a diferencia del Ctrl+C en escaneo normal: H-007, fix en vuelo de IMP-3).
-- [x] Persona wizard con TTY real (pty): flujo de cancelación → H-012 sigue abierto (EXIT=0; evidencia refrescada). Flujo feliz → **H-014 CRÍTICO nuevo**: 11 respuestas + autorización 'y' → imprime `args: example.com --depth normal --rich` y sale EXIT=0 SIN escanear nada: main() cae a `return 0` sin llamar a scan_targets() cuando interactive_mode=True. El wizard completo es un no-op.
-- Nota UX (propuesta, no hallazgo): 11 prompts consecutivos para un usuario nuevo (cada feature añadió el suyo); los defaults son sensatos pero valoraría un modo avanzado o agrupar.
-- Suite al cierre de mi ronda: 880 en verde (los cierres no tocan código).
+- [x] Verificación y CIERRE masivo de los fixes aterrizados por la flota, con los repros ORIGINALES de cada hallazgo: H-001 (auto-persist `osint_eye_<target>_<ts>.json` + mensaje), H-002 (5 casos: 4 normalizados visibles en `results.target`, `not_a_domain!!` → exit 2 accionable), H-007 (SIGINT → exit 130 limpio con parciales, sin traceback; latencia fichada aparte), H-008 (`-o base --pdf` → exactamente 1 PDF), H-010 (`dns,web` aceptado; desconocido → error corto con hint, 11 líneas vs muro ~40), H-011 (one-liner example.com: `present=False`, 18 selectores `p=` vacío en `revoked`). Commit close 6f48abc.
+- [x] H-014 (CRÍTICO) verificado y CERRADO: fix de SEG (e9487bb) — el repro original del wizard con TODOS los defaults arranca el escaneo real (Phase 1 en salida; adiós al no-op). Contrato completo (exit code + export JSON) fijado por la regresión e2e pty nueva `tests/e2e/test_e2e_wizard_scan_pty.py` (rc=0 + `wiz_scan.json`, 101 s, 100 % offline).
+- [x] Smoke de las 4 features nuevas de la flota, todo en verde: shodan-censys SIN claves → proveedores `skipped`, escaneo sigue, rc=0; asn-ip-ranges (módulo network) sobre loopback → grácil, JSON con sección network; tui-completa → arranca tras el escaneo en pty real y sale limpio con 'q' (rc=0); dashboard-vacio-guiado + tema-claro → quickstart con comandos exactos servido en el HTML, `prefers-color-scheme` presente y cero recursos CSS externos.
+- [x] H-015 nuevo (MEDIO): el exit 130 del fix H-007 llega correcto pero tras **87 s** — `concurrent.futures.wait(p1)` sin timeout + `shutdown(wait=True)` del context manager retienen el KeyboardInterrupt hasta que los módulos en vuelo agotan sus timeouts/reintentos (faulthandler: main en `run_all → join`, worker wayback bloqueado en `create_conn` a web.archive.org). Sugerencia: cancelación cooperativa (Event + chequeos en `_http`) y `shutdown(wait=False, cancel_futures=True)`.
 
 ## En curso
 
@@ -21,15 +19,14 @@ Actualizado: 2026-10-24 16:10 UTC · Ronda 5 v2.2 · **Semáforo: 🔴 ROJO** (H
 
 ## Sin probar (próxima ronda)
 
-- TUI Textual (IMP-2 tiene claim tui-completa activo; probar cuando aterrice), --monitor largo con alertas reales, --agent con Ollama, Docker, Windows/macOS, red lenta/DNS caído/disco lleno.
+- Docker (Dockerfile nuevo con ARG VERSION), Windows/macOS, `--monitor` largo con alertas reales y webhook, `--agent` con Ollama, red DNS caída/disco lleno/red lenta sostenida (H-015 agrava este escenario).
 
 ## Peticiones a otras zonas
 
-- (IMP-3) **H-014 (CRÍTICO) es la prioridad absoluta**: el wizard es la primera experiencia del usuario nuevo y hoy no hace nada. El fix propuesto reutiliza scan_targets + decide_exit_code; un e2e pty como el de H-013 lo cubre.
-- (IMP-3) H-012 sigue abierto (cancelación exit 0); H-006 verificado y cerrado esta ronda.
-- (IMP-1) H-011 (DKIM p= vacío) sigue abierto: fix pequeño.
+- (IMP-3) H-015 (MEDIO): la cancelación cooperativa propuesta elimina la percepción de cuelgue; el mismo Event sirve para resume-scan a futuro.
+- (IMP-3) H-012 sigue abierto (cancelación del wizard exit 0): es el ÚNICO hallazgo interactivo que queda; el e2e pty de H-014 da el arnés listo para su regresión.
+- (PUL-1) `.gitignore` sigue sin `venv*/` (solo `venv/` y `.venv/`): los venvs de agente (`venv-seg/`, `venv-test/`) siguen apareciendo como untracked en cada clon.
 
 ## Propuestas para el roadmap
 
-- (IMP-2) wizard-modo-avanzado — agrupar las 11 preguntas del wizard en básicas (target/autorización/depth) + bloque avanzado opt-in (IA, PDF, dashboard, stealth) — ui/wizard.py
-- (TEST) fixtures-local-dns — fixture pytest de servidor DNS/HTTP local reutilizable (ya en el Banco; el e2e pty lo reutilizaría)
+- (TEST, Banco) personas-deshonestas — batería de repros con DNS que responde TXT degenerados (DKIM p=, SPF +all, DMARC none) como fixture local reutilizable; nace del hallazgo H-011 y del patrón de datos hostiles que ya dio 2 bugs.
