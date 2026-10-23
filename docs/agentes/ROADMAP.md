@@ -12,7 +12,7 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-3 — Núcleo, análisis y salidas
 
-- [ ] (IMP-3) results-schema — definir el contrato de results (dataclasses/TypedDict + validate_results()), versión de esquema en el JSON y test de que cada módulo cumple — core/schema.py, osint_eye.py, tests/test_core_schema.py
+- [ ] (IMP-3) findings-extract — extractor único de hallazgos (takeover, buckets públicos, secretos, CVE, ficheros sensibles) a lista canónica con severidad y evidencia, reutilizable por SARIF/exit-codes/risk-scoring — core/findings.py (propuesta IMP-3, ronda 2)
 - [ ] (IMP-3) logging-real — sustituir print() en core/graph/reporting por logging con --log-level y --log-file; Rich solo para la salida de usuario — core/, graph/, reporting/, osint_eye.py
 - [ ] (IMP-3) scope-file — --scope scope.txt / --exclude (dominios, wildcards, CIDR): ningún módulo activo toca algo fuera de scope; los descartes se registran — core/scope.py, osint_eye.py
 - [ ] (IMP-3) sarif-export — exportación SARIF 2.1 de hallazgos (takeover, buckets públicos, secretos, CVE) para GitHub Code Scanning — reporting/sarif.py
@@ -30,14 +30,13 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-2 — Interfaz
 
-- [ ] (IMP-2) dashboard-multiscan — selector de escaneos guardados + vista diff entre dos escaneos (reusa core/scan_diff.py) — ui/
 - [ ] (IMP-2) progreso-por-modulo — barra/tabla de progreso en vivo por módulo (estado, duración, nº de hallazgos, errores) — ui/rich_cli.py
 - [ ] (IMP-2) wizard-scope — el asistente pregunta scope/exclusiones y confirma autorización antes de módulos activos — ui/wizard.py
+- [ ] (IMP-2) wizard-validacion-target — el wizard valida formato de target (dominio/IP/CIDR) con reintentos y avisa si parece una URL antes de continuar — ui/wizard.py (propuesta IMP-2, ronda 2)
 - [ ] (IMP-2) dashboard-export — botón de descarga JSON/CSV/MD del escaneo abierto en el dashboard — ui/
 
 ### PUL-1 — Repo y documentación
 
-- [ ] (PUL-1) readme-fiel — badges reales (versión 2.1.1, 118 tests), árbol actualizado, comandos probados desde cero — README.md
 - [ ] (PUL-1) pyproject — pyproject.toml con metadatos, extras ([ui], [pdf], [dev]) y entry point osint-eye; pip install -e . funciona — pyproject.toml, requirements*.txt
 - [ ] (PUL-1) dockerignore-real — .dockerignore correcto (hoy está en .gitignore y no se versiona), imagen más pequeña — .dockerignore, .gitignore, Dockerfile
 - [ ] (PUL-1) ci-lint-cov — job de ruff y cobertura (pytest --cov) en CI; badge de cobertura — .github/workflows/ci.yml
@@ -126,6 +125,10 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - (IMP-2) dashboard-detalle-activo — ficha de cada activo en el dashboard: módulos que lo reportan, evidencia y primera/última vez visto — ui/dashboard.py, ui/dashboard_template.html
 - (IMP-3) informe-integridad — sello de integridad (SHA-256 de resultados + timestamp UTC + versión de esquema) en todos los exportadores — reporting/
 - (IMP-3) monitor-metrics — métricas del modo monitor en formato Prometheus servidas por el dashboard local (127.0.0.1) — core/monitor.py, ui/dashboard.py
+- (IMP-3) export-cli-flags — --export sarif,stix,csv,... con exportadores selectivos en lugar de exportar todo con --output — osint_eye.py, reporting/ (propuesta IMP-3, ronda 2)
+- (IMP-1) reputacion-blocklists — consultar blocklists públicas sin API key (URLhaus, OpenPhish, PhishTank) para marcar dominio/IP como malicioso conocido — modules/osint/blocklists.py
+- (IMP-2) dashboard-autorefresco — auto-refresco del dashboard en modo monitor (polling de la API cada N s, respeta --monitor-interval) — ui/dashboard.py, ui/dashboard_template.html
+- (IMP-3) cache-ttl-por-fuente — TTLs distintos por fuente en la caché SQLite (DNS corto, wayback largo) en lugar de TTL global — core/session_cache.py
 
 ### Pulimiento
 
@@ -137,8 +140,13 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - (PUL-1) version-unica — única fuente de __version__ en core/ leída por banner CLI y CHANGELOG (hoy el banner dice v2.1 y el repo va por 2.1.1) — core/__init__.py, osint_eye.py
 - (PUL-1) gitignore-output — garantizar output/, .agent-tmp/ y volcados de escaneo en .gitignore (petición de IMP-1) — .gitignore
 - (PUL-2) excepciones-propias — jerarquía de errores (OsintEyeError/ModuleError) para sustituir los ~40 except Exception genéricos detectados — core/errors.py, core/, modules/
+- (PUL-1) usage-sync — docs/USAGE.md sincronizado con los flags actuales (--profile, --monitor, exports) con ejemplos probados — docs/USAGE.md
+- (PUL-2) tipado-modules — tipado completo de modules/ (mypy) como segunda fase tras type-hints-core de core/ y graph/ — modules/
 
 ## ✅ Hecho (DIR mueve aquí lo verificado; se poda cada fase)
 
 - v2.1.1 — dashboard rediseñado, 15 fixes de QA, 118 tests offline.
 - v2.2 ronda 1 — dashboard-filtros: buscador y filtros por severidad/tipo/módulo, sin CDN; verificado por DIR en código (commit a3d61bf, suite en 128 tests en verde).
+- v2.2 ronda 2 — results-schema: core/schema.py con SCHEMA_VERSION 2.0, TypedDicts y validate_results(); verificado por DIR (suite 179 en verde).
+- v2.2 ronda 2 — dashboard-multiscan: selector de escaneos + vista diff reutilizando core/scan_diff.py; verificado por DIR (test_ui_dashboard_diff.py).
+- v2.2 ronda 2 — readme-fiel: badges v2.1.1, árbol y enlaces al ROADMAP; verificado por DIR (nota: badge de tests quedó en 118, suite actual 179 — refrescar en próxima pasada PUL-1).
