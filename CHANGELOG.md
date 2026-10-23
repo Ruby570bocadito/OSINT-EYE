@@ -10,6 +10,10 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Exportación SARIF 2.1 (`<base>.sarif`)**: hallazgos de takeover, buckets públicos, secretos de GitHub,
+  CVEs y ficheros sensibles como resultados SARIF (niveles error/warning/note según severidad, con
+  `partialFingerprints` estables) listos para GitHub Code Scanning; shapes corruptos se saltan sin romper
+  el log. Cableado en `export_all` y `SarifExporter` en `reporting/sarif.py`.
 - **CI de lint y cobertura**: job `lint` (ruff, gate de sintaxis E9) y job `coverage` (pytest-cov sobre `core/modules/graph/reporting/ui/ai`, `coverage.xml` como artifact y subida a Codecov); badge de cobertura en el README.
 - **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
 - **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
