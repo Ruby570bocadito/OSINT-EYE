@@ -15,6 +15,7 @@ from modules.dns.subdomain_permutator import (
     SubdomainTakeoverDetector,
 )
 from modules.certs import CertScanner
+from modules.certs.tls_audit import TLSAuditor
 from modules.web import WaybackScanner
 from modules.web.web_scanner import WebScanner, EndpointDiscovery
 from modules.network import NetworkScanner
@@ -138,6 +139,7 @@ class OSINTEye:
         self.permutator = SubdomainPermutator(threads=100)
         self.takeover_detector = SubdomainTakeoverDetector()
         self.cert_scanner = CertScanner()
+        self.tls_auditor = TLSAuditor()
         self.wayback_scanner = WaybackScanner()
         self.web_scanner = WebScanner()
         self.endpoint_discovery = EndpointDiscovery()
@@ -248,6 +250,15 @@ class OSINTEye:
         self.results["modules"]["certs"] = result
         self.correlator.ingest_certs(result)
         self._print(f"  Found {len(result.get('subdomains', []))} subdomains via CT")
+
+    def run_tls_audit(self):
+        self._print("Running TLS audit...")
+        result = self._safe_run(
+            "tls_audit", self.tls_auditor.audit, self.target, scope=self.scope
+        )
+        self.results["modules"]["tls_audit"] = result
+        grade = result.get("grade") or "n/a"
+        self._print(f"  TLS grade {grade} (score {result.get('score')})")
 
     def run_wayback(self):
         self._print("Running Wayback Machine...")
@@ -793,6 +804,7 @@ def scan_targets(targets: list, args):
             module_map = {
                 "dns": engine.run_dns,
                 "certs": engine.run_certs,
+                "tls_audit": engine.run_tls_audit,
                 "wayback": engine.run_wayback,
                 "network": engine.run_network,
                 "whois": engine.run_whois,
@@ -918,6 +930,7 @@ def scan_targets(targets: list, args):
 MODULE_CATALOG = {
     "dns": "DNS record enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA) + subdomain brute-force",
     "certs": "Certificate transparency (crt.sh) subdomain discovery",
+    "tls_audit": "TLS protocol versions, weak ciphers, certificate expiry and chain (stdlib ssl)",
     "wayback": "Wayback Machine URL history and snapshot timeline",
     "network": "Port & service discovery via nmap (graceful skip if nmap missing)",
     "whois": "Domain registration and ownership data",
@@ -1205,6 +1218,7 @@ Exit codes (CI):
         choices=[
             "dns",
             "certs",
+            "tls_audit",
             "wayback",
             "network",
             "whois",

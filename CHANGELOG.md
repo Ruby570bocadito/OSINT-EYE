@@ -33,6 +33,12 @@ Reglas del equipo (PROTOCOLO §3):
   SQLite y parseo de `osint_eye.toml` — y compara cada caso contra su suelo en `floors.json`
   (márgenes generosos): una caída por debajo del suelo sale con código 1 para pillar regresiones
   groseras de rendimiento antes del release.
+- **Auditoría TLS (`tls_audit`, `--modules tls_audit`)**: sondeo exacto de protocolos aceptados
+  (TLS 1.0/1.1 obsoletos, ausencia de 1.3), familias de cifrado débiles que el servidor aún acepta
+  (RC4, 3DES, CBC-SHA1, anónimos), certificado (caducidad con días restantes, SANs, autofirmado,
+  firma SHA-1) y cadena verificada contra el almacén del sistema; hallazgos explicables con
+  severidad, score 0-100 y nota A-F. Solo stdlib (`ssl`/`socket`), degradación grácil sin conexión
+  y respetando el scope (`modules/certs/tls_audit.py`).
 - **Grafo avanzado**: la leyenda del grafo es ahora una barra de filtros por tipo de nodo (chips
   que atenúan lo excluido), búsqueda de nodos con resaltado, botón «Attack paths» que ilumina los
   caminos más cortos del target hacia los nodos de riesgo (CVEs/buckets, fallback puertos) vía BFS,
