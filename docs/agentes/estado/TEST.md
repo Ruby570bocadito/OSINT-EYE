@@ -1,15 +1,14 @@
 # Estado TEST — Tester por personas
 
-Actualizado: 2026-10-24 15:00 UTC · Ronda 4 v2.2 · **Semáforo: 🟢 VERDE** (8 hallazgos abiertos; H-005 y H-009 cerrados; H-013 detectado y arreglado en sesión)
+Actualizado: 2026-10-24 16:10 UTC · Ronda 5 v2.2 · **Semáforo: 🔴 ROJO** (H-014 CRÍTICO nuevo: el wizard completo no escanea nunca)
 
 ## Hecho (últimas 24 h)
 
-- [x] Cierre de H-005 y H-009 — verificado con test client tras 096e190: todas las rutas /api/scan/... (incluida export) → 200 con target URL y target hostil con slashes. Regresión permanente: tests/test_ui_dashboard_slash_targets.py.
-- [x] demo-assets-nuevos (reabierta por DIR a PUL-1/TEST) — reclamo hecho, trabajo de captura en curso cuando IMP-2 entregó el set completo (992d131). Mi claim liberado; verificación de sus assets como TEST: dashboard-dark.png honesto y completo (grafo 40 nodos, contadores reales, filtros, timeline), cli-progress.png con estados reales (done/running/error) — capturado por el path run_all, que se auto-instrumenta bien.
-- [x] H-013 (nuevo, MEDIO, IMP-3 → arreglado en sesión por SEG): la tabla "Module Progress" con `--modules` mostraba todo "pending" siempre (module_map capturaba métodos antes de instrumentar). Detectado al capturar la CLI para demo-assets; reproducido con typescript real y stub; fix + e2e pty en main.
-- Personas smoke: --diff multi-target EXIT=0 sin crash; --export-cypher con y sin módulo graph (escape \ y ' correcto en literals, labels sanitizados — sin inyección Cypher); exit-codes re-verificados (1/0/3).
-- Evidencia adicional para H-002: con target URL, el módulo emails construye `https://http://127.0.0.1:8599` y falla silencioso ([]) — refuerza la validación de targets de la ALTA.
-- Suite al cierre: 880 en verde (incluye mi e2e pty y los 3 tests de summary).
+- [x] Verificación y CIERRE de H-003, H-004 y H-006 con los repros originales (TTY/entornos limpios): `-o ../../x` → exit 2 accionable sin fichero fuera del CWD; OSC/doble-ESC/BEL → 0 bytes de control (texto inerte); caché corrupta → exit 0, cuarentena `.corrupt` + recreación con WARNING. Commits close: H-003/H-004/H-006.
+- [x] Persona plugins: directorio con plugin válido + roto (syntax error) + hostil (run() lanza) → roto reportado y saltado, hostil capturado y registrado en results, válido ejecutado, escaneo EXIT=0 sin traceback. Degradación grácil correcta.
+- [x] Persona wizard con TTY real (pty): flujo de cancelación → H-012 sigue abierto (EXIT=0; evidencia refrescada). Flujo feliz → **H-014 CRÍTICO nuevo**: 11 respuestas + autorización 'y' → imprime `args: example.com --depth normal --rich` y sale EXIT=0 SIN escanear nada: main() cae a `return 0` sin llamar a scan_targets() cuando interactive_mode=True. El wizard completo es un no-op.
+- Nota UX (propuesta, no hallazgo): 11 prompts consecutivos para un usuario nuevo (cada feature añadió el suyo); los defaults son sensatos pero valoraría un modo avanzado o agrupar.
+- Suite al cierre de mi ronda: 880 en verde (los cierres no tocan código).
 
 ## En curso
 
@@ -21,15 +20,15 @@ Actualizado: 2026-10-24 15:00 UTC · Ronda 4 v2.2 · **Semáforo: 🟢 VERDE** (
 
 ## Sin probar (próxima ronda)
 
-- Wizard con TTY real completo (selector depth), TUI Textual, --monitor largo con alertas reales, plugins --plugin-dir (plugin roto/hostil), --agent con Ollama, Docker, Windows/macOS, red lenta/DNS caído/disco lleno.
+- TUI Textual (IMP-2 tiene claim tui-completa activo; probar cuando aterrice), --monitor largo con alertas reales, --agent con Ollama, Docker, Windows/macOS, red lenta/DNS caído/disco lleno.
 
 ## Peticiones a otras zonas
 
-- (IMP-3) H-012 y H-006 siguen abiertos sin actividad visible; ambos rompen flujos completos (CI y operador con caché corrupta).
+- (IMP-3) **H-014 (CRÍTICO) es la prioridad absoluta**: el wizard es la primera experiencia del usuario nuevo y hoy no hace nada. El fix propuesto reutiliza scan_targets + decide_exit_code; un e2e pty como el de H-013 lo cubre.
+- (IMP-3) H-012 sigue abierto (cancelación exit 0); H-006 verificado y cerrado esta ronda.
 - (IMP-1) H-011 (DKIM p= vacío) sigue abierto: fix pequeño.
-- (IMP-2) Los assets están bien; si regeneras cli-progress.png usa el path --modules (el fix H-013 hace que la tabla refleje estados también ahí).
 
 ## Propuestas para el roadmap
 
-- (IMP-3) modules-comas — aceptar --modules dns,web (split por comas + hint en el error); cierre natural de H-010 — osint_eye.py
-- (TEST) fixtures-local-dns — fixture pytest de servidor DNS/HTTP local reutilizable (ya en el Banco; el e2e pty nuevo reutilizaría el HTTP)
+- (IMP-2) wizard-modo-avanzado — agrupar las 11 preguntas del wizard en básicas (target/autorización/depth) + bloque avanzado opt-in (IA, PDF, dashboard, stealth) — ui/wizard.py
+- (TEST) fixtures-local-dns — fixture pytest de servidor DNS/HTTP local reutilizable (ya en el Banco; el e2e pty lo reutilizaría)
