@@ -21,6 +21,7 @@ from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
 from modules.osint.cloud_email import CloudBucketDetector, EmailEnumerator, CDNDetector
 from modules.cve import CVEScanner
 from core.correlator import AssetCorrelator
+from core.schema import SCHEMA_VERSION, new_results, validate_results
 from core.session_cache import ScanCache, SessionManager
 from core.scan_diff import ScanDiff, AttackChainBuilder, BountyReporter
 from core.monitor import SubdomainMonitor, AlertManager
@@ -93,13 +94,12 @@ class OSINTEye:
         self.use_ai = ai
         self.depth = depth
         self.use_cache = cache
-        self.results = {
-            "target": target,
-            "scan_date": datetime.now().isoformat(),
-            "depth": depth,
-            "modules": {},
-            "errors": [],
-        }
+        self.results = new_results(target, depth)
+        # Defensive: new_results() must always emit a schema-versioned dict;
+        # if the contract drifts, fail loudly here instead of shipping
+        # unversioned scans.
+        if self.results.get("schema_version") != SCHEMA_VERSION:
+            raise RuntimeError("results factory diverged from SCHEMA_VERSION")
 
         self.dns_scanner = DNSScanner()
         self.permutator = SubdomainPermutator(threads=100)
@@ -154,6 +154,20 @@ class OSINTEye:
 
     def _print(self, msg):
         print(f"[*] {msg}")
+
+    def _validate_schema(self):
+        """Check self.results against the contract; warn, never fail.
+
+        A schema violation here is a bug in a collector, not a reason to
+        lose the whole scan: problems are surfaced so the JSON stays
+        debuggable by consumers (dashboard, diff, CI exports).
+        """
+        problems = validate_results(self.results)
+        for problem in problems[:5]:
+            print(f"[!] schema: {problem}")
+        if len(problems) > 5:
+            print(f"[!] schema: {len(problems) - 5} more problems suppressed")
+        return problems
 
     def _drain_executor_errors(self, futures, phase: str):
         """Surface exceptions raised inside phase worker threads.
@@ -505,6 +519,8 @@ class OSINTEye:
         self.run_ai()
         self._print("[+] Phase 4 complete.")
 
+        self._validate_schema()
+
         if self.scan_cache:
             self.scan_cache.save_scan(self.target, "full", self.results, self.depth)
 
@@ -512,6 +528,8 @@ class OSINTEye:
 
     def export_all(self, output_base=None):
         """Export results in all formats"""
+        self._validate_schema()
+
         if not output_base:
             output_base = (
                 f"osint_eye_{_sanitize_filename(self.target)}_"

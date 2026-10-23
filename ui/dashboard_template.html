@@ -200,6 +200,30 @@
     padding: 10px 18px; color: var(--faint); font-size: 12px;
     border-bottom: 1px solid var(--border);
   }
+  .f-label {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .7px;
+  }
+
+  /* ---------- scan comparison (diff) ---------- */
+  .diff-score {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    font-size: 13px; color: var(--muted);
+  }
+  .diff-score b { font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .diff-score .up { color: var(--danger); }
+  .diff-score .down { color: var(--ok); }
+  .diff-group-h {
+    padding: 10px 18px 4px; font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .7px;
+  }
+  .diff-group-h.added { color: var(--ok); }
+  .diff-group-h.removed { color: var(--danger); }
+  .diff-group-h.changed { color: var(--warn); }
+  td.diff-add { color: var(--ok); font-weight: 600; }
+  td.diff-del { color: var(--danger); font-weight: 600; }
+  td.diff-chg { color: var(--warn); font-weight: 600; }
 
   /* ---------- empty states ---------- */
   .empty {
@@ -282,6 +306,18 @@
         </div>
         <div id="assets-body"></div>
       </div>
+
+      <div class="panel span-2">
+        <div class="panel-h"><h2>Scan Comparison</h2><span class="meta" id="diff-meta"></span></div>
+        <div class="filter-bar">
+          <label class="f-label" for="diff-from">From</label>
+          <select id="diff-from"></select>
+          <label class="f-label" for="diff-to">To</label>
+          <select id="diff-to"></select>
+          <button type="button" id="diff-run">Compare</button>
+        </div>
+        <div id="diff-body"></div>
+      </div>
     </section>
 
     <div class="foot">
@@ -352,8 +388,11 @@ async function loadTargets() {
     setEmpty($("tech-body"), "No scans loaded");
     setEmpty($("mitre-body"), "No scans loaded");
     setEmpty($("chains-body"), "No scans loaded");
+    setEmpty($("assets-body"), "No scans loaded");
+    setEmpty($("diff-body"), "No scans loaded");
     setEmpty($("graph-box"), "No graph data");
   }
+  fillScanSelectors();
 }
 
 /* ---------- summary ---------- */
@@ -609,6 +648,107 @@ async function renderAssetsFor(target) {
     $("f-search").value = "";
     ["f-severity", "f-type", "f-module"].forEach((id) => { $(id).value = "all"; });
     renderAssets();
+  });
+})();
+
+/* ---------- scan comparison (diff between two loaded scans) ---------- */
+const DIFF_GROUPS = [
+  ["new_subdomains", "added", "new subdomains", (x) => x],
+  ["removed_subdomains", "removed", "removed subdomains", (x) => x],
+  ["new_ports", "added", "new open ports", (p) => (p.host ? p.host + " : " : "") + p.port + (p.service ? " (" + p.service + ")" : "")],
+  ["closed_ports", "removed", "closed ports", (p) => (p.host ? p.host + " : " : "") + p.port],
+  ["changed_services", "changed", "changed services", (s) => (s.host ? s.host + " : " : "") + s.port + " " + (s.service || "") + " — " + (s.old_version || "—") + " → " + (s.new_version || "—")],
+  ["new_technologies", "added", "new technologies", (x) => x],
+  ["removed_technologies", "removed", "removed technologies", (x) => x],
+  ["new_emails", "added", "new emails", (x) => x],
+  ["new_cves", "added", "new CVEs", (c) => (c.id || "?") + (Array.isArray(c.severity) && c.severity[0] ? " (CVSS " + (c.severity[0].score ?? "?") + ")" : "")],
+  ["new_cloud_buckets", "added", "new cloud buckets", (b) => (b.url || b.bucket || "?")],
+];
+const DIFF_GROUP_CAP = 50;
+
+function fillScanSelectors() {
+  const targets = Array.from(document.querySelectorAll(".target-pill")).map((p) => p.textContent);
+  ["diff-from", "diff-to"].forEach((id) => {
+    clear($(id));
+    targets.forEach((t) => {
+      const opt = el("option", null, t);
+      opt.value = t;
+      $(id).appendChild(opt);
+    });
+  });
+  if (targets.length >= 2) {
+    $("diff-from").value = targets[0];
+    $("diff-to").value = targets[targets.length - 1];
+  }
+}
+
+function diffRow(markerCls, marker, text) {
+  const tr = el("tr");
+  tr.appendChild(el("td", "mono " + markerCls, marker));
+  tr.appendChild(el("td", "mono", text));
+  return tr;
+}
+
+async function runDiff() {
+  const body = $("diff-body");
+  const from = $("diff-from").value;
+  const to = $("diff-to").value;
+  if (!from || !to) {
+    setEmpty(body, "Load at least two scans to compare");
+    return;
+  }
+  if (from === to) {
+    setEmpty(body, "Pick two different scans");
+    return;
+  }
+
+  const data = await getJSON(`/api/scan/${encodeURIComponent(to)}/diff?against=${encodeURIComponent(from)}`);
+  if (!data || data.error) {
+    setEmpty(body, (data && data.error) || "Diff failed");
+    return;
+  }
+
+  clear(body);
+  $("diff-meta").textContent = from + " → " + to;
+
+  const score = data.score_change || {};
+  const delta = Number(score.delta) || 0;
+  const scoreRow = el("div", "diff-score");
+  scoreRow.appendChild(document.createTextNode("Attack surface score: "));
+  scoreRow.appendChild(el("b", null, (score.before ?? "?") + " → " + (score.after ?? "")));
+  if (delta !== 0) {
+    const cls = delta > 0 ? "up" : "down";
+    scoreRow.appendChild(el("span", cls, (delta > 0 ? "↑ +" : "↓ ") + delta));
+  }
+  body.appendChild(scoreRow);
+
+  let shown = 0;
+  DIFF_GROUPS.forEach(([key, kind, label, fmt]) => {
+    const items = (Array.isArray(data[key]) ? data[key] : []).slice(0, DIFF_GROUP_CAP);
+    if (!items.length) return;
+    shown += items.length;
+
+    const head = el("div", "diff-group-h " + kind, (kind === "added" ? "+ " : kind === "removed" ? "− " : "~ ") + items.length + " " + label);
+    body.appendChild(head);
+    const table = el("table");
+    const tbody = el("tbody");
+    const marker = kind === "added" ? "+" : kind === "removed" ? "−" : "~";
+    items.forEach((item) => {
+      let text;
+      try { text = fmt(item); } catch (err) { text = JSON.stringify(item); }
+      tbody.appendChild(diffRow("diff-" + (kind === "added" ? "add" : kind === "removed" ? "del" : "chg"), marker, text));
+    });
+    table.appendChild(tbody);
+    body.appendChild(table);
+  });
+
+  if (!shown) setEmpty(body, "No differences between the two scans");
+}
+
+(function wireDiffControls() {
+  $("diff-run").addEventListener("click", runDiff);
+  ["diff-from", "diff-to"].forEach((id) => {
+    $(id).addEventListener("change", runDiff);
   });
 })();
 
