@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from core.logging_config import get_logger
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -13,6 +14,8 @@ from modules.dns import DNSScanner
 from modules.dns.subdomain_permutator import SubdomainPermutator
 from modules.certs import CertScanner
 from core.session_cache import ScanCache
+
+logger = get_logger(__name__)
 
 
 class AlertManager:
@@ -32,11 +35,15 @@ class AlertManager:
                 handler(alert_type, message, severity, data or {})
             except Exception as e:
                 # A broken alert channel must never take the monitor down.
-                print(f"[!] Alert handler {getattr(handler, '__name__', handler)} failed: {e}")
+                logger.error(
+                    "Alert handler %s failed: %s",
+                    getattr(handler, "__name__", handler),
+                    e,
+                )
 
     @staticmethod
     def log_handler(alert_type, message, severity, data):
-        print(f"[ALERT] [{severity.upper()}] [{alert_type}] {message}")
+        logger.info("[ALERT] [%s] [%s] %s", severity.upper(), alert_type, message)
 
     @staticmethod
     def file_handler(logfile: str):
@@ -91,7 +98,7 @@ Data: {json.dumps(data, indent=2)}
                     except Exception:
                         pass
             except Exception as e:
-                print(f"[!] Email alert failed: {e}")
+                logger.error("Email alert failed: %s", e)
 
         return handler
 
@@ -113,7 +120,7 @@ Data: {json.dumps(data, indent=2)}
                     timeout=10,
                 )
             except Exception as e:
-                print(f"[!] Webhook alert failed: {e}")
+                logger.error("Webhook alert failed: %s", e)
 
         return handler
 
@@ -160,13 +167,13 @@ class SubdomainMonitor:
             dns_result = await asyncio.to_thread(self.dns_scanner.scan, target, "basic")
             new_subdomains.update(dns_result.get("subdomains") or [])
         except Exception as e:
-            print(f"[!] DNS check failed for {target}: {e}")
+            logger.warning("DNS check failed for %s: %s", target, e)
 
         try:
             cert_result = await asyncio.to_thread(self.cert_scanner.scan, target)
             new_subdomains.update(cert_result.get("subdomains") or [])
         except Exception as e:
-            print(f"[!] CT check failed for {target}: {e}")
+            logger.warning("CT check failed for %s: %s", target, e)
 
         try:
             perm_result = await asyncio.to_thread(
@@ -174,7 +181,7 @@ class SubdomainMonitor:
             )
             new_subdomains.update(perm_result or [])
         except Exception as e:
-            print(f"[!] Permutation check failed for {target}: {e}")
+            logger.warning("Permutation check failed for %s: %s", target, e)
 
         if self.scan_cache:
             for sub in new_subdomains:
@@ -218,46 +225,48 @@ class SubdomainMonitor:
         self.running = True
         cycle = 0
 
-        print("[*] Starting OSINT EYE Monitor")
-        print(f"[*] Targets: {', '.join(self.targets)}")
-        print(f"[*] Check interval: {self.check_interval}s")
-        print("[*] Setting baselines...")
+        logger.info("Starting OSINT EYE Monitor")
+        logger.info("Targets: %s", ", ".join(self.targets))
+        logger.info("Check interval: %ss", self.check_interval)
+        logger.info("Setting baselines...")
 
         for target in self.targets:
             self.set_baseline(target)
-            print(f"  - {target}: {len(self.baseline[target])} known subdomains")
+            logger.info("  - %s: %d known subdomains", target, len(self.baseline[target]))
 
-        print("[*] Monitoring started")
+        logger.info("Monitoring started")
 
         while self.running:
             if max_cycles > 0 and cycle >= max_cycles:
                 break
 
             cycle += 1
-            print(f"\n[{'=' * 40}]")
-            print(
-                f"[*] Check #{cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            logger.info("%s", "=" * 40)
+            logger.info(
+                "Check #%d - %s", cycle, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             )
 
             try:
                 results = await self.check_all()
             except Exception as e:
                 # A failing cycle (network outage, scanner bug) must not kill the daemon.
-                print(f"[!] Check cycle #{cycle} failed: {e}")
+                logger.error("Check cycle #%d failed: %s", cycle, e)
                 results = []
 
             for result in results:
                 if result["new_subdomains"]:
-                    print(
-                        f"\n[+] {result['target']}: {len(result['new_subdomains'])} new subdomains"
+                    logger.info(
+                        "%s: %d new subdomains",
+                        result["target"],
+                        len(result["new_subdomains"]),
                     )
                     for sub in result["new_subdomains"][:10]:
-                        print(f"    + {sub}")
+                        logger.info("    + %s", sub)
 
             if self.running and (max_cycles == 0 or cycle < max_cycles):
                 await self._interruptible_sleep(self.check_interval)
 
-        print(f"\n[*] Monitor stopped after {cycle} cycles")
+        logger.info("Monitor stopped after %d cycles", cycle)
 
     async def _interruptible_sleep(self, seconds: float):
         """Sleep in short slices so stop() is honoured promptly (no stale asyncio.sleep)."""
