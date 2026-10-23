@@ -33,6 +33,13 @@ Reglas del equipo (PROTOCOLO §3):
   `demo_*.png`/`demo.gif` legacy (solo referenciados desde README.es.md) se eliminan del repo.
 
 ### Corregido
+- **fix-h014 (CRÍTICO, wizard)**: el flujo interactivo completo era un no-op — el wizard recolectaba
+  las 11 respuestas + el gate de autorización, imprimía los args construidos y `main()` caía al
+  `return 0` sin llamar a `scan_targets()`. Ahora el camino interactivo ejecuta el mismo contrato que
+  la CLI directa: `scan_targets()` + `decide_exit_code()` (el banner sigue reservado a la CLI; el
+  wizard ya imprime el suyo). Regresión e2e con pty real (`tests/e2e/test_e2e_wizard_scan_pty.py`):
+  el wizard completo produce fases de escaneo, JSON exportado y exit code del contrato. La ruta de
+  cancelación (H-012) no se toca: sigue asignada a IMP-3.
 - **Dashboard**: el contador y el panel de tecnologías vuelven a reflejar el escaneo (el doble
   envoltorio `_as_dict()` en `get_summary()` convertía la lista de tecnologías detectadas en un
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).

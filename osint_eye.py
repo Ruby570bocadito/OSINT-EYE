@@ -1628,34 +1628,40 @@ Exit codes (CI):
 
     # Print the banner once for every non-interactive run (scan or monitor).
     # Monitor mode's daemon loop lives entirely inside scan_targets().
-    if not interactive_mode:
-        from ui.rich_cli import RichCLI as _RCli
+    # H-014 (TEST, CRÍTICO): with interactive_mode=True the flow used to
+    # fall through to `return 0` without ever calling scan_targets() — the
+    # wizard collected 11 answers + the authorization gate, printed the
+    # built args and exited as a no-op. The wizard already prints its own
+    # banner (start() → print_banner()), so the banner stays reserved for
+    # the non-interactive path; the scan itself now runs on BOTH paths so
+    # main() honours the same decide_exit_code() contract for CI.
+    from ui.rich_cli import RichCLI as _RCli
 
+    if not interactive_mode:
         _RCli().print_banner()
-        try:
-            all_results = scan_targets(args.targets, args)
-        except ScanInterrupted as interrupted:
-            # H-007 (TEST): clean abort — report what was collected, render
-            # the per-target summary of the partials and exit with the
-            # dedicated interrupt code instead of a raw traceback.
-            partials = interrupted.partial_results
-            names = ", ".join(partials.keys()) or "none"
-            print(f"\n[x] Scan interrupted by user (Ctrl+C); partial results for: {names}")
-            summary_cli = _RCli()
-            for result in partials.values():
-                if isinstance(result, dict):
-                    try:
-                        summary_cli.print_summary(result)
-                    except Exception as exc:
-                        print(f"[!] Partial summary unavailable: {exc}")
-            print(
-                f"[i] Interrupted scans exit with code {EXIT_INTERRUPTED} "
-                f"(128+SIGINT). Re-run with -o to export results as they "
-                f"are collected."
-            )
-            return EXIT_INTERRUPTED
-        return decide_exit_code(all_results, args)
-    return 0
+    try:
+        all_results = scan_targets(args.targets, args)
+    except ScanInterrupted as interrupted:
+        # H-007 (TEST): clean abort — report what was collected, render
+        # the per-target summary of the partials and exit with the
+        # dedicated interrupt code instead of a raw traceback.
+        partials = interrupted.partial_results
+        names = ", ".join(partials.keys()) or "none"
+        print(f"\n[x] Scan interrupted by user (Ctrl+C); partial results for: {names}")
+        summary_cli = _RCli()
+        for result in partials.values():
+            if isinstance(result, dict):
+                try:
+                    summary_cli.print_summary(result)
+                except Exception as exc:
+                    print(f"[!] Partial summary unavailable: {exc}")
+        print(
+            f"[i] Interrupted scans exit with code {EXIT_INTERRUPTED} "
+            f"(128+SIGINT). Re-run with -o to export results as they "
+            f"are collected."
+        )
+        return EXIT_INTERRUPTED
+    return decide_exit_code(all_results, args)
 
 
 if __name__ == "__main__":
