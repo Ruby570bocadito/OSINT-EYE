@@ -10,6 +10,11 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Grafo avanzado**: la leyenda del grafo es ahora una barra de filtros por tipo de nodo (chips
+  que atenúan lo excluido), búsqueda de nodos con resaltado, botón «Attack paths» que ilumina los
+  caminos más cortos del target hacia los nodos de riesgo (CVEs/buckets, fallback puertos) vía BFS,
+  y exportación del grafo a SVG y PNG (estilos inline en el SVG serializado, canvas con data: URL
+  permitido por la CSP, descarga por Blob) — todo cliente, sin CDN ni recursos externos.
 - **Surface Timeline (evolución entre escaneos)**: nuevo panel del dashboard con la línea temporal
   de la superficie — `GET /api/timeline` (global) y `GET /api/scan/<target>/timeline` (por target)
   encadenan deltas por fecha sobre la vista canónica de activos: cuántos activos son nuevos, cuántos
