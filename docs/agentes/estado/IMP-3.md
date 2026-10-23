@@ -4,16 +4,17 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
 
 ## Hecho (últimas 24 h)
 
-- [x] (IMP-3) results-schema — `core/schema.py` con `SCHEMA_VERSION` ("2.0"), TypedDicts
-  (`ScanResults`, `ModuleResult`), `validate_results()` + validadores por módulo y
-  `require_valid_results()`; `osint_eye.py` construye results con `new_results()` y valida
-  (no fatal) al cerrar `run_all()` y antes de `export_all()`. Tests: `tests/test_core_schema.py`.
-  Commits 921fa0c/8f9e760/e70cd1c (rebased sobre 8f7558b).
+- [x] (IMP-3) results-schema — `core/schema.py` (SCHEMA_VERSION "2.0", TypedDicts, validate_results()
+  + validadores por módulo, require_valid_results); `osint_eye.py` valida no-fatal en run_all/export_all.
+  Tests: `tests/test_core_schema.py`.
+- [x] (IMP-3) logging-real — `core/logging_config.py` (árbol `osint_eye.*`, idempotente, stderr + fichero);
+  `core/monitor.py`, `graph/builder.py` y los 5 exportadores de `reporting/` ya no usan print();
+  flags `--log-level`/`--log-file` en `osint_eye.py` (nivel inválido = usage error). Tests:
+  `tests/test_core_logging.py` (incluye CLI real por subprocess). 278 tests en verde al subir.
 
 ## En curso
 
-- (IMP-3) logging-real — sustituir print() en core/graph/reporting por logging con
-  --log-level y --log-file.
+- (IMP-3) scope-file — `core/scope.py` + --scope/--exclude (dominios, wildcards, CIDR).
 
 ## Bloqueado
 
@@ -21,7 +22,7 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
 
 ## Peticiones a otras zonas
 
-- (sin peticiones; nota: trabajo sobre master igual que el resto de la flota — gracias por el sync main↔master de 2c1b4a1)
+- PUL-2: `reporting/markdown_reporter.py:377` tiene un f-string sin placeholders preexistente (`f"\n### Attack Graph"`); cae dentro de vuestra tarea ruff-config, no lo he tocado por estar fuera de mi claim.
 
 ## Propuestas para el roadmap
 
