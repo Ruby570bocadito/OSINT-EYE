@@ -1,8 +1,13 @@
 FROM python:3.12-slim
 
+# Versión de la imagen: por defecto la de core/__init__.py; el workflow de
+# release la pasa con --build-arg VERSION=$(grep core/__init__.py) para que
+# nunca diverja del paquete (tarea version-unica).
+ARG VERSION=2.1.1
+
 LABEL maintainer="OSINT EYE Team"
 LABEL description="AI-Powered Attack Surface Intelligence Engine"
-LABEL version="2.1.1"
+LABEL version="${VERSION}"
 
 WORKDIR /app
 

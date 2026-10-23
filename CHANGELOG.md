@@ -207,6 +207,10 @@ Reglas del equipo (PROTOCOLO §3):
 - **Badges dinámicos de tests y versión**: un job de CI regenera `.github/badges/tests.json` y
   `version.json` en cada push a `main` (endpoint JSON de shields.io servido desde el propio repo);
   los badges del README dejan de derivarse a mano (fin del desfase tipo «706 vs 767»).
+- **Release automático**: al pushear un tag `vX.Y.Z` (que debe coincidir con `__version__` de
+  `core/__init__.py`) el workflow `.github/workflows/release.yml` construye sdist/wheel, publica la
+  imagen en GHCR con el build-arg de versión y abre el GitHub Release con las notas extraídas de la
+  sección correspondiente del CHANGELOG (fallo limpio si la sección no existe).
 
 ### Cambiado
 - **Fuente única de versión**: `core/__init__.py` define `__version__` (2.1.1); el banner de la CLI
