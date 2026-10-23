@@ -97,6 +97,16 @@ def _validate_output_path(value: str, flag: str = "--output") -> str:
     return str(value)
 
 
+def _split_modules_token(value: str) -> list:
+    """Split one --modules argv token on commas (H-010, TEST).
+
+    ``--modules dns,web`` is the natural way to write a list; the type
+    hook splits it per token so both ``dns web`` and ``dns,web`` work.
+    Empty fragments (trailing/double commas) are dropped.
+    """
+    return [m for m in (part.strip() for part in str(value).split(",")) if m]
+
+
 def _pdf_output_name(target: str) -> str:
     """Default PDF filename for a target (sanitized, CWD-relative)."""
     return (
@@ -1335,29 +1345,9 @@ Exit codes (CI):
     parser.add_argument(
         "--modules",
         nargs="*",
-        choices=[
-            "dns",
-            "certs",
-            "tls_audit",
-            "wayback",
-            "network",
-            "whois",
-            "github",
-            "google",
-            "cve",
-            "web",
-            "endpoints",
-            "cloud",
-            "emails",
-            "permutation",
-            "takeover",
-            "cdn_waf",
-            "correlation",
-            "graph",
-            "mitre",
-            "chains",
-        ],
-        help="Specific modules",
+        type=_split_modules_token,
+        help="Modules to run, comma or space separated (e.g. dns,web). "
+        "Without values, prints the module catalog",
     )
 
     if len(sys.argv) == 1:
@@ -1397,6 +1387,21 @@ Exit codes (CI):
             except OutputPathError as exc:
                 parser.error(str(exc))
             setattr(args, attr, value)
+
+    # H-010 (TEST): --modules dns,web is the natural list form; the type
+    # hook splits commas per token, here the per-token lists are flattened
+    # and unknown names rejected with a short, actionable error (the old
+    # choices=[...] dumped ~40 lines of usage instead).
+    if getattr(args, "modules", None):
+        flat = [m for part in args.modules for m in part]
+        args.modules = list(dict.fromkeys(flat))
+        unknown = [m for m in args.modules if m not in MODULE_CATALOG]
+        if unknown:
+            parser.error(
+                f"unknown module(s): {', '.join(unknown)}; valid modules: "
+                f"{', '.join(MODULE_CATALOG)} (separate them with commas or "
+                f"spaces: --modules dns,web)"
+            )
 
     # Configure the library logger before any scan/monitor work runs, so
     # every core/graph/reporting message honours --log-level/--log-file.

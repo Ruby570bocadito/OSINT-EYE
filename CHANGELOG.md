@@ -15,6 +15,10 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h010 (módulos con comas)**: `--modules dns,web` ya funciona (la forma natural de listar): el
+  flag acepta comas y espacios a la vez, recorta espacios, descarta fragmentos vacíos y deduplica.
+  Un nombre desconocido produce un error corto y accionable (lista de módulos válidos + hint
+  `--modules dns,web`) en lugar del volcado de ~40 líneas de usage que dejaba `choices=[...]`.
 - **fix-h008 (PDF duplicado)**: `-o base --pdf` ya no genera dos PDFs. Si 'pdf' está entre los
   formatos de exportación, la rama `--pdf` no renderiza (export_all produce `base.pdf`); si no está,
   la rama deriva la ruta de la base `-o` (sufijo saneado por target en multi-target). Sin `-o` se
