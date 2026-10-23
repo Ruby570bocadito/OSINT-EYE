@@ -10,6 +10,9 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Añadido
+- **Imports perezosos de reportlab (extra `[pdf]` real)**: `import osint_eye` y `import reporting` ya no
+  cargan reportlab hasta generar un PDF de verdad (`PDFReporter` perezoso vía PEP 562 y propiedad
+  diferida en el orquestador); arranque más ligero y empaquetado coherente (petición PUL-1).
 - **Auto-refresco del dashboard (modo monitor)**: el dashboard puede vivir actualizándose —
   `GET /api/dashboard/config` entrega la configuración al cliente; con `--monitor --dashboard` la
   página hace polling de la API cada `--monitor-interval` (límites 5–3600 s), muestra un badge
