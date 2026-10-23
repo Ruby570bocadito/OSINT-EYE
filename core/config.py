@@ -35,13 +35,14 @@ are rejected at load time so typos never silently no-op.
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 try:  # stdlib since Python 3.11
-    import tomllib
+    import tomllib  # type: ignore[import-not-found]  # mypy analiza con python_version=3.10
 except ModuleNotFoundError:  # Python 3.10: TOML config simply unavailable
-    tomllib = None  # type: ignore[assignment]
+    tomllib = None
 
 CONFIG_FILENAME = "osint_eye.toml"
 
@@ -64,7 +65,7 @@ VALID_EXPORT_FORMATS = (
 )
 
 #: section → allowed keys
-VALID_SECTIONS: Dict[str, set] = {
+VALID_SECTIONS: dict[str, set[str]] = {
     "scan": {"depth", "stealth", "no_ai", "no_cache", "modules"},
     "timeouts": {"monitor_interval"},
     "scope": {"includes", "excludes"},
@@ -89,10 +90,8 @@ def _check_bool(section: str, key: str, value: Any) -> None:
         )
 
 
-def _check_str_list(section: str, key: str, value: Any) -> List[str]:
-    if not isinstance(value, list) or not all(
-        isinstance(v, str) for v in value
-    ):
+def _check_str_list(section: str, key: str, value: Any) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
         raise ConfigError(f"{_qual(section, key)} debe ser una lista de strings")
     return value
 
@@ -105,13 +104,13 @@ def _check_positive_int(section: str, key: str, value: Any) -> None:
 class Config:
     """Validated view over an osint_eye.toml document."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> None:
         self._data = copy.deepcopy(data or {})
         self._validate()
 
     # ── construction ────────────────────────────────────────────────────
     @classmethod
-    def load(cls, path: Optional[str] = None) -> Optional["Config"]:
+    def load(cls, path: str | None = None) -> Config | None:
         """Load the config file; ``None`` when none is given nor detected.
 
         ``path=None`` auto-detects ``osint_eye.toml`` in the CWD. An
@@ -120,8 +119,7 @@ class Config:
         """
         if tomllib is None:
             raise ConfigError(
-                "tomllib requiere Python 3.11+; actualiza Python o usa los "
-                "flags de CLI"
+                "tomllib requiere Python 3.11+; actualiza Python o usa los flags de CLI"
             )
         if path is None:
             if not Path(CONFIG_FILENAME).exists():
@@ -138,7 +136,7 @@ class Config:
         return cls(document)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Config":
+    def from_dict(cls, data: dict[str, Any]) -> Config:
         """Build a Config directly from a parsed document (tests/API)."""
         return cls(data)
 
@@ -192,7 +190,7 @@ class Config:
             elif key in ("includes", "excludes", "formats"):
                 _check_str_list(prefix, key, value)
 
-    def validate_modules(self, valid_modules) -> "Config":
+    def validate_modules(self, valid_modules: Iterable[str]) -> Config:
         """Cross-check [scan].modules against the module catalogue."""
         for module in self._data.get("scan", {}).get("modules", []) or []:
             if module not in valid_modules:
@@ -201,7 +199,7 @@ class Config:
                 )
         return self
 
-    def validate_export_formats(self) -> "Config":
+    def validate_export_formats(self) -> Config:
         for fmt in self._data.get("exports", {}).get("formats", []) or []:
             if fmt not in VALID_EXPORT_FORMATS:
                 raise ConfigError(
@@ -214,7 +212,7 @@ class Config:
     def has_profile(self, name: str) -> bool:
         return name in self._data.get("profiles", {})
 
-    def apply_profile(self, name: str) -> "Config":
+    def apply_profile(self, name: str) -> Config:
         """Config with ``[profiles.<name>]`` overlaid on the top level.
 
         ``"default"`` always exists: without a ``[profiles.default]``
@@ -240,40 +238,42 @@ class Config:
 
     # ── typed accessors (None = not configured) ─────────────────────────
     @property
-    def depth(self) -> Optional[str]:
-        return self._data.get("scan", {}).get("depth")
+    def depth(self) -> str | None:
+        return cast("str | None", self._data.get("scan", {}).get("depth"))
 
     @property
-    def stealth(self) -> Optional[bool]:
-        return self._data.get("scan", {}).get("stealth")
+    def stealth(self) -> bool | None:
+        return cast("bool | None", self._data.get("scan", {}).get("stealth"))
 
     @property
-    def no_ai(self) -> Optional[bool]:
-        return self._data.get("scan", {}).get("no_ai")
+    def no_ai(self) -> bool | None:
+        return cast("bool | None", self._data.get("scan", {}).get("no_ai"))
 
     @property
-    def no_cache(self) -> Optional[bool]:
-        return self._data.get("scan", {}).get("no_cache")
+    def no_cache(self) -> bool | None:
+        return cast("bool | None", self._data.get("scan", {}).get("no_cache"))
 
     @property
-    def modules(self) -> Optional[List[str]]:
-        return self._data.get("scan", {}).get("modules")
+    def modules(self) -> list[str] | None:
+        return cast("list[str] | None", self._data.get("scan", {}).get("modules"))
 
     @property
-    def monitor_interval(self) -> Optional[int]:
-        return self._data.get("timeouts", {}).get("monitor_interval")
+    def monitor_interval(self) -> int | None:
+        return cast(
+            "int | None", self._data.get("timeouts", {}).get("monitor_interval")
+        )
 
     @property
-    def scope_includes(self) -> Optional[List[str]]:
-        return self._data.get("scope", {}).get("includes")
+    def scope_includes(self) -> list[str] | None:
+        return cast("list[str] | None", self._data.get("scope", {}).get("includes"))
 
     @property
-    def scope_excludes(self) -> Optional[List[str]]:
-        return self._data.get("scope", {}).get("excludes")
+    def scope_excludes(self) -> list[str] | None:
+        return cast("list[str] | None", self._data.get("scope", {}).get("excludes"))
 
     @property
-    def export_formats(self) -> Optional[List[str]]:
-        return self._data.get("exports", {}).get("formats")
+    def export_formats(self) -> list[str] | None:
+        return cast("list[str] | None", self._data.get("exports", {}).get("formats"))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return copy.deepcopy(self._data)

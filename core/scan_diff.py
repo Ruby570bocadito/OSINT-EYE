@@ -3,9 +3,10 @@
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 
-def _tech_set(raw) -> set[str]:
+def _tech_set(raw: Any) -> set[str]:
     """Normalize a technologies payload (dict/list/set) into a set of strings."""
     if isinstance(raw, dict):
         return set(raw.get("technologies") or [])
@@ -14,7 +15,7 @@ def _tech_set(raw) -> set[str]:
     return set()
 
 
-def _severity_score(cve: dict) -> float:
+def _severity_score(cve: dict[str, Any]) -> float:
     """Extract the CVSS score from a CVE entry ([{"score": x, ...}])."""
     severity = cve.get("severity")
     if isinstance(severity, list) and severity:
@@ -41,11 +42,11 @@ class ScanDiff:
         "score_change",
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.diff = self._fresh_diff()
 
     @classmethod
-    def _fresh_diff(cls) -> dict:
+    def _fresh_diff(cls) -> dict[str, Any]:
         return {
             "new_subdomains": [],
             "removed_subdomains": [],
@@ -60,7 +61,9 @@ class ScanDiff:
             "score_change": {"before": 0, "after": 0, "delta": 0},
         }
 
-    def compare(self, old_results: dict, new_results: dict) -> dict:
+    def compare(
+        self, old_results: dict[str, Any], new_results: dict[str, Any]
+    ) -> dict[str, Any]:
         """Compare two scan results.
 
         Safe to reuse: every call starts from a fresh skeleton, so a
@@ -85,7 +88,7 @@ class ScanDiff:
 
         return self.diff
 
-    def _diff_subdomains(self, old: dict, new: dict):
+    def _diff_subdomains(self, old: dict[str, Any], new: dict[str, Any]) -> None:
         old_subs = set(old.get("dns", {}).get("subdomains", []))
         old_subs.update(old.get("certs", {}).get("subdomains", []))
         old_subs.update(old.get("permutation", {}).get("subdomains", []))
@@ -97,13 +100,13 @@ class ScanDiff:
         self.diff["new_subdomains"] = sorted(list(new_subs - old_subs))
         self.diff["removed_subdomains"] = sorted(list(old_subs - new_subs))
 
-    def _diff_ports(self, old: dict, new: dict):
-        old_services = {}
+    def _diff_ports(self, old: dict[str, Any], new: dict[str, Any]) -> None:
+        old_services: dict[tuple[Any, Any], Any] = {}
         for svc in old.get("network", {}).get("services", []):
             key = (svc.get("host"), svc.get("port"))
             old_services[key] = svc
 
-        new_services = {}
+        new_services: dict[tuple[Any, Any], Any] = {}
         for svc in new.get("network", {}).get("services", []):
             key = (svc.get("host"), svc.get("port"))
             new_services[key] = svc
@@ -146,20 +149,20 @@ class ScanDiff:
                     }
                 )
 
-    def _diff_technologies(self, old: dict, new: dict):
+    def _diff_technologies(self, old: dict[str, Any], new: dict[str, Any]) -> None:
         old_techs = _tech_set(old.get("web", {}).get("technologies"))
         new_techs = _tech_set(new.get("web", {}).get("technologies"))
 
         self.diff["new_technologies"] = sorted(map(str, new_techs - old_techs))
         self.diff["removed_technologies"] = sorted(map(str, old_techs - new_techs))
 
-    def _diff_emails(self, old: dict, new: dict):
+    def _diff_emails(self, old: dict[str, Any], new: dict[str, Any]) -> None:
         old_emails = set(old.get("emails", {}).get("emails_found", []))
         new_emails = set(new.get("emails", {}).get("emails_found", []))
 
         self.diff["new_emails"] = sorted(list(new_emails - old_emails))
 
-    def _diff_cves(self, old: dict, new: dict):
+    def _diff_cves(self, old: dict[str, Any], new: dict[str, Any]) -> None:
         old_cves = {c.get("id") for c in old.get("cve", {}).get("cves") or []}
         new_cve_entries = new.get("cve", {}).get("cves") or []
         new_cves = {c.get("id") for c in new_cve_entries}
@@ -168,7 +171,7 @@ class ScanDiff:
             c for c in new_cve_entries if c.get("id") in (new_cves - old_cves)
         ]
 
-    def _diff_cloud(self, old: dict, new: dict):
+    def _diff_cloud(self, old: dict[str, Any], new: dict[str, Any]) -> None:
         old_buckets = {
             b.get("url") for b in old.get("cloud_buckets", {}).get("found") or []
         }
@@ -179,7 +182,7 @@ class ScanDiff:
             b for b in new_bucket_entries if b.get("url") in (new_buckets - old_buckets)
         ]
 
-    def _diff_scores(self, old: dict, new: dict):
+    def _diff_scores(self, old: dict[str, Any], new: dict[str, Any]) -> None:
         old_corr = old.get("correlation") or {}
         new_corr = new.get("correlation") or {}
         old_score = (old_corr.get("attack_surface_score") or {}).get("score", 0) or 0
@@ -254,10 +257,10 @@ class ScanDiff:
 class AttackChainBuilder:
     """Build attack chains from findings"""
 
-    def __init__(self):
-        self.chains = []
+    def __init__(self) -> None:
+        self.chains: list[dict[str, Any]] = []
 
-    def build(self, scan_results: dict) -> list[dict]:
+    def build(self, scan_results: dict[str, Any]) -> list[dict[str, Any]]:
         """Build potential attack chains"""
         self.chains = []
         modules = scan_results.get("modules", {})
@@ -271,7 +274,7 @@ class AttackChainBuilder:
 
         return self.chains
 
-    def _build_initial_access_chains(self, modules: dict):
+    def _build_initial_access_chains(self, modules: dict[str, Any]) -> None:
         cves = modules.get("cve", {}).get("cves") or []
         services = modules.get("network", {}).get("services") or []
 
@@ -331,7 +334,7 @@ class AttackChainBuilder:
             }
             self.chains.append(chain)
 
-    def _build_credential_chains(self, modules: dict):
+    def _build_credential_chains(self, modules: dict[str, Any]) -> None:
         emails = modules.get("emails", {}).get("emails_found") or []
         github = modules.get("github", {})
 
@@ -387,7 +390,7 @@ class AttackChainBuilder:
             }
             self.chains.append(chain)
 
-    def _build_cloud_chains(self, modules: dict):
+    def _build_cloud_chains(self, modules: dict[str, Any]) -> None:
         buckets = modules.get("cloud_buckets", {}).get("public") or []
 
         for bucket in buckets:
@@ -416,7 +419,7 @@ class AttackChainBuilder:
             }
             self.chains.append(chain)
 
-    def _build_supply_chain(self, modules: dict):
+    def _build_supply_chain(self, modules: dict[str, Any]) -> None:
         techs = list(_tech_set(modules.get("web", {}).get("technologies")))
 
         known_vuln_stacks = {
@@ -480,7 +483,9 @@ class BountyReporter:
 
     OUTPUT_DIR = "output"
 
-    def generate(self, scan_results: dict, program_name: str = None) -> str:
+    def generate(
+        self, scan_results: dict[str, Any], program_name: str | None = None
+    ) -> str:
         """Write a markdown bounty report and return its path.
 
         Files land in a deterministic directory (``./output/`` relative to the
@@ -526,7 +531,7 @@ All findings are derived from publicly available information and passive/active 
 ## Critical Findings
 
 """
-        critical_findings = []
+        critical_findings: list[str] = []
 
         takeover = modules.get("takeover", {}).get("vulnerable", [])
         if takeover:

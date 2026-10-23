@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any
 
 #: Canonical severity ladder (lowest → highest).
 SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
@@ -25,7 +25,7 @@ SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
 SEVERITY_RANK = {name: rank for rank, name in enumerate(SEVERITY_ORDER)}
 
 #: Rule catalogue: rule id → default severity + human label.
-RULE_CATALOG: Dict[str, Dict[str, str]] = {
+RULE_CATALOG: dict[str, dict[str, str]] = {
     "subdomain_takeover": {
         "severity": "critical",
         "label": "Subdomain takeover",
@@ -59,15 +59,15 @@ RULE_CATALOG: Dict[str, Dict[str, str]] = {
 _BAD_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
-def _d(value) -> Dict:
+def _d(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _l(value) -> List:
+def _l(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _clean(value) -> str:
+def _clean(value: Any) -> str:
     return _BAD_CHARS.sub("", str(value or "")).strip()
 
 
@@ -83,17 +83,17 @@ class Finding:
     source_module: str = ""
     fingerprint: str = field(default="", compare=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Fingerprint is derived, never part of identity comparisons: two
         # findings extracted twice must compare equal AND dedupe the same.
         if not self.fingerprint:
             object.__setattr__(self, "fingerprint", self.compute_fingerprint())
 
     def compute_fingerprint(self) -> str:
-        basis = f"{self.rule}|{self.uri}|{self.title}".encode("utf-8")
+        basis = f"{self.rule}|{self.uri}|{self.title}".encode()
         return hashlib.sha256(basis).hexdigest()[:16]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "rule": self.rule,
             "severity": self.severity,
@@ -105,7 +105,7 @@ class Finding:
         }
 
 
-def normalize_cve_severity(cve: Dict) -> str:
+def normalize_cve_severity(cve: dict[str, Any]) -> str:
     """Map a CVE entry's many severity shapes onto the canonical ladder.
 
     Accepts the NVD list shape, a flat dict, a bare score or nothing:
@@ -120,8 +120,9 @@ def normalize_cve_severity(cve: Dict) -> str:
     named = str(sev.get("severity", "") or "").upper()
     if named in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
         return named.lower()
+    raw_score: Any = sev.get("score")
     try:
-        score = float(sev.get("score"))
+        score = float(raw_score)
     except (TypeError, ValueError):
         return "low"
     if score >= 9.0:
@@ -133,8 +134,14 @@ def normalize_cve_severity(cve: Dict) -> str:
     return "low"
 
 
-def _finding(rule: str, title: str, uri: str, evidence: str, module: str,
-             severity: Optional[str] = None) -> Optional[Finding]:
+def _finding(
+    rule: str,
+    title: str,
+    uri: str,
+    evidence: str,
+    module: str,
+    severity: str | None = None,
+) -> Finding | None:
     title = _clean(title)
     if not title:
         return None
@@ -149,12 +156,12 @@ def _finding(rule: str, title: str, uri: str, evidence: str, module: str,
     )
 
 
-def extract_findings(results: Dict) -> List[Finding]:
+def extract_findings(results: dict[str, Any]) -> list[Finding]:
     """Project a results dict onto the canonical finding list."""
     results = _d(results)
     modules = _d(results.get("modules"))
     target = _clean(results.get("target")) or "unknown"
-    findings: List[Finding] = []
+    findings: list[Finding] = []
 
     # Subdomain takeover (critical)
     for item in _l(_d(modules.get("takeover")).get("vulnerable")):
@@ -213,7 +220,9 @@ def extract_findings(results: Dict) -> List[Finding]:
         finding = _finding(
             "github_secret_leak",
             f"Potential secret/config leak on GitHub: {label}{detail}",
-            label if label.startswith("http") else f"https://github.com/search?q={label}",
+            label
+            if label.startswith("http")
+            else f"https://github.com/search?q={label}",
             snippet,
             "github",
         )
@@ -273,9 +282,11 @@ def extract_findings(results: Dict) -> List[Finding]:
     # Google dorks: admin panels (medium) and login pages (low)
     google = _d(modules.get("google"))
     for item in _l(google.get("admin_panels")):
-        url = _clean(item.get("url") if isinstance(item, dict) else item) if isinstance(
-            item, (dict, str)
-        ) else ""
+        url = (
+            _clean(item.get("url") if isinstance(item, dict) else item)
+            if isinstance(item, (dict, str))
+            else ""
+        )
         if url:
             finding = _finding(
                 "exposed_admin_panel",
@@ -287,9 +298,11 @@ def extract_findings(results: Dict) -> List[Finding]:
             if finding:
                 findings.append(finding)
     for item in _l(google.get("login_pages")):
-        url = _clean(item.get("url") if isinstance(item, dict) else item) if isinstance(
-            item, (dict, str)
-        ) else ""
+        url = (
+            _clean(item.get("url") if isinstance(item, dict) else item)
+            if isinstance(item, (dict, str))
+            else ""
+        )
         if url:
             finding = _finding(
                 "exposed_login_page",
@@ -304,7 +317,7 @@ def extract_findings(results: Dict) -> List[Finding]:
     return findings
 
 
-def sort_findings(findings: List[Finding]) -> List[Finding]:
+def sort_findings(findings: list[Finding]) -> list[Finding]:
     """Highest severity first; ties broken by URI for deterministic output."""
     return sorted(
         findings,
@@ -312,10 +325,10 @@ def sort_findings(findings: List[Finding]) -> List[Finding]:
     )
 
 
-def findings_summary(findings: List[Finding]) -> Dict:
+def findings_summary(findings: list[Finding]) -> dict[str, Any]:
     """Aggregate counts by severity and rule (JSON-safe)."""
     by_severity = {name: 0 for name in SEVERITY_ORDER}
-    by_rule: Dict[str, int] = {}
+    by_rule: dict[str, int] = {}
     for finding in findings:
         if finding.severity in by_severity:
             by_severity[finding.severity] += 1
@@ -323,7 +336,7 @@ def findings_summary(findings: List[Finding]) -> Dict:
     return {"total": len(findings), "by_severity": by_severity, "by_rule": by_rule}
 
 
-def worst_severity(findings: List[Finding]) -> Optional[str]:
+def worst_severity(findings: list[Finding]) -> str | None:
     """Highest severity present, or ``None`` with no findings."""
     if not findings:
         return None
