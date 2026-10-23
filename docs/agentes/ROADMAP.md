@@ -7,8 +7,8 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 ## 🔴 ALTA (urgente, va antes que todo)
 
 - [x] (TODOS) rama-canonical — CERRADA ronda 4: la flota empuja a `main` (verificado: findings/estados/hallazgos de la flota llegan por main); `master` queda como espejo alineado por DIR (--force-with-lease, contenido único de master verificado como ya integrado en main) — transversal
-- [ ] (IMP-3) fix-h003-path-traversal — H-003 de TEST: `-o` con path traversal escribe fuera del directorio previsto; sanear/validar ruta de salida — osint_eye.py, reporting/
-- [ ] (IMP-3) fix-h004-escape-injection — H-004 de TEST: caracteres de escape/inyección en el target llegan a salidas (CLI/HTML); escapar en el punto de render — osint_eye.py, ui/
+- [ ] (IMP-3) fix-h003-path-traversal — H-003 de TEST: `-o` con path traversal escribe fuera del directorio previsto; sanear/validar ruta de salida — osint_eye.py, reporting/ (claim activo, en vuelo)
+- [x] (IMP-3) fix-h004-escape-injection — ENTREGADA ronda 5 (cc0d2ec, release bd1f34c): bytes de control neutralizados antes del terminal; verificado por DIR
 - [ ] (PUL-1) readme-en-desde-cero — [x] ENTREGADA ronda 5 (7708983): README.md en inglés desde cero (373 líneas, 14 secciones), README.es.md conservado con cross-links; verificado por DIR (100% inglés, badges honestos, todo lo documentado existe en código incl. TOML config)
 - [ ] (IMP-2 → REABIERTA a PUL-1/TEST, ronda 5) demo-assets-nuevos — **petición directa del propietario (ronda 5), URGENTE: el README nuevo ya referencia 3 ficheros que no existen (docs/assets/dashboard-dark.png, cli-progress.png, graph-view.png — enlaces rotos en portada)**: capturas reales de la UI ACTUAL con fixtures offline (loopback tipo TEST e2e, dominios example.com/fixture, nada de datos reales de terceros); mínimos para cerrar los enlaces rotos: dashboard-dark.png (dashboard oscuro con escaneo cargado y filtros visibles), cli-progress.png (Rich CLI con tabla progreso-por-módulo), graph-view.png (vista grafo); deseados después: wizard-auth.png, report-pdf.png, 1 GIF demo-scan.gif (≤15 s, <5 MB) y MP4 opcional (≤30 s); sustituir también los demo_*.png/demo.gif viejos cuando estén los nuevos; Playwright/headless contra el dashboard local o asciinema→gif para CLI; IMP-2 queda eximida (está en grafo-avanzado) pero puede revisar los assets — docs/assets/
 
@@ -22,10 +22,10 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - [ ] (IMP-3) fix-h008-pdf-duplicado — H-008 de TEST: el PDF se genera duplicado en export_all; deduplicar — reporting/
 - [ ] (IMP-3) fix-h002-validacion-targets — H-002 de TEST: validar formato de target en la CLI (gemelo CLI de wizard-validacion-target); rechazar URLs como targets con mensaje accionable — osint_eye.py
 - [ ] (IMP-2) fix-h005-dashboard-slash — [x] ENTREGADA ronda 5 (096e190): verificado por DIR (test_ui_dashboard_slash_targets.py)
-- [ ] (IMP-2) fix-h009-dashboard-export-slash — H-009 de TEST (MEDIO): la ruta de export del dashboard falla con targets tipo URL/slash (gemelo de fix-h005 en export) — ui/dashboard.py
+- [x] (IMP-2) fix-h009-dashboard-export-slash — ANULADA ronda 5 a petición de TEST: duplicada de fix-h005 (ya entregada y verificada); no asignar a IMP-2
 - [ ] (IMP-3) fix-h012-wizard-cancela-exit-code — H-012 de TEST (MEDIO): cancelar en el wizard termina con exit 0; debe salir con código no-cero y mensaje claro (importa a CI) — ui/wizard.py, osint_eye.py
 - [ ] (IMP-1) fix-h011-dkim-p-vacio — H-011 de TEST (BAJO): registro DKIM con p= vacío produce falso positivo; tratar "p=" vacío como política sin clave, no como válida — modules/dns/email_security.py
-- [ ] (IMP-3) fix-h010-modules-comas — H-010 de TEST (BAJO): la lista de --modules acepta/ensucia con comas; normalizar entrada y mensaje de error — osint_eye.py
+- [ ] (IMP-3) fix-h010-modules-comas — H-010 de TEST (BAJO): la lista de --modules acepta/ensucia con comas; normalizar entrada y mensaje de error (aceptar --modules dns,web con split por comas + hint en el error, propuesta TEST) — osint_eye.py
 
 ### IMP-3 — Núcleo, análisis y salidas
 
@@ -33,10 +33,9 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-1 — Colectores
 
-- [ ] (IMP-1) scope-collectores — aplicar `Scope.allows()`/`filter_targets()` (core/scope.py) a las URLs derivadas dentro de cada módulo: dns brute-force de wordlist, endpoints, cloud (petición de IMP-3, ronda 4) — modules/
-- [ ] (IMP-1) tls-audit — versión TLS, cifrados débiles, caducidad y cadena del certificado con ssl de la stdlib — modules/certs/tls_audit.py
-- [ ] (IMP-1) js-secrets — extracción de secretos/endpoints/claves en ficheros JS (regex + entropía) con verificación de falsos positivos — modules/web/ (promocionada del Siguiente, ronda 4)
+- [ ] (IMP-1) js-secrets — extracción de secretos/endpoints/claves en ficheros JS (regex + entropía) con verificación de falsos positivos — modules/web/ (promocionada del Siguiente, ronda 4; claim activo)
 - [ ] (IMP-1) favicon-hash — hash mmh3 del favicon para pivotar tecnologías y hosts relacionados — modules/web/ (promocionada del Siguiente, ronda 4)
+- [ ] (IMP-1) fix-h011-dkim-p-vacio — H-011 de TEST (BAJO): registro DKIM con p= vacío produce falso positivo; tratar "p=" vacío como política sin clave, no como válida — modules/dns/email_security.py
 
 ### IMP-2 — Interfaz
 
@@ -132,8 +131,9 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - (IMP-2) dashboard-sse — progreso del escaneo en vivo vía Server-Sent Events (menos polling que el autorefresco, un solo canal) — ui/dashboard.py, ui/dashboard_template.html
 - (IMP-3) ndjson-stream — salida incremental NDJSON por módulo/hallazgo para consumo en vivo por otros procesos y pipelines — reporting/
 - (PUL-1) badges-dinamicos — workflow que actualiza el badge de tests y versión en cada push (fin de la deriva manual: README dice 293 y la suite va por 489) — .github/workflows/
-- (SEG) webhook-guard — validar la URL de --webhook: allowlist de scheme https y bloqueo de IPs privadas reutilizando ssrf_guard (SSRF en el webhook propio) — osint_eye.py, modules/web/ssrf_guard.py
 - (TEST) fixtures-local-dns — fixture pytest de servidor DNS/HTTP local reutilizable para el e2e offline y futuros tests de red — tests/conftest.py, tests/fixtures/
+- (IMP-2) dashboard-vacio-guiado — panel con los 3 comandos exactos para generar un escaneo real cuando el dashboard carga datos demo (propuesta TEST, ronda 5) — ui/dashboard_template.html
+- (SEG) webhook-guard — [x] ENTREGADA ronda 5 (cfd9cd7): --webhook exige https y host público + test_seg_webhook.py; verificado por DIR
 
 ### Pulimiento
 
@@ -186,3 +186,12 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - v2.2 ronda 5 (tardía) — lazy-imports-reportlab (IMP-3): import diferido de reportlab + test_core_lazy_imports.py (CLI arranca sin extras pesados); verificado por DIR.
 - v2.2 ronda 5 (tardía) — **readme-en-desde-cero (PUL-1, directiva del propietario)**: README.md nuevo 100% inglés escrito desde cero (373 líneas, 14 secciones: quickstart, scope/autorización, módulos, exportes, TOML, dashboard, monitor/plugins/AI, arquitectura, testing/CI, uso responsable) + README.es.md conservado con cross-links; verificado por DIR (0 hispanismos, badges honestos, toda feature documentada existe en código); claim purgado por DIR tras verificación (entrega sin release).
 - v2.2 ronda 5 (tardía) — changelog-consolidacion (PUL-1): [Unreleased] consolidada; verificado por DIR vía release 7207948.
+- v2.2 ronda 5 (tardía) — tls-audit (IMP-1): modules/certs/tls_audit.py (versiones de protocolo, cifrados débiles, certificado y cadena); verificado por DIR (release d53e652).
+- v2.2 ronda 5 (tardía) — scope-collectores (IMP-1): Scope.allows() aplicado a URLs derivadas en colectores + test_modules_scope.py; verificado por DIR (release 8c73661).
+- v2.2 ronda 5 (tardía) — webhook-guard (SEG): --webhook exige https y host público (reutiliza lógica anti-SSRF) + test_seg_webhook.py; verificado por DIR.
+- v2.2 ronda 5 (tardía) — csv-formula-dash (SEG): prefijo anti-fórmula en _csv_cell (revisión de IMP-2); verificado por DIR.
+- v2.2 ronda 5 (tardía) — badges-dinamicos (PUL-1): job de CI regenera tests.json/version.json en cada push y los README usan endpoint dinámico — fin de la deriva manual de badges; verificado por DIR (release b8f362d).
+- v2.2 ronda 5 (tardía) — makefile (PUL-1): Makefile con help/install/test/coverage/lint/docker/clean espejo del CI; verificado por DIR (release ad94fa6).
+- v2.2 ronda 5 (tardía) — contributing (PUL-1): CONTRIBUTING.md, SECURITY.md y plantillas de issue/PR; verificado por DIR (release dceee49).
+- v2.2 ronda 5 (tardía) — excepciones-propias fase 1 (PUL-2): jerarquía OsintEyeError/ModuleError en core/; verificado por DIR (release ccce453); tarea del Banco sigue abierta para migrar los ~40 except Exception.
+- v2.2 ronda 5 (tardía) — fix-h004-escape-injection (IMP-3, ALTA seguridad): bytes de control neutralizados antes del terminal; verificado por DIR (release bd1f34c, H-004 a resuelto-pendiente-verificación).

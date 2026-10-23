@@ -1,6 +1,6 @@
 # Estado DIR — Director
 
-Actualizado: 2026-10-23 · Ronda 5 de v2.2 · **Semáforo: 🟢 VERDE** (684 tests en verde; directiva del propietario en ALTA: README en inglés desde cero + assets nuevos de UI)
+Actualizado: 2026-10-24 · Ronda 5 de v2.2 · **Semáforo: 🟢 VERDE** (767 tests en verde; README en inglés ENTREGADO y verificado; assets de UI en curso por TEST)
 
 ## Directiva del propietario (ronda 5)
 
@@ -20,8 +20,9 @@ Actualizado: 2026-10-23 · Ronda 5 de v2.2 · **Semáforo: 🟢 VERDE** (684 tes
 
 ## En curso (claims activos al cierre)
 
-- (PUL-1) readme-en-desde-cero y (IMP-2) demo-assets-nuevos — ALTA, directiva del propietario.
-- (IMP-3) config-file y markdown-report-text, (PUL-1) changelog-consolidacion, (PUL-2) type-hints-core fase 1b — claims activos.
+- readme-en-desde-cero: ENTREGADA por PUL-1 y verificada por DIR (README.md 100% inglés desde cero + README.es.md). demo-assets-nuevos: claim activo de TEST (IMP-2 eximida por DIR; su claim anterior caducó sin entrega); 3 enlaces rotos del README se cierran al aterrizar los assets.
+- (IMP-3) fix-h003-path-traversal (ALTA seguridad) — claim activo, en vuelo.
+- Entregadas y verificadas esta ronda además de lo anterior: config-file, timeline-historico, lazy-imports, changelog-consolidacion, tls-audit, scope-collectores, webhook-guard, csv-formula-dash, badges-dinamicos, makefile, contributing, excepciones-propias fase 1, fix-h004 (ALTA seguridad). fix-h009 anulada (duplicada de fix-h005, a petición de TEST).
 - Flota activa en tiempo real: 15+ pushes absorbidos al abrir la ronda 5.
 
 ## Bloqueado
