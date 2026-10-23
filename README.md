@@ -4,9 +4,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.1.0-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.1.1-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](CHANGELOG.md)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-61%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-118%20passing-3FB68B?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![API Keys](https://img.shields.io/badge/API_Keys-None%20required-3FB68B?style=for-the-badge&logo=key&logoColor=white)]()
 
 </div>
@@ -72,7 +72,7 @@ Diseñada para pentesters, bug bounty hunters, analistas SOC e investigadores de
 - **Correlación real**: los hallazgos de todos los módulos se cruzan en un inventario unificado de activos con puntuación de riesgo ponderada.
 - **Degradación elegante**: si falta `nmap` o una fuente externa está caída, el módulo se salta con un aviso claro y el escaneo continúa.
 - **Salidas profesionales**: JSON, Markdown, HTML, PDF (ReportLab), CSV, Burp XML, Metasploit JSON, capa MITRE Navigator y grafo HTML interactivo — todo en una sola pasada.
-- **Probado**: 61 tests unitarios que corren **offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
+- **Probado**: 118 tests que corren **100% offline** y CI en GitHub Actions contra Python 3.10/3.11/3.12.
 
 ---
 
@@ -268,23 +268,16 @@ osint_eye.py            # Orquestador: fases, CLI, exportación
 ├── reporting/          # PDF, Markdown, HTML, CSV, Burp, MSF, MITRE
 ├── ui/                 # Rich CLI, wizard, TUI Textual, dashboard Flask
 ├── ai/                 # Motor IA local (Ollama)
-└── tests/              # 61 tests offline (pytest)
+└── tests/              # 118 tests offline (pytest)
 ```
 
 ---
 
 ## 🗺 Roadmap
 
-- [x] Núcleo DNS/web/certificados (v1.0)
-- [x] Motores de dorking GitHub/Google (v1.5)
-- [x] Correlación, grafo, diff y bounty reports (v2.0)
-- [x] Dashboard Flask + exportadores (v2.0)
-- [x] IA local vía Ollama (v2.0)
-- [x] **v2.1**: CLI renovada, score ponderado con buckets/takeovers, monitor daemon estable, tests offline, CI multi-versión, Docker non-root
-- [ ] Integración Shodan / Censys (con clave propia)
-- [ ] Alertas push (Telegram/Discord nativo)
-- [ ] Análisis de tendencias entre escaneos históricos
-- [ ] Marketplace de plugins de la comunidad
+Fase actual: **v2.2 — «Fiable y extensible»** — contrato de datos estable (`results`), logging real, scope seguro, salidas para CI y README fiel.
+
+El plan completo (prioridades ALTA, fase v2.3 «Inteligencia», banco de ideas y tareas por agente) vive en [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md). El histórico de releases, en el [CHANGELOG](CHANGELOG.md).
 
 ---
 
