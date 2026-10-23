@@ -57,6 +57,12 @@ Reglas del equipo (PROTOCOLO §3):
   junto a md5/sha256, tamaño y content-type; las respuestas que no son imagen (por content-type o
   magic bytes) se reportan pero nunca se hashean. Respeta el scope y degrada sin red
   (`modules/web/favicon_hash.py`).
+- **TUI completa (`--tui`)**: la TUI Textual es navegable de verdad — pestañas Overview / Assets /
+  DNS / Network / Findings (atajos 1-5), tabla de activos con la vista canónica del dashboard y
+  filtro en vivo (`ctrl+f`), y ficha modal por activo (módulos que lo reportan, severidad por
+  módulo y evidencia) abierta con Enter y cerrada con esc/q; footer con los atajos. Cableada como
+  `--tui` tras el escaneo (mismo patrón que `--dashboard`); 100 % offline y degradación grácil sin
+  el extra ui.
 - **Secretos y endpoints en ficheros JS (`js-secrets`)**: descarga los .js del objetivo (tope 20
   ficheros / 2 MB) y extrae claves AWS/Google/GitHub/Slack, JWT, cabeceras Bearer, claves Firebase,
   contraseñas hardcodeadas, claves privadas y endpoints (absolutos y `/api|/rest|/graphql`), más un

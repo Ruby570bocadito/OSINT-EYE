@@ -995,6 +995,11 @@ def scan_targets(targets: list, args):
                 load_scan_results(dash_json)
                 start_dashboard()
 
+            if getattr(args, "tui", False) and len(targets) == 1:
+                from ui.tui_app import launch_tui
+
+                launch_tui(engine.results)
+
             if args.diff and len(targets) > 1:
                 prev_target = targets[targets.index(target) - 1]
                 if prev_target in all_results:
@@ -1231,6 +1236,10 @@ Exit codes (CI):
     parser.add_argument("--rich", action="store_true", help="Use Rich CLI output")
     parser.add_argument(
         "--dashboard", action="store_true", help="Launch web dashboard after scan"
+    )
+    parser.add_argument(
+        "--tui", action="store_true",
+        help="Explore the results in the interactive Textual TUI after scan",
     )
     parser.add_argument(
         "--profile", help="Use a named [profiles.<name>] section from the "
