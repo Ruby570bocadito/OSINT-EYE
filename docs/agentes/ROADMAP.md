@@ -9,7 +9,7 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - [x] (TODOS) rama-canonical — CERRADA ronda 4: la flota empuja a `main` (verificado: findings/estados/hallazgos de la flota llegan por main); `master` queda como espejo alineado por DIR (--force-with-lease, contenido único de master verificado como ya integrado en main) — transversal
 - [ ] (IMP-3) fix-h003-path-traversal — H-003 de TEST: `-o` con path traversal escribe fuera del directorio previsto; sanear/validar ruta de salida — osint_eye.py, reporting/
 - [ ] (IMP-3) fix-h004-escape-injection — H-004 de TEST: caracteres de escape/inyección en el target llegan a salidas (CLI/HTML); escapar en el punto de render — osint_eye.py, ui/
-- [ ] (PUL-1) readme-en-desde-cero — **petición directa del propietario (ronda 5)**: README.md nuevo 100% en inglés escrito DESDE CERO (no traducción del actual): reestructurado sobre la realidad actual (19 módulos, exit codes --fail-on, SARIF, scope/autorización, dashboard con filtros/export/autorefresco, monitor, plugins, 684+ tests offline, CI); badges honestos, quickstart, tabla de módulos y exportaciones, nota de uso autorizado, mapa de arquitectura, enlaces a CHANGELOG/ROADMAP; el README actual en español se conserva como README.es.md con enlaces cruzados; nada documentado puede existir solo en el README — todo verificable con --help/tests; usar los assets de demo-assets-nuevos (placeholders docs/assets/ hasta que IMP-2 los entregue) — README.md, README.es.md, docs/assets/
+- [ ] (PUL-1) readme-en-desde-cero — [x] ENTREGADA ronda 5 (7708983): README.md en inglés desde cero (373 líneas, 14 secciones), README.es.md conservado con cross-links; verificado por DIR (100% inglés, badges honestos, todo lo documentado existe en código incl. TOML config)
 - [ ] (IMP-2) demo-assets-nuevos — **petición directa del propietario (ronda 5)**: capturas reales de la UI ACTUAL con fixtures offline (loopback tipo TEST e2e, dominios example.com/fixture, nada de datos reales de terceros): PNG del dashboard oscuro con escaneo cargado (filtros visibles), Rich CLI con tabla progreso-por-módulo, wizard en el paso de autorización, primera página del PDF, vista grafo; 1 GIF animado (≤15 s, <5 MB) de quick scan → navegación del dashboard; MP4 opcional (≤30 s) de la misma toma; nombres estables en docs/assets/ (dashboard-dark.png, cli-progress.png, wizard-auth.png, report-pdf.png, graph-view.png, demo-scan.gif, demo-scan.mp4); Playwright/headless contra el dashboard local o asciinema→gif para CLI; PUL-1 los cablea en readme-en-desde-cero — docs/assets/ (sustituye a demo-assets del Siguiente)
 
 ## 🟢 Ahora (fase v2.2)
@@ -29,7 +29,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-3 — Núcleo, análisis y salidas
 
-- [ ] (IMP-3) config-file — osint_eye.toml (tomllib, stdlib) con perfiles, timeouts, módulos y exportadores; los flags CLI lo sobreescriben — core/config.py, osint_eye.py (claim activo ronda 4, en curso)
 - [ ] (IMP-3) risk-scoring-v2 — puntuación explicable: cada punto de riesgo enlaza a la evidencia que lo genera; pesos configurables — core/correlator.py (promocionada del Siguiente, ronda 4; encadena con findings-extract)
 
 ### IMP-1 — Colectores
@@ -42,7 +41,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 ### IMP-2 — Interfaz
 
 - [ ] (IMP-2) wizard-validacion-target — el wizard valida formato de target (dominio/IP/CIDR) con reintentos y avisa si parece una URL antes de continuar — ui/wizard.py (propuesta IMP-2, ronda 2)
-- [ ] (IMP-2) timeline-historico — vista de evolución de la superficie entre escaneos (nuevos/desaparecidos por fecha) — ui/ (promocionada del Siguiente, ronda 4; encadena con dashboard-multiscan/diff)
 - [ ] (IMP-2) grafo-avanzado — filtros por tipo de nodo, búsqueda, resaltar caminos de ataque, exportar PNG/SVG — ui/dashboard_template.html (promocionada del Siguiente, ronda 4)
 
 ### PUL-1 — Repo y documentación
@@ -59,7 +57,7 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### SEG / TEST
 
-- [ ] (SEG) audit-deps — pip-audit sobre requirements y fijar mínimos seguros — requirements.txt (vía Peticiones a PUL-1)
+- [ ] (SEG) audit-deps — [x] ENTREGADA ronda 5 (ver estado SEG: pip-audit y mínimos seguros junto a cache-deserializacion); verificar detalles en ronda 6
 
 ## 🟡 Siguiente (v2.3 — «Inteligencia»)
 
@@ -182,4 +180,9 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - v2.2 ronda 5 — fix-h005-dashboard-slash: targets con `/` servidos por el dashboard + test_ui_dashboard_slash_targets.py (hallazgo TEST cerrado); verificado por DIR.
 - v2.2 ronda 5 — deps-sync (PUL-1): requirements de 17 a 13 deps (nvdlib/waybackpy/beautifulsoup4/lxml eliminadas, urllib3 declarado); verificado por DIR.
 - v2.2 ronda 5 — estado-seg: docs/agentes/estado/SEG.md creado por la flota (PUL-1 lo cubre sin tarea propia); verificado por DIR.
-- v2.2 ronda 5 (parcial) — type-hints-core: fases 1a y 1b (async_engine, plugins, neo4j_exporter en mypy strict); tarea sigue abierta para resto de core/ y graph/.
+- v2.2 ronda 5 (parcial) — type-hints-core: fases 1a y 1b (async_engine, plugins, neo4j_exporter, correlator, session_cache en mypy strict); tarea sigue abierta para resto de core/ y graph/.
+- v2.2 ronda 5 (tardía) — config-file: core/config.py (osint_eye.toml, tomllib, fallback en 3.10) + flag --config cableado; verificado por DIR.
+- v2.2 ronda 5 (tardía) — timeline-historico: vista de evolución entre escaneos en el dashboard + test_ui_timeline.py; verificado por DIR.
+- v2.2 ronda 5 (tardía) — lazy-imports-reportlab (IMP-3): import diferido de reportlab + test_core_lazy_imports.py (CLI arranca sin extras pesados); verificado por DIR.
+- v2.2 ronda 5 (tardía) — **readme-en-desde-cero (PUL-1, directiva del propietario)**: README.md nuevo 100% inglés escrito desde cero (373 líneas, 14 secciones: quickstart, scope/autorización, módulos, exportes, TOML, dashboard, monitor/plugins/AI, arquitectura, testing/CI, uso responsable) + README.es.md conservado con cross-links; verificado por DIR (0 hispanismos, badges honestos, toda feature documentada existe en código); claim purgado por DIR tras verificación (entrega sin release).
+- v2.2 ronda 5 (tardía) — changelog-consolidacion (PUL-1): [Unreleased] consolidada; verificado por DIR vía release 7207948.
