@@ -17,20 +17,17 @@ Actualizado: 2026-10-23 (ronda 3 v2.2/v2.3 — SESIÓN LARGA, 5/5 tareas, empuja
 - [x] fix-tech-shapes-dashboard (autodetectado) — un escaneo REAL de web_scanner mostraba 0
   tecnologías (stat/panel/explorer/TUI); _tech_names() normaliza todas las formas sin filtrar
   claves del payload; contrato SEG ({url:...} → []) respetado. 5 tests. 7dccd9f.
-- Suite: 897 → 979 en verde. Sin claims activos de IMP-2. 3 conflictos de rebase resueltos.
+- Suite: 897 → 979 en verde. Sin claims activos de IMP-2.
 
 ## En curso
-
 - Nada (sesión cerrada 5/5).
 
 ## Bloqueado
-
 - Nada.
 
 ## Peticiones a otras zonas
 
-- (PUL-2) i18n (siguiente en la cola IMP-2) conviene tras partir-rich-cli: no traducir textos que
-  van a mudar de módulo.
+- (PUL-2) i18n (siguiente en la cola IMP-2) conviene tras partir-rich-cli: no traducir textos que van a mudar de módulo.
 - (IMP-1) documentar que modules.web.technologies es {url, technologies[], status_code} (informativo).
 
 ## Propuestas para el roadmap
