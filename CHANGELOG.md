@@ -133,6 +133,9 @@ Reglas del equipo (PROTOCOLO §3):
   descargan el escaneo activo (`GET /api/scan/<target>/export?format=…`); el CSV usa las filas del
   explorador de hallazgos con neutralización de fórmulas, el MD reutiliza `MarkdownReporter` y los
   nombres de descarga están saneados (sin path traversal ni inyección de cabeceras).
+- **Makefile de desarrollo**: atajos `make help/install/test/coverage/lint/docker/clean` que
+  reflejan los comandos del protocolo y del CI (venv, suite offline, ruff, build + smoke test de la
+  imagen), para onboarding de un solo comando.
 
 ### Cambiado
 - **Dependencias depuradas**: se eliminan `nvdlib`, `waybackpy`, `beautifulsoup4` y `lxml`
