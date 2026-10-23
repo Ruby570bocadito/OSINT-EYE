@@ -1,14 +1,14 @@
 # Estado IMP-1 — Colectores
 
-Actualizado: 2026-10-24 (sesión v2.2, ronda 5 — cerrada, 5/5 tareas)
+Actualizado: 2026-10-24 (sesión v2.3, ronda 6 — cerrada, 5/5 tareas; suite en 1055 verde)
 
 ## Hecho (últimas 24 h)
 
-- (IMP-1) asn-ip-ranges — HECHA: modules/network/asn.py: resuelve target a IP y enumera ASN/holder/prefijos anunciados vía RIPEstat (API pública sin clave) + objeto de red RDAP (nombre, país, rango, tipo) vía rdap.org; degradación por fuente; prefijos solo inteligencia (nunca sondeados); scope-aware; 11 tests (test_modules_asn.py).
-- (IMP-1) favicon-hash — HECHA: modules/web/favicon_hash.py (stdlib): MurmurHash3 x86_32 en Python puro (paridad con la librería de referencia: 52/52 casos, cero dependencias nuevas), base64 del icono declarado (<link rel=icon> con fallback /favicon.ico), md5/sha256/tamaño/content-type; respuestas no-imagen nunca se hashean; scope-aware y degradación sin red; 19 tests (test_modules_favicon_hash.py).
-- (IMP-1) js-secrets — HECHA: modules/web/js_secrets.py (stdlib): regex (AWS/Google/GitHub/Slack, JWT, Bearer, Firebase, passwords, private keys) + pase de entropía de Shannon + verificación de falsos positivos (placeholders, ${...}/process.env, comentarios, baja diversidad); tope 20 ficheros/2 MB, endpoints /api|rest|graphql; scope-aware y degradación sin red; 16 tests (test_modules_js_secrets.py).
-- (IMP-1) tls-audit — HECHA: modules/certs/tls_audit.py (solo stdlib ssl/socket): sondeo por versión (1.0/1.1/1.2/1.3), familias débiles (RC4/3DES/CBC-SHA1/aNULL), certificado (caducidad, SANs, autofirmado, SHA-1), cadena verificada; hallazgos con severidad, score 0-100 y nota A-F; degradación sin conexión y gate de scope. Cableado mínimo en osint_eye.py (catálogo, module_map, --modules, run_tls_audit con scope). 30 tests (test_modules_tls_audit.py).
-- (IMP-1) scope-collectores — HECHA: modules/_scope.py (helpers duck-typed; scope=None = comportamiento previo) + gate de scope en objetivos derivados: brute-force DNS de wordlist, permutaciones, vhosts derivados, ficheros JS de terceros, URLs de páginas de email, buckets cloud y endpoints web; descartes auditables en results["scope"]["discarded"] con etiqueta por módulo. Incluye fix del permutador, que sondeaba FQDN duplicados (www.example.com.example.com). 22 tests (test_modules_scope.py), suite en 767 verde.
+- (IMP-1) fix-h011-dkim-p-vacio — HECHA (b43d184): check_dkim ya no da por protegido un dominio con `p=` vacío (clave revocada, RFC 6376 §3.6.1.1): selectores en dkim.revoked con motivo (revoked/malformed), present solo con clave real, score conserva la deducción -15 y recomendación de republicar. 6 tests; hallazgo H-011 a resuelto-pendiente-verificación.
+- (IMP-1) shodan-censys — HECHA (31c4dcc): modules/osint/shodan_censys.py; Shodan/Censys v2/FOFA con claves del usuario por env (OSINT_EYE_SHODAN_KEY, OSINT_EYE_CENSYS_API_ID/SECRET, OSINT_EYE_FOFA_EMAIL/KEY); sin clave cada proveedor status "skipped" y el escaneo sigue; degradación por proveedor (HTTP/JSON/red con motivo corto); claves nunca entran en results; resumen fusionado (puertos/servicios/subdominios). Cableado mínimo --modules shodan_censys. 16 tests.
+- (IMP-1) reverse-ip-vhosts — HECHA (729ae55): modules/network/reverse_ip.py + data/wordlists/vhosts.txt; vecinos vía HackerTarget sin clave (solo inteligencia, nunca se contacta a los vecinos; mensajes del fuente jamás se vuelven datos) + vhosts sondando la IP del objetivo con Host headers (derivados del dominio o explícitos; baseline status/Server/título/longitud >25%); scope-aware con descartes auditables. 17 tests.
+- (IMP-1) social-footprint — HECHA (ef47d86): modules/osint/social_footprint.py; GitHub/GitLab/Docker Hub/npm/PyPI con APIs públicas sin clave; nombre de cuenta derivado del dominio (o explícito, 2ª ronda si la 1ª no encuentra nada); degradación por plataforma; payloads malformados tolerados. 19 tests.
+- (IMP-1) leak-check — HECHA (452e995): modules/osint/leak_check.py; catálogo público de brechas HIBP sin clave, solo metadatos (nunca credenciales): dominio exacto (campo Domain) + mención heurística del nombre de la org en título/descripción (reportada como heurística, nombres <4 chars ignorados); catálogo 1 request por escaneo, 429/403/red degradan. 14 tests.
 
 ## En curso
 
@@ -20,12 +20,13 @@ Actualizado: 2026-10-24 (sesión v2.2, ronda 5 — cerrada, 5/5 tareas)
 
 ## Peticiones a otras zonas
 
-- IMP-3: cuando el orquestador construya el Scope (core/scope.py), pásalo a los colectores — todos aceptan scope como kwarg opcional (None = sin filtro): SubdomainEnumerator.enumerate/enumerate_with_resolve, SubdomainPermutator.enumerate, VirtualHostBruteforcer.bruteforce, JavaScriptEndpointDiscovery.scan, CloudBucketDetector.scan, EmailEnumerator.extract_from_web/scan, EndpointDiscovery.discover/discover_sensitive/discover_apis, WebScanner.scan. Los descartes ya caen en Scope.discarded → results["scope"].
-- IMP-2: nota de contrato — endpoint discovery ahora pre-filtra antes del pool: "total_tested" cuenta solo peticiones realmente intentadas cuando hay scope (antes contaba futuros encolados).
+- TEST: H-011 marcado resuelto-pendiente-verificación (commit b43d184) — lista para verificación.
+- IMP-3: los 4 módulos nuevos añaden claves aditivas en results["modules"] con bloque summary de counts listos para fichas; el contrato results["modules"][<nombre>] no cambia de forma.
+- IMP-2: si el dashboard quiere fichas de estos módulos, summary.platforms_found/neighbors/vhosts_found/exact_domain_breaches ya vienen normalizados.
+- PUL-2: modules/network/scanner.py y modules/dns/advanced_dns.py siguen siendo los grandes pendientes de trocear; mis módulos nuevos ya están en piezas separadas.
 
 ## Propuestas para el roadmap
 
-- [ ] (IMP-1) well-known-analysis — análisis de robots.txt, sitemap.xml, security.txt y .well-known/* (detección, no fuerza bruta) — modules/web/wellknown.py
-- [ ] (IMP-1) exposed-repos — detección de .git/.svn/.env expuestos solo por HEAD/existencia con códigos de estado, sin descargar contenido — modules/web/exposed_files.py
-- [ ] (IMP-1) api-discovery — descubrimiento de swagger.json/openapi.yaml/GraphQL introspection (solo detección pasiva) — modules/web/api_discovery.py
-- [ ] (IMP-1) http-client-metrics — contadores agregados por host (peticiones, reintentos, 429) en results para visibilidad de rate limiting — modules/_http.py, results
+- [ ] (IMP-1) hibp-verified-domain — verificación de brechas por dominio con HIBP key de pago opcional (env OSINT_EYE_HIBP_KEY) completando el leak-check público; se salta sin clave — modules/osint/leak_check.py
+- [ ] (IMP-1) vhosts-from-subdomains — reutilizar los subdominios ya descubiertos (dns/certs/caché) como candidatos de Host-header probing en reverse_ip en vez de solo la wordlist — modules/network/reverse_ip.py, core
+- [ ] (IMP-1) source-health-metrics — métricas por fuente (latencia, tasa de error, reintentos) agregadas en results para diagnosticar fuentes caídas entre escaneos — modules/_http.py, transversal
