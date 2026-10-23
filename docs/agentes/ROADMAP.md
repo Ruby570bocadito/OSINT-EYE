@@ -22,6 +22,10 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - [ ] (IMP-3) fix-h008-pdf-duplicado — H-008 de TEST: el PDF se genera duplicado en export_all; deduplicar — reporting/
 - [ ] (IMP-3) fix-h002-validacion-targets — H-002 de TEST: validar formato de target en la CLI (gemelo CLI de wizard-validacion-target); rechazar URLs como targets con mensaje accionable — osint_eye.py
 - [ ] (IMP-2) fix-h005-dashboard-slash — [x] ENTREGADA ronda 5 (096e190): verificado por DIR (test_ui_dashboard_slash_targets.py)
+- [ ] (IMP-2) fix-h009-dashboard-export-slash — H-009 de TEST (MEDIO): la ruta de export del dashboard falla con targets tipo URL/slash (gemelo de fix-h005 en export) — ui/dashboard.py
+- [ ] (IMP-3) fix-h012-wizard-cancela-exit-code — H-012 de TEST (MEDIO): cancelar en el wizard termina con exit 0; debe salir con código no-cero y mensaje claro (importa a CI) — ui/wizard.py, osint_eye.py
+- [ ] (IMP-1) fix-h011-dkim-p-vacio — H-011 de TEST (BAJO): registro DKIM con p= vacío produce falso positivo; tratar "p=" vacío como política sin clave, no como válida — modules/dns/email_security.py
+- [ ] (IMP-3) fix-h010-modules-comas — H-010 de TEST (BAJO): la lista de --modules acepta/ensucia con comas; normalizar entrada y mensaje de error — osint_eye.py
 
 ### IMP-3 — Núcleo, análisis y salidas
 
