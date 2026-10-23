@@ -613,7 +613,7 @@ def _safe_download_name(target: str, ext: str) -> str:
     return f"osint_eye_{safe}.{ext}"
 
 
-_CSV_FORMULA_PREFIXES = ("=", "+", "@", "\t", "\r")
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 def _csv_cell(value) -> str:
