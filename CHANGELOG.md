@@ -9,6 +9,11 @@ Reglas del equipo (PROTOCOLO §3):
 
 ## [Unreleased]
 
+### Corregido
+- **Dashboard**: el contador y el panel de tecnologías vuelven a reflejar el escaneo (el doble
+  envoltorio `_as_dict()` en `get_summary()` convertía la lista de tecnologías detectadas en un
+  dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
+
 ### Seguridad
 - **fix-h003 (path traversal)**: toda ruta de salida suministrada por el usuario (`--output/-o`,
   `--export-cypher`, `--log-file`) debe resolver dentro del directorio de trabajo; las que escapan

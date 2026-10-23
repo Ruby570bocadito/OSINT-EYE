@@ -477,11 +477,15 @@ def get_summary(target):
         s for s in services
         if isinstance(s, dict) and s.get("state") == "open"
     ]
-    techs = _as_dict(_as_dict(_as_dict(modules.get("web")).get("technologies")).get("technologies"))
+    techs = _as_dict(_as_dict(modules.get("web")).get("technologies")).get(
+        "technologies"
+    )
     if isinstance(techs, list):
         tech_list = [t for t in techs if isinstance(t, str)]
-    else:
+    elif isinstance(techs, dict):
         tech_list = [str(k) for k in techs.keys()]
+    else:
+        tech_list = []
 
     return jsonify(
         {
