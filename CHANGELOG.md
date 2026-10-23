@@ -15,6 +15,10 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h007 (Ctrl+C)**: interrumpir un escaneo ya no termina en traceback crudo: el bucle de targets
+  captura `KeyboardInterrupt`, reúne los resultados parciales (targets completados + el en vuelo) en
+  `ScanInterrupted`, imprime mensaje de aborto con el resumen por target y sale con código propio
+  `130` (convención POSIX 128+SIGINT), documentado junto al resto de exit codes.
 - **fix-h006 (cache corrupta)**: una `scan_cache.db` corrupta ya no crashea el escaneo con
   `sqlite3.DatabaseError: file is not a database`: `ScanCache` detecta el fallo al inicializar,
   pone el fichero en cuarentena (`<db>.corrupt`, con timestamp si el nombre está ocupado — nunca se

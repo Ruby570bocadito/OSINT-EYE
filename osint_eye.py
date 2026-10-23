@@ -127,6 +127,20 @@ def _print_monitor_panel(console, targets: list, interval: int, webhook_url):
     )
 
 
+class ScanInterrupted(Exception):
+    """The operator aborted the scan (Ctrl+C, H-007).
+
+    Carries the results collected so far (completed targets plus the
+    in-flight one, whose partial data lives in ``engine.results``) so
+    ``main()`` can report what was gathered and exit with the dedicated
+    interrupt code instead of a raw traceback.
+    """
+
+    def __init__(self, partial_results: dict):
+        super().__init__("scan interrupted by user")
+        self.partial_results = partial_results or {}
+
+
 class OSINTEye:
     """Main OSINT EYE orchestrator v2"""
 
@@ -803,158 +817,174 @@ def scan_targets(targets: list, args):
             console.print("\n  [bold green]✔  Monitor stopped gracefully.[/bold green]")
         return {}
 
-    for target in targets:
-        scope = getattr(args, "scope_obj", None)
-        if scope is not None and not scope.allows(target):
-            scope.discard(target, "cli")
-            print(
-                f"[!] {target} fuera de scope ({scope.reason(target)}) - target omitido"
-            )
-            continue
-
-        # Rich header for each target
-        from ui.rich_cli import RichCLI as _RCli
-
-        _cli = _RCli()
-        _cli.print_scan_header(target, args.depth, getattr(args, "stealth", False))
-
-        engine = OSINTEye(
-            target,
-            stealth=args.stealth,
-            ai=not args.no_ai,
-            depth=args.depth,
-            cache=not args.no_cache,
-            scope=getattr(args, "scope_obj", None),
-        )
-
-        if args.modules:
-            # Instrument FIRST, then build the dispatch map: module_map
-            # captures bound methods, so mapping before instrument_engine()
-            # would call the unwrapped originals and the live "Module
-            # Progress" table would stay "pending" for the whole scan.
-            tracker = instrument_engine(engine)
-            tracker.start_live()
-            module_map = {
-                "dns": engine.run_dns,
-                "certs": engine.run_certs,
-                "tls_audit": engine.run_tls_audit,
-                "wayback": engine.run_wayback,
-                "network": engine.run_network,
-                "whois": engine.run_whois,
-                "github": engine.run_github,
-                "google": engine.run_google,
-                "cve": engine.run_cve,
-                "web": engine.run_web,
-                "endpoints": engine.run_endpoints,
-                "cloud": engine.run_cloud_buckets,
-                "emails": engine.run_emails,
-                "permutation": engine.run_permutation,
-                "takeover": engine.run_takeover_check,
-                "cdn_waf": engine.run_cdn_waf,
-                "correlation": engine.run_correlation,
-                "graph": engine.run_graph,
-                "mitre": engine.run_mitre,
-                "chains": engine.run_attack_chains,
-            }
-            for module in args.modules:
-                if module in module_map:
-                    module_map[module]()
-            if not args.no_ai:
-                engine.run_ai()
-            tracker.stop_live()
-        else:
-            engine.run_all()
-
-        if getattr(args, "plugin_dir", None):
-            engine.run_plugins(args.plugin_dir)
-
-        if getattr(args, "agent", False) and getattr(engine, "ai_engine", None):
-            engine._print("[*] Generating AI Red Team Playbook...")
-            playbook_res = engine.ai_engine.generate_redteam_playbook(engine.results)
-            playbook_md = playbook_res.get("playbook", "")
-            engine.results["agent_playbook"] = playbook_md
-            print("\n" + "=" * 60 + "\nAI AGENT PLAYBOOK\n" + "=" * 60)
-            print(playbook_md)
-            print("=" * 60 + "\n")
-
-        engine.print_summary()
-
-        if args.rich:
-            from ui.rich_cli import RichCLI
-
-            cli = RichCLI()
-            cli.print_full_results(engine.results)
-
-        if getattr(args, "pdf", False):
-            try:
-                # Sanitized: a URL-like target used to produce a filename
-                # containing "/" and crash PDF generation (FileNotFoundError).
-                pdf_path = _pdf_output_name(target)
-                engine._print(f"[*] Generating Executive PDF Report -> {pdf_path}...")
-                engine.pdf_reporter.generate(engine.results, pdf_path)
-                print(f"[+] PDF Report saved: {pdf_path}")
-            except Exception as e:
-                print(f"[!] PDF generation failed: {e}")
-
-        if args.output:
-            output = (
-                args.output
-                if len(targets) == 1
-                else f"{args.output}_{_sanitize_filename(target)}"
-            )
-            exports = engine.export_all(
-                output, formats=getattr(args, "export_formats", None)
-            )
-            print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
-
-        if getattr(args, "export_cypher", None):
-            from graph.neo4j_exporter import Neo4jExporter
-
-            cypher_file = (
-                args.export_cypher
-                if len(targets) == 1
-                else f"{args.export_cypher}_{_sanitize_filename(target)}"
-            )
-            print(f"[*] Exporting Neo4j Cypher to {cypher_file}...")
-            exporter = Neo4jExporter(
-                engine.results.get("graph", {"nodes": [], "edges": []})
-            )
-            exporter.export_file(cypher_file)
-            print(f"[*] Cypher export complete: {cypher_file}")
-
-        if args.dashboard and len(targets) == 1:
-            from ui.dashboard import load_scan_results, start_dashboard
-
-            # Persist the scan JSON first so the dashboard always has real
-            # data to load, then hand the exact path over.
-            if args.output:
-                dash_json = (
-                    args.output
-                    if args.output.endswith(".json")
-                    else args.output + ".json"
+    # H-007 (TEST): Ctrl+C used to end the scan as a raw
+    # KeyboardInterrupt traceback (e.g. inside sock.connect). The loop
+    # below folds whatever was collected (completed targets plus the
+    # in-flight one) into ScanInterrupted for main() to report cleanly.
+    target = None
+    engine = None
+    try:
+        for target in targets:
+            engine = None  # reset per iteration: no stale engine misattribution
+            scope = getattr(args, "scope_obj", None)
+            if scope is not None and not scope.allows(target):
+                scope.discard(target, "cli")
+                print(
+                    f"[!] {target} fuera de scope ({scope.reason(target)}) - target omitido"
                 )
+                continue
+
+            # Rich header for each target
+            from ui.rich_cli import RichCLI as _RCli
+
+            _cli = _RCli()
+            _cli.print_scan_header(target, args.depth, getattr(args, "stealth", False))
+
+            engine = OSINTEye(
+                target,
+                stealth=args.stealth,
+                ai=not args.no_ai,
+                depth=args.depth,
+                cache=not args.no_cache,
+                scope=getattr(args, "scope_obj", None),
+            )
+
+            if args.modules:
+                # Instrument FIRST, then build the dispatch map: module_map
+                # captures bound methods, so mapping before instrument_engine()
+                # would call the unwrapped originals and the live "Module
+                # Progress" table would stay "pending" for the whole scan.
+                tracker = instrument_engine(engine)
+                tracker.start_live()
+                module_map = {
+                    "dns": engine.run_dns,
+                    "certs": engine.run_certs,
+                    "tls_audit": engine.run_tls_audit,
+                    "wayback": engine.run_wayback,
+                    "network": engine.run_network,
+                    "whois": engine.run_whois,
+                    "github": engine.run_github,
+                    "google": engine.run_google,
+                    "cve": engine.run_cve,
+                    "web": engine.run_web,
+                    "endpoints": engine.run_endpoints,
+                    "cloud": engine.run_cloud_buckets,
+                    "emails": engine.run_emails,
+                    "permutation": engine.run_permutation,
+                    "takeover": engine.run_takeover_check,
+                    "cdn_waf": engine.run_cdn_waf,
+                    "correlation": engine.run_correlation,
+                    "graph": engine.run_graph,
+                    "mitre": engine.run_mitre,
+                    "chains": engine.run_attack_chains,
+                }
+                for module in args.modules:
+                    if module in module_map:
+                        module_map[module]()
+                if not args.no_ai:
+                    engine.run_ai()
+                tracker.stop_live()
             else:
-                dash_json = (
-                    f"osint_eye_{_sanitize_filename(target)}_"
-                    f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                engine.run_all()
+
+            if getattr(args, "plugin_dir", None):
+                engine.run_plugins(args.plugin_dir)
+
+            if getattr(args, "agent", False) and getattr(engine, "ai_engine", None):
+                engine._print("[*] Generating AI Red Team Playbook...")
+                playbook_res = engine.ai_engine.generate_redteam_playbook(engine.results)
+                playbook_md = playbook_res.get("playbook", "")
+                engine.results["agent_playbook"] = playbook_md
+                print("\n" + "=" * 60 + "\nAI AGENT PLAYBOOK\n" + "=" * 60)
+                print(playbook_md)
+                print("=" * 60 + "\n")
+
+            engine.print_summary()
+
+            if args.rich:
+                from ui.rich_cli import RichCLI
+
+                cli = RichCLI()
+                cli.print_full_results(engine.results)
+
+            if getattr(args, "pdf", False):
+                try:
+                    # Sanitized: a URL-like target used to produce a filename
+                    # containing "/" and crash PDF generation (FileNotFoundError).
+                    pdf_path = _pdf_output_name(target)
+                    engine._print(f"[*] Generating Executive PDF Report -> {pdf_path}...")
+                    engine.pdf_reporter.generate(engine.results, pdf_path)
+                    print(f"[+] PDF Report saved: {pdf_path}")
+                except Exception as e:
+                    print(f"[!] PDF generation failed: {e}")
+
+            if args.output:
+                output = (
+                    args.output
+                    if len(targets) == 1
+                    else f"{args.output}_{_sanitize_filename(target)}"
                 )
-            if not Path(dash_json).exists():
-                Path(dash_json).parent.mkdir(parents=True, exist_ok=True)
-                with open(dash_json, "w") as f:
-                    json.dump(engine.results, f, indent=2, default=str)
-            load_scan_results(dash_json)
-            start_dashboard()
+                exports = engine.export_all(
+                    output, formats=getattr(args, "export_formats", None)
+                )
+                print(f"\n[+] Exports: {json.dumps(exports, indent=2)}")
 
-        if args.diff and len(targets) > 1:
-            prev_target = targets[targets.index(target) - 1]
-            if prev_target in all_results:
-                diff = ScanDiff()
-                diff.compare(all_results[prev_target], engine.results)
-                print(f"\n[Diff vs {prev_target}]")
-                print(diff.get_summary())
+            if getattr(args, "export_cypher", None):
+                from graph.neo4j_exporter import Neo4jExporter
 
-        all_results[target] = engine.results
+                cypher_file = (
+                    args.export_cypher
+                    if len(targets) == 1
+                    else f"{args.export_cypher}_{_sanitize_filename(target)}"
+                )
+                print(f"[*] Exporting Neo4j Cypher to {cypher_file}...")
+                exporter = Neo4jExporter(
+                    engine.results.get("graph", {"nodes": [], "edges": []})
+                )
+                exporter.export_file(cypher_file)
+                print(f"[*] Cypher export complete: {cypher_file}")
 
+            if args.dashboard and len(targets) == 1:
+                from ui.dashboard import load_scan_results, start_dashboard
+
+                # Persist the scan JSON first so the dashboard always has real
+                # data to load, then hand the exact path over.
+                if args.output:
+                    dash_json = (
+                        args.output
+                        if args.output.endswith(".json")
+                        else args.output + ".json"
+                    )
+                else:
+                    dash_json = (
+                        f"osint_eye_{_sanitize_filename(target)}_"
+                        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                    )
+                if not Path(dash_json).exists():
+                    Path(dash_json).parent.mkdir(parents=True, exist_ok=True)
+                    with open(dash_json, "w") as f:
+                        json.dump(engine.results, f, indent=2, default=str)
+                load_scan_results(dash_json)
+                start_dashboard()
+
+            if args.diff and len(targets) > 1:
+                prev_target = targets[targets.index(target) - 1]
+                if prev_target in all_results:
+                    diff = ScanDiff()
+                    diff.compare(all_results[prev_target], engine.results)
+                    print(f"\n[Diff vs {prev_target}]")
+                    print(diff.get_summary())
+
+            all_results[target] = engine.results
+
+    except KeyboardInterrupt:
+        # The in-flight target's partial results live in engine.results;
+        # completed ones are already in all_results. engine is reset to
+        # None at the top of every iteration, so a hit during the scan
+        # header of target N+1 never misattributes target N's engine.
+        if target is not None and engine is not None and target not in all_results:
+            all_results[target] = engine.results
+        raise ScanInterrupted(all_results)
     return all_results
 
 
@@ -996,15 +1026,17 @@ def _positive_int(value: str) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 # CI exit codes (--fail-on)
 #
-#   0  scan finished under the requested threshold (or no --fail-on given)
-#   1  --fail-on threshold reached or exceeded by the worst finding severity
-#   2  usage error (argparse convention)
-#   3  nothing was scanned (all targets outside the authorized scope)
+#   0   scan finished under the requested threshold (or no --fail-on given)
+#   1   --fail-on threshold reached or exceeded by the worst finding severity
+#   2   usage error (argparse convention)
+#   3   nothing was scanned (all targets outside the authorized scope)
+#   130 scan interrupted by the operator (Ctrl+C, POSIX 128+SIGINT)
 # ─────────────────────────────────────────────────────────────────────────────
 EXIT_OK = 0
 EXIT_FAIL_ON = 1
 EXIT_USAGE = 2
 EXIT_NOTHING_SCANNED = 3
+EXIT_INTERRUPTED = 130
 
 SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 FAIL_ON_CHOICES = ("low", "medium", "high")
@@ -1387,7 +1419,28 @@ Exit codes (CI):
         from ui.rich_cli import RichCLI as _RCli
 
         _RCli().print_banner()
-        all_results = scan_targets(args.targets, args)
+        try:
+            all_results = scan_targets(args.targets, args)
+        except ScanInterrupted as interrupted:
+            # H-007 (TEST): clean abort — report what was collected, render
+            # the per-target summary of the partials and exit with the
+            # dedicated interrupt code instead of a raw traceback.
+            partials = interrupted.partial_results
+            names = ", ".join(partials.keys()) or "none"
+            print(f"\n[x] Scan interrupted by user (Ctrl+C); partial results for: {names}")
+            summary_cli = _RCli()
+            for result in partials.values():
+                if isinstance(result, dict):
+                    try:
+                        summary_cli.print_summary(result)
+                    except Exception as exc:
+                        print(f"[!] Partial summary unavailable: {exc}")
+            print(
+                f"[i] Interrupted scans exit with code {EXIT_INTERRUPTED} "
+                f"(128+SIGINT). Re-run with -o to export results as they "
+                f"are collected."
+            )
+            return EXIT_INTERRUPTED
         return decide_exit_code(all_results, args)
     return 0
 
