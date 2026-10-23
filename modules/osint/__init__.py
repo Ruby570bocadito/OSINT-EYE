@@ -1,8 +1,8 @@
 """OSINT Module for OSINT EYE"""
 
-from .whois import WhoisLookup, WhoisScanner
 from .github import GitHubDorker, GitHubScanner
 from .google import GoogleDorker, GoogleScanner
+from .whois import WhoisLookup, WhoisScanner
 
 __all__ = [
     "WhoisLookup",

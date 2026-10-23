@@ -1,9 +1,9 @@
 """OSINT EYE - Interactive TUI with Textual"""
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, DataTable, Label, Static
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
+from textual.widgets import DataTable, Footer, Header, Label, Static
 
 
 class ScanScreen(Screen):

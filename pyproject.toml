@@ -64,3 +64,23 @@ py-modules = ["osint_eye"]
 
 [tool.setuptools.packages.find]
 include = ["ai", "ai.*", "core", "core.*", "graph", "graph.*", "modules", "modules.*", "reporting", "reporting.*", "ui", "ui.*"]
+
+[tool.ruff]
+# Configuración acordada en ROADMAP v2.2 (tarea ruff-config, PUL-2).
+# pyflakes + pycodestyle (subset) + isort + pyupgrade + bugbear, 0 avisos.
+target-version = "py310"
+extend-exclude = ["venv", ".agent-tmp", "output", "data"]
+
+[tool.ruff.lint]
+select = [
+    "E4",  # pycodestyle: E401 (varios imports por línea), E402 (imports fuera de cabecera)
+    "E7",  # pycodestyle: sentencias problemáticas (except desnudo, comparaciones a True/None…)
+    "E9",  # pycodestyle: errores de sintaxis/runtime (ya era el gate de CI)
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade (py3.10+)
+    "B",   # flake8-bugbear
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ai", "core", "graph", "modules", "reporting", "ui"]

@@ -1,9 +1,8 @@
 """OSINT EYE - Asset Correlation Engine"""
 
 import threading
-from typing import Dict, List
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
 
 
 class AssetCorrelator:
@@ -22,7 +21,7 @@ class AssetCorrelator:
         return len(self.assets.get(key, ()))
 
     @staticmethod
-    def _anchor(data: Dict) -> str:
+    def _anchor(data: dict) -> str:
         """Best-effort anchor (domain/target/url) to relate new assets to."""
         for key in ("domain", "target", "url"):
             value = data.get(key)
@@ -30,7 +29,7 @@ class AssetCorrelator:
                 return value
         return ""
 
-    def ingest_dns(self, dns_data: Dict):
+    def ingest_dns(self, dns_data: dict):
         """Ingest DNS data"""
         domain = dns_data.get("domain", "") or ""
 
@@ -73,7 +72,7 @@ class AssetCorrelator:
                     elif "v=dmarc1" in value.lower():
                         self.assets["dmarc_records"].add(value)
 
-    def ingest_certs(self, cert_data: Dict):
+    def ingest_certs(self, cert_data: dict):
         """Ingest certificate data"""
         for cert in cert_data.get("certificates") or []:
             domain = cert.get("domain", "")
@@ -85,7 +84,7 @@ class AssetCorrelator:
                     self.assets["issuers"].add(issuer)
                     self._add_relationship("issued_by", domain, issuer)
 
-    def ingest_network(self, network_data: Dict):
+    def ingest_network(self, network_data: dict):
         """Ingest network scan data"""
         host = network_data.get("host", "") or ""
         if not host:
@@ -110,7 +109,7 @@ class AssetCorrelator:
                         "version_of", f"{service_name}:{version}", service_name
                     )
 
-    def ingest_wayback(self, wayback_data: Dict):
+    def ingest_wayback(self, wayback_data: dict):
         """Ingest Wayback data"""
         domain = wayback_data.get("domain", "") or ""
 
@@ -132,7 +131,7 @@ class AssetCorrelator:
                 if domain:
                     self._add_relationship("path_of", path, domain)
 
-    def ingest_whois(self, whois_data: Dict):
+    def ingest_whois(self, whois_data: dict):
         """Ingest WHOIS data"""
         domain = whois_data.get("domain") or ""
 
@@ -157,7 +156,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("contact_email", domain, email)
 
-    def ingest_cloud(self, cloud_data: Dict):
+    def ingest_cloud(self, cloud_data: dict):
         """Ingest cloud bucket discovery data.
 
         ``found`` holds every bucket that answered and ``public`` the subset
@@ -188,7 +187,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("public_bucket", url, domain)
 
-    def ingest_emails(self, email_data: Dict):
+    def ingest_emails(self, email_data: dict):
         """Ingest email enumeration data"""
         domain = email_data.get("domain", "") or ""
 
@@ -199,7 +198,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("email_reputation", email, domain)
 
-    def ingest_endpoints(self, endpoints_data: Dict):
+    def ingest_endpoints(self, endpoints_data: dict):
         """Ingest endpoint discovery data (sensitive files included)"""
         target = endpoints_data.get("target", "") or ""
 
@@ -216,7 +215,7 @@ class AssetCorrelator:
             if url:
                 self.assets["endpoints"].add(url)
 
-    def ingest_takeover(self, takeover_data: Dict):
+    def ingest_takeover(self, takeover_data: dict):
         """Ingest subdomain takeover results"""
         for item in takeover_data.get("vulnerable") or []:
             sub = (
@@ -231,7 +230,7 @@ class AssetCorrelator:
                     "takeover_fingerprint", sub, f"dangling:{service}"
                 )
 
-    def ingest_web(self, web_data: Dict):
+    def ingest_web(self, web_data: dict):
         """Ingest web technology fingerprinting data.
 
         ``technologies`` may be the TechDetector dict shape
@@ -254,7 +253,7 @@ class AssetCorrelator:
             if anchor:
                 self._add_relationship("technology_on", anchor, str(tech))
 
-    def ingest_permutation(self, permutation_data: Dict):
+    def ingest_permutation(self, permutation_data: dict):
         """Ingest subdomain permutation results (``{"subdomains": [...]}``)."""
         domain = permutation_data.get("domain", "") or ""
 
@@ -265,7 +264,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("subdomain_of", subdomain, domain)
 
-    def ingest_github(self, github_data: Dict):
+    def ingest_github(self, github_data: dict):
         """Ingest GitHub dorking results (potential leaked secrets)."""
         domain = github_data.get("domain", "") or ""
 
@@ -280,7 +279,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("leak_related_to", str(label), domain)
 
-    def ingest_google(self, google_data: Dict):
+    def ingest_google(self, google_data: dict):
         """Ingest Google dorking results (indexed pages per dork category)."""
         domain = google_data.get("domain", "") or ""
 
@@ -309,7 +308,7 @@ class AssetCorrelator:
             if domain:
                 self._add_relationship("subdomain_of", subdomain, domain)
 
-    def ingest_cve(self, cve_data: Dict):
+    def ingest_cve(self, cve_data: dict):
         """Ingest CVE lookup results (``{"cves": [...]}``)."""
         for cve in cve_data.get("cves") or []:
             cve_id = cve.get("id", "") if isinstance(cve, dict) else str(cve)
@@ -317,7 +316,7 @@ class AssetCorrelator:
                 continue
             self.assets["vulnerabilities"].add(cve_id)
 
-    def ingest_cdn_waf(self, cdn_data: Dict):
+    def ingest_cdn_waf(self, cdn_data: dict):
         """Ingest CDN/WAF fingerprinting data."""
         anchor = self._anchor(cdn_data)
 
@@ -349,7 +348,7 @@ class AssetCorrelator:
                 }
             )
 
-    def find_shared_infrastructure(self) -> Dict:
+    def find_shared_infrastructure(self) -> dict:
         """Find shared infrastructure across assets"""
         ip_to_domains = defaultdict(set)
 
@@ -364,7 +363,7 @@ class AssetCorrelator:
 
         return shared
 
-    def find_hidden_relationships(self) -> List[Dict]:
+    def find_hidden_relationships(self) -> list[dict]:
         """Find non-obvious relationships"""
         findings = []
 
@@ -400,7 +399,7 @@ class AssetCorrelator:
 
         return findings
 
-    def _detect_cdn_origins(self) -> Dict:
+    def _detect_cdn_origins(self) -> dict:
         """Detect if CDN origin IP is exposed"""
         cdn_indicators = ["cloudflare", "akamai", "fastly", "cloudfront", "incapsula"]
 
@@ -412,7 +411,7 @@ class AssetCorrelator:
 
         return {}
 
-    def _find_shared_mail_infrastructure(self) -> Dict:
+    def _find_shared_mail_infrastructure(self) -> dict:
         """Find domains sharing mail servers"""
         mail_servers = defaultdict(set)
 
@@ -427,7 +426,7 @@ class AssetCorrelator:
 
         return shared
 
-    def _find_cert_overlap(self) -> Dict:
+    def _find_cert_overlap(self) -> dict:
         """Find certificates that cover unexpected domain combinations"""
         issuer_to_domains = defaultdict(set)
 
@@ -442,7 +441,7 @@ class AssetCorrelator:
 
         return overlap
 
-    def calculate_attack_surface_score(self) -> Dict:
+    def calculate_attack_surface_score(self) -> dict:
         """Calculate overall attack surface score"""
         score = 0
         factors = []
@@ -502,7 +501,7 @@ class AssetCorrelator:
             "asset_counts": {k: len(v) for k, v in self.assets.items()},
         }
 
-    def generate_attack_graph(self) -> Dict:
+    def generate_attack_graph(self) -> dict:
         """Generate attack surface graph data"""
         nodes = []
         edges = []
@@ -567,7 +566,7 @@ class AssetCorrelator:
             },
         }
 
-    def export_report(self) -> Dict:
+    def export_report(self) -> dict:
         """Export full correlation report"""
         return {
             "assets": {

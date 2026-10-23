@@ -1,12 +1,14 @@
 """OSINT EYE - Async Core Engine"""
 
 import asyncio
-import aiohttp
+import random
 import ssl
 import time
-import random
-from typing import Dict, List, Optional, Callable, Any
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
+
+import aiohttp
 
 
 @dataclass
@@ -98,7 +100,7 @@ class AsyncSession:
             await asyncio.sleep(delay - elapsed)
         self._last_request = time.time()
 
-    def _merge_headers(self, kwargs: Dict) -> Dict:
+    def _merge_headers(self, kwargs: dict) -> dict:
         """Merge per-request headers (popped once, before any retry)."""
         headers = {"User-Agent": self.config.get_ua()}
         custom = kwargs.pop("headers", None)
@@ -106,7 +108,7 @@ class AsyncSession:
             headers.update(custom)
         return headers
 
-    async def get(self, url: str, **kwargs) -> Optional[aiohttp.ClientResponse]:
+    async def get(self, url: str, **kwargs) -> aiohttp.ClientResponse | None:
         async with self._semaphore:
             await self._apply_rate_limit()
             headers = self._merge_headers(kwargs)
@@ -126,7 +128,7 @@ class AsyncSession:
                     else:
                         return None
 
-    async def post(self, url: str, **kwargs) -> Optional[aiohttp.ClientResponse]:
+    async def post(self, url: str, **kwargs) -> aiohttp.ClientResponse | None:
         async with self._semaphore:
             await self._apply_rate_limit()
             headers = self._merge_headers(kwargs)
@@ -146,7 +148,7 @@ class AsyncSession:
                     else:
                         return None
 
-    async def get_text(self, url: str, **kwargs) -> Optional[str]:
+    async def get_text(self, url: str, **kwargs) -> str | None:
         resp = await self.get(url, **kwargs)
         if resp:
             try:
@@ -155,7 +157,7 @@ class AsyncSession:
                 return None
         return None
 
-    async def get_json(self, url: str, **kwargs) -> Optional[Dict]:
+    async def get_json(self, url: str, **kwargs) -> dict | None:
         resp = await self.get(url, **kwargs)
         if resp:
             try:
@@ -174,14 +176,14 @@ class AsyncTaskRunner:
         self.errors = []
 
     async def run_batch(
-        self, func: Callable, items: List, *args, **kwargs
-    ) -> List:
+        self, func: Callable, items: list, *args, **kwargs
+    ) -> list:
         """Run function on all items concurrently"""
         return await self.run_batch_with_progress(func, items, None, *args, **kwargs)
 
     async def run_batch_with_progress(
-        self, func: Callable, items: List, progress_cb: Callable = None, *args, **kwargs
-    ) -> List:
+        self, func: Callable, items: list, progress_cb: Callable = None, *args, **kwargs
+    ) -> list:
         """Run function with progress callback"""
         self.results = []
         self.errors = []
@@ -212,7 +214,7 @@ class AsyncTaskRunner:
         return self.results
 
 
-async def async_get_many(urls: List[str], config: AsyncConfig = None) -> Dict[str, Any]:
+async def async_get_many(urls: list[str], config: AsyncConfig = None) -> dict[str, Any]:
     """Fetch multiple URLs concurrently"""
     config = config or AsyncConfig()
     results = {}
@@ -230,7 +232,9 @@ async def async_get_many(urls: List[str], config: AsyncConfig = None) -> Dict[st
         # Zip with the original url list: gather results are positional, and
         # exceptions cannot be used as mapping keys (previous code did
         # result[0] on an Exception -> TypeError).
-        for url, outcome in zip(urls, done):
+        # strict=True documenta el invariante 1:1 (gather devuelve un resultado
+        # por cada url, en el mismo orden).
+        for url, outcome in zip(urls, done, strict=True):
             if isinstance(outcome, Exception):
                 results[url] = {"content": None, "success": False, "error": str(outcome)}
             else:

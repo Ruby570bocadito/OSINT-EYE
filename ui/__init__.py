@@ -1,7 +1,7 @@
 """UI Module for OSINT EYE"""
 
-from .rich_cli import RichCLI
 from .dashboard import app, load_scan_results, start_dashboard
+from .rich_cli import RichCLI
 from .tui_app import OSINTEyeTUI, launch_tui
 
 __all__ = [

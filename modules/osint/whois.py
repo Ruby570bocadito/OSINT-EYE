@@ -1,7 +1,6 @@
 """OSINT EYE - WHOIS Module"""
 
 from datetime import datetime
-from typing import Dict, Optional
 
 import whois
 
@@ -12,7 +11,7 @@ class WhoisLookup:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
 
-    def lookup_domain(self, domain: str) -> Dict:
+    def lookup_domain(self, domain: str) -> dict:
         """Perform WHOIS lookup for a domain"""
         try:
             w = whois.whois(domain, timeout=self.timeout)
@@ -20,7 +19,7 @@ class WhoisLookup:
         except Exception as e:
             return {"error": str(e), "domain": domain}
 
-    def _parse_whois_data(self, w) -> Dict:
+    def _parse_whois_data(self, w) -> dict:
         """Parse WHOIS data into structured format.
 
         python-whois returns a ``WhoisEntry`` (dict subclass); fields are
@@ -44,7 +43,7 @@ class WhoisLookup:
         return result
 
     @staticmethod
-    def _clean(value) -> Optional[str]:
+    def _clean(value) -> str | None:
         """Normalise scalar WHOIS values (empty strings become None)."""
         if value is None:
             return None
@@ -60,7 +59,7 @@ class WhoisLookup:
             return [emails]
         return [str(e) for e in emails if e]
 
-    def _normalize_date(self, date) -> Optional[str]:
+    def _normalize_date(self, date) -> str | None:
         """Normalize date fields"""
         if not date:
             return None
@@ -88,7 +87,7 @@ class WhoisLookup:
             return [str(n).lower() for n in ns if n]
         return [str(ns).lower()]
 
-    def _parse_registrant(self, w) -> Optional[Dict]:
+    def _parse_registrant(self, w) -> dict | None:
         """Parse registrant info from dict-style WHOIS entries.
 
         python-whois exposes flat keys ("name", "org", "country", ...);
@@ -106,7 +105,7 @@ class WhoisLookup:
             return registrant
         return None
 
-    def _parse_admin(self, w) -> Optional[Dict]:
+    def _parse_admin(self, w) -> dict | None:
         """Parse admin contact info (dict-style; best effort)."""
         admin = w.get("admin")
         if isinstance(admin, dict):
@@ -122,7 +121,7 @@ class WhoisLookup:
             return {"name": admin}
         return None
 
-    def check_expiration(self, domain: str) -> Dict:
+    def check_expiration(self, domain: str) -> dict:
         """Check domain expiration status"""
         result = self.lookup_domain(domain)
 
@@ -154,7 +153,7 @@ class ASNLookup:
     def __init__(self):
         self.cache = {}
 
-    def get_asn_info(self, ip_or_asn: str) -> Dict:
+    def get_asn_info(self, ip_or_asn: str) -> dict:
         """Get ASN info for IP or ASN number"""
         try:
             import ipwhois
@@ -188,7 +187,7 @@ class WhoisScanner:
         self.whois = WhoisLookup()
         self.asn = ASNLookup()
 
-    def scan(self, target: str, scan_type: str = "domain") -> Dict:
+    def scan(self, target: str, scan_type: str = "domain") -> dict:
         """Scan target via WHOIS"""
         if scan_type == "domain":
             return self.whois.lookup_domain(target)

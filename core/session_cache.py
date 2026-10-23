@@ -1,10 +1,9 @@
 """OSINT EYE - SQLite Cache & Session Manager"""
 
-import sqlite3
-import json
 import hashlib
+import json
+import sqlite3
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 from pathlib import Path
 
 
@@ -92,7 +91,7 @@ class ScanCache:
             """)
 
     def save_scan(
-        self, target: str, scan_type: str, results: Dict, depth: str = "normal"
+        self, target: str, scan_type: str, results: dict, depth: str = "normal"
     ):
         """Save a complete scan result"""
         def _json_fallback(obj):
@@ -113,7 +112,7 @@ class ScanCache:
                 ),
             )
 
-    def get_last_scan(self, target: str, max_age_hours: int = 24) -> Optional[Dict]:
+    def get_last_scan(self, target: str, max_age_hours: int = 24) -> dict | None:
         """Get the most recent scan if within age limit"""
         cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
 
@@ -151,7 +150,7 @@ class ScanCache:
                 (target, subdomain, source, now, now, ip, now, ip),
             )
 
-    def get_subdomains(self, target: str, source: str = None) -> List[Dict]:
+    def get_subdomains(self, target: str, source: str = None) -> list[dict]:
         """Get all known subdomains for a target"""
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
@@ -171,7 +170,7 @@ class ScanCache:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_new_subdomains(self, target: str, since: str) -> List[str]:
+    def get_new_subdomains(self, target: str, since: str) -> list[str]:
         """Get subdomains discovered since a timestamp"""
         with self._connect() as conn:
             cursor = conn.execute(
@@ -214,7 +213,7 @@ class ScanCache:
                 ),
             )
 
-    def get_ports(self, target: str) -> List[Dict]:
+    def get_ports(self, target: str) -> list[dict]:
         """Get all known ports for a target"""
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
@@ -224,7 +223,7 @@ class ScanCache:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_diff(self, target: str, since: str) -> Dict:
+    def get_diff(self, target: str, since: str) -> dict:
         """Get changes since last scan"""
         diff = {
             "new_subdomains": self.get_new_subdomains(target, since),
@@ -241,7 +240,7 @@ class ScanCache:
 
         return diff
 
-    def get_stats(self, target: str) -> Dict:
+    def get_stats(self, target: str) -> dict:
         """Get cache statistics for a target"""
         with self._connect() as conn:
             sub_count = conn.execute(
@@ -297,7 +296,7 @@ class SessionManager:
         self.cache = cache or ScanCache()
         self.active_sessions = {}
 
-    def start_session(self, target: str, depth: str = "normal") -> Dict:
+    def start_session(self, target: str, depth: str = "normal") -> dict:
         """Start a new scan session"""
         session_id = hashlib.md5(
             f"{target}{datetime.now().isoformat()}".encode()
@@ -324,7 +323,7 @@ class SessionManager:
 
         return session
 
-    def get_incremental_targets(self, session: Dict) -> Dict:
+    def get_incremental_targets(self, session: dict) -> dict:
         """Get only new targets to scan"""
         if not session["is_incremental"]:
             return {"full_scan": True}
@@ -339,7 +338,7 @@ class SessionManager:
             "last_scan_time": session["last_scan"]["timestamp"],
         }
 
-    def finalize_session(self, session_id: str, results: Dict):
+    def finalize_session(self, session_id: str, results: dict):
         """Save session results to cache"""
         session = self.active_sessions.get(session_id)
         if not session:
@@ -364,7 +363,7 @@ class SessionManager:
         if session_id in self.active_sessions:
             del self.active_sessions[session_id]
 
-    def get_session_diff(self, session_id: str) -> Dict:
+    def get_session_diff(self, session_id: str) -> dict:
         """Get what changed in this session"""
         session = self.active_sessions.get(session_id)
         if not session or not session["last_scan"]:

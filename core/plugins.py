@@ -5,8 +5,8 @@ import inspect
 import sys
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
 from pathlib import Path
+from typing import Any
 
 
 class BaseModule(ABC):
@@ -19,11 +19,11 @@ class BaseModule(ABC):
     requires_api_key: bool = False
 
     @abstractmethod
-    async def run(self, target: str, **kwargs) -> Dict[str, Any]:
+    async def run(self, target: str, **kwargs) -> dict[str, Any]:
         """Execute the module against a target"""
         raise NotImplementedError
 
-    def get_info(self) -> Dict:
+    def get_info(self) -> dict:
         return {
             "name": self.name,
             "description": self.description,
@@ -48,7 +48,7 @@ class _UnavailableBuiltin:
         self.requires_api_key = False
         self._reason = reason
 
-    def get_info(self) -> Dict:
+    def get_info(self) -> dict:
         return {
             "name": self.name,
             "description": self.description,
@@ -57,7 +57,7 @@ class _UnavailableBuiltin:
             "requires_api_key": self.requires_api_key,
         }
 
-    async def run(self, target: str, **kwargs) -> Dict[str, Any]:
+    async def run(self, target: str, **kwargs) -> dict[str, Any]:
         return {
             "target": target,
             "error": f"Module '{self.name}' is unavailable: {self._reason}",
@@ -69,7 +69,7 @@ class PluginManager:
     """Manage and load OSINT EYE plugins"""
 
     def __init__(self):
-        self.plugins: Dict[str, Any] = {}
+        self.plugins: dict[str, Any] = {}
         self._builtin_plugins = []
 
     def register(self, plugin: Any):
@@ -95,18 +95,18 @@ class PluginManager:
         nmap binary installed) no longer aborts the whole load: it is replaced
         by an ``_UnavailableBuiltin`` stub so ``has_plugin()`` stays accurate.
         """
-        from modules.dns import DNSScanner
         from modules.certs import CertScanner
-        from modules.web import WaybackScanner
-        from modules.web.web_scanner import WebScanner
+        from modules.cve import CVEScanner
+        from modules.dns import DNSScanner
         from modules.network import NetworkScanner
-        from modules.osint import WhoisScanner, GitHubScanner, GoogleScanner
+        from modules.osint import GitHubScanner, GoogleScanner, WhoisScanner
         from modules.osint.cloud_email import (
+            CDNDetector,
             CloudBucketDetector,
             EmailEnumerator,
-            CDNDetector,
         )
-        from modules.cve import CVEScanner
+        from modules.web import WaybackScanner
+        from modules.web.web_scanner import WebScanner
 
         builtin_wrappers = {
             "dns": DNSScanner,
@@ -182,7 +182,7 @@ class PluginManager:
                 # Never leave broken modules registered under sys.modules.
                 sys.modules.pop(module_name, None)
 
-    def list_plugins(self) -> List[Dict]:
+    def list_plugins(self) -> list[dict]:
         """List all loaded plugins"""
         result = []
         for name, p in self.plugins.items():
@@ -201,7 +201,7 @@ class PluginManager:
                 )
         return result
 
-    def get_plugin(self, name: str) -> Optional[Any]:
+    def get_plugin(self, name: str) -> Any | None:
         """Get a plugin by name"""
         return self.plugins.get(name)
 
@@ -218,7 +218,7 @@ class PluginTemplate(BaseModule):
     author = "built-in"
     requires_api_key = False
 
-    async def run(self, target: str, **kwargs) -> Dict[str, Any]:
+    async def run(self, target: str, **kwargs) -> dict[str, Any]:
         """Implement your scanning logic here"""
         results = {
             "target": target,

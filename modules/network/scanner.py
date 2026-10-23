@@ -17,9 +17,8 @@ Resilience contract:
     consume ("host" / "services") without exceptions.
 """
 
-import socket
 import concurrent.futures
-from typing import Dict, List, Optional
+import socket
 
 try:  # python-nmap is an optional heavy dependency; never break imports.
     import nmap
@@ -64,7 +63,7 @@ class PortScanner:
         self.aggressive = aggressive
         self.timing = timing
         self._nm = None  # Lazy nmap.PortScanner instance.
-        self._error: Optional[str] = None
+        self._error: str | None = None
 
     # ------------------------------------------------------------------
     # Lazy initialisation helpers
@@ -99,7 +98,7 @@ class PortScanner:
         """Return True if the nmap binary/backend is ready for scanning."""
         return self._ensure_scanner()
 
-    def unavailable_result(self, host: str) -> Dict:
+    def unavailable_result(self, host: str) -> dict:
         """Canonical graceful-degradation result when nmap is unusable."""
         return {
             "host": host,
@@ -111,7 +110,7 @@ class PortScanner:
     # ------------------------------------------------------------------
     # Scanning
     # ------------------------------------------------------------------
-    def scan_host(self, host: str, ports: str = None, arguments: str = None) -> Dict:
+    def scan_host(self, host: str, ports: str = None, arguments: str = None) -> dict:
         """Scan a single host; degrades gracefully if nmap is missing."""
         if not self._ensure_scanner():
             return self.unavailable_result(host)
@@ -137,7 +136,7 @@ class PortScanner:
                 "error": str(e),
             }
 
-    def _parse_scan_results(self, host: str) -> Dict:
+    def _parse_scan_results(self, host: str) -> dict:
         """Parse nmap scan results"""
         result = {
             "host": host,
@@ -181,8 +180,8 @@ class PortScanner:
         return result
 
     def scan_multiple_hosts(
-        self, hosts: List[str], ports: str = None, max_workers: int = 10
-    ) -> List[Dict]:
+        self, hosts: list[str], ports: str = None, max_workers: int = 10
+    ) -> list[dict]:
         """Scan multiple hosts in parallel (bounded worker pool)."""
         results = []
         max_workers = max(1, min(max_workers, 50))
@@ -204,19 +203,19 @@ class PortScanner:
 
         return results
 
-    def quick_scan(self, host: str) -> Dict:
+    def quick_scan(self, host: str) -> dict:
         """Quick scan with only top 20 ports"""
         return self.scan_host(host, ",".join(map(str, TOP_20_PORTS)))
 
-    def full_scan(self, host: str) -> Dict:
+    def full_scan(self, host: str) -> dict:
         """Full aggressive scan (settings are local to this scan call)."""
         return self.scan_host(host, arguments="-sV -A -T2")
 
-    def scan_port_list(self, host: str, port_list: List[int]) -> Dict:
+    def scan_port_list(self, host: str, port_list: list[int]) -> dict:
         """Scan specific port list"""
         return self.scan_host(host, ",".join(map(str, port_list)))
 
-    def detect_web_services(self, hosts: List[str]) -> Dict[str, Dict]:
+    def detect_web_services(self, hosts: list[str]) -> dict[str, dict]:
         """Detect web services and gather basic info"""
         web_ports = [80, 81, 443, 8080, 8443, 8888, 8000, 8008, 8009]
         results = {}
@@ -237,7 +236,7 @@ class PortScanner:
 
         return results
 
-    def _generate_urls(self, host: str, services: List[Dict]) -> List[str]:
+    def _generate_urls(self, host: str, services: list[dict]) -> list[str]:
         """Generate possible URLs (https on TLS ports, http elsewhere)"""
         urls = []
 
@@ -260,7 +259,7 @@ class ServiceDetector:
     def __init__(self):
         self.scanner = PortScanner(aggressive=True)
 
-    def detect_service(self, host: str, port: int) -> Dict:
+    def detect_service(self, host: str, port: int) -> dict:
         """Detect service on specific port"""
         result = self.scanner.scan_host(host, str(port), "-sV -sC")
 
@@ -269,7 +268,7 @@ class ServiceDetector:
 
         return {}
 
-    def fingerprint_banner(self, host: str, port: int) -> Optional[str]:
+    def fingerprint_banner(self, host: str, port: int) -> str | None:
         """Grab banner from open port"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -282,7 +281,7 @@ class ServiceDetector:
                 sock.close()
 
             return banner.decode("utf-8", errors="ignore").strip()
-        except (OSError, socket.timeout):
+        except (TimeoutError, OSError):
             return None
 
 
@@ -302,7 +301,7 @@ class NetworkScanner:
         """True if the underlying nmap backend is usable."""
         return self.scanner.is_available()
 
-    def scan(self, target: str, scan_type: str = "quick") -> Dict:
+    def scan(self, target: str, scan_type: str = "quick") -> dict:
         """Scan target (IP or domain); always returns a well-formed dict."""
         print(f"[*] Resolving {target}...")
 
@@ -335,7 +334,7 @@ class NetworkScanner:
         result.setdefault("host", target)
         return result
 
-    def scan_subnet(self, subnet: str, ports: str = None) -> Dict:
+    def scan_subnet(self, subnet: str, ports: str = None) -> dict:
         """Scan an entire subnet (delegates to nmap CIDR support)."""
         print(f"[*] Scanning subnet {subnet}...")
 

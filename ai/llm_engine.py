@@ -5,7 +5,6 @@ Privacy by design: this engine talks EXCLUSIVELY to a local Ollama server
 """
 
 import json
-from typing import Dict, List
 
 # Connect/read timeouts (seconds): fail fast if Ollama is not running, but
 # allow long generation times once the stream is connected.
@@ -62,7 +61,7 @@ class OllamaEngine:
         """Public wrapper around the local LLM call."""
         return self._call_ollama(prompt, system)
 
-    def analyze_findings(self, osint_data: Dict) -> str:
+    def analyze_findings(self, osint_data: dict) -> str:
         """Analyze OSINT findings with AI"""
         prompt = self._build_analysis_prompt(osint_data)
 
@@ -75,7 +74,7 @@ Be concise and tactical."""
 
         return self._call_ollama(prompt, system_prompt)
 
-    def _build_analysis_prompt(self, data: Dict) -> str:
+    def _build_analysis_prompt(self, data: dict) -> str:
         """Build analysis prompt from OSINT data"""
         prompt = "Analyze these OSINT findings and prioritize attack vectors:\n\n"
 
@@ -112,7 +111,7 @@ Be concise and tactical."""
 
         return prompt
 
-    def generate_attack_hypothesis(self, target: str, findings: Dict) -> str:
+    def generate_attack_hypothesis(self, target: str, findings: dict) -> str:
         """Generate attack hypothesis"""
         prompt = f"""For target: {target}
 
@@ -128,7 +127,7 @@ reconnaissance findings. Be specific about techniques and tools."""
 
         return self._call_ollama(prompt, system_prompt)
 
-    def suggest_exploits(self, services: List[Dict]) -> str:
+    def suggest_exploits(self, services: list[dict]) -> str:
         """Suggest potential exploits for discovered services"""
         prompt = "For these services, suggest relevant exploit frameworks and techniques:\n\n"
 
@@ -153,7 +152,7 @@ class RiskScorer:
         self.ollama = ollama
 
     @staticmethod
-    def _flatten(findings: Dict) -> Dict:
+    def _flatten(findings: dict) -> dict:
         """Support both flat payloads and the modules dict osint_eye feeds in.
 
         ``AIEngine.analyze()`` receives ``results["modules"]`` (keys dns /
@@ -179,7 +178,7 @@ class RiskScorer:
         flattened.setdefault("wayback", wayback)
         return flattened
 
-    def calculate_risk_score(self, findings: Dict) -> Dict:
+    def calculate_risk_score(self, findings: dict) -> dict:
         """Calculate risk score based on findings (tolerates partial/None data)."""
         findings = self._flatten(findings)
         score = 0
@@ -236,7 +235,7 @@ class AIEngine:
             print("[!] Ollama not available - AI features disabled")
             print("[!] Install Ollama: https://ollama.ai/")
 
-    def analyze(self, findings: Dict) -> Dict:
+    def analyze(self, findings: dict) -> dict:
         """Perform full AI analysis (never raises, never hangs)."""
         findings = findings or {}
 
@@ -265,7 +264,7 @@ class AIEngine:
         results["risk_score"] = self.risk_scorer.calculate_risk_score(findings)
         return results
 
-    def generate_redteam_playbook(self, findings: Dict) -> Dict:
+    def generate_redteam_playbook(self, findings: dict) -> dict:
         """Act as an AI Agent and generate an execution playbook.
 
         Returns ``{"playbook": str}`` always (with a ``status`` hint); local

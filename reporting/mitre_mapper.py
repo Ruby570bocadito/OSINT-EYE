@@ -5,16 +5,15 @@ ATT&CK Navigator layer JSON compatible with https://mitre-attack.github.io/.
 """
 
 import json
-from typing import Dict, List
 from dataclasses import dataclass
 
 
-def _d(value) -> Dict:
+def _d(value) -> dict:
     """Return value if dict else {} (defensive accessor for scan data)."""
     return value if isinstance(value, dict) else {}
 
 
-def _l(value) -> List:
+def _l(value) -> list:
     """Return value if list else []."""
     return value if isinstance(value, list) else []
 
@@ -34,7 +33,7 @@ class MitreMapper:
     """Map OSINT findings to MITRE ATT&CK techniques"""
 
     def __init__(self):
-        self.findings: List[MitreFinding] = []
+        self.findings: list[MitreFinding] = []
 
         self.mapping_rules = {
             "subdomains": [
@@ -200,7 +199,7 @@ class MitreMapper:
             "Impact": "#c0392b",
         }
 
-    def map_findings(self, scan_results: Dict) -> List[MitreFinding]:
+    def map_findings(self, scan_results: dict) -> list[MitreFinding]:
         """Map all scan findings to MITRE ATT&CK"""
         self.findings = []
         if not isinstance(scan_results, dict):
@@ -351,7 +350,7 @@ class MitreMapper:
 
         return self.findings
 
-    def get_tactic_summary(self) -> Dict[str, List[MitreFinding]]:
+    def get_tactic_summary(self) -> dict[str, list[MitreFinding]]:
         """Group findings by tactic"""
         tactics = {}
         for finding in self.findings:
@@ -360,7 +359,7 @@ class MitreMapper:
             tactics[finding.tactic].append(finding)
         return tactics
 
-    def get_heatmap_data(self) -> List[Dict]:
+    def get_heatmap_data(self) -> list[dict]:
         """Generate heatmap data for visualization"""
         tactic_counts = {}
         for finding in self.findings:
@@ -391,7 +390,7 @@ class MitreMapper:
             for tactic, data in tactic_counts.items()
         ]
 
-    def export_json(self) -> Dict:
+    def export_json(self) -> dict:
         """Export MITRE mapping as JSON"""
         return {
             "findings": [
@@ -424,14 +423,14 @@ class MitreMapper:
             "high_count": len([f for f in self.findings if f.severity == "HIGH"]),
         }
 
-    def export_navigator_layer(self) -> Dict:
+    def export_navigator_layer(self) -> dict:
         """Export as a valid MITRE ATT&CK Navigator layer JSON.
 
         Produces the canonical structure (name/versions/domain/techniques)
         with full sub-technique IDs (e.g. ``T1595.002``), deduplicated per
         technique keeping the maximum score and merged comments.
         """
-        merged: Dict[str, Dict] = {}
+        merged: dict[str, dict] = {}
         for finding in self.findings:
             score = {
                 "CRITICAL": 100,
@@ -453,7 +452,10 @@ class MitreMapper:
             entry["score"] = max(entry["score"], score)
             comment = f"{finding.source_module}: {finding.evidence}"
             if comment not in entry["comment"]:
-                entry["comment"] = (entry["comment"] + " | " + comment).strip(" | ")
+                # strip(" | ") es semántica de conjunto de caracteres (recorta
+                # espacios y barras de los extremos), intencional aquí para
+                # limpiar el separador " | " inicial de la acumulación.
+                entry["comment"] = (entry["comment"] + " | " + comment).strip(" | ")  # noqa: B005
             entry["metadata"].append(
                 {
                     "name": "Severity",

@@ -2,9 +2,9 @@
 
 from .wayback import WaybackMachine, WaybackScanner
 from .web_scanner import (
-    TechDetector,
     EndpointDiscovery,
     SensitiveDataDetector,
+    TechDetector,
     WebScanner,
 )
 

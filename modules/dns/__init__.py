@@ -1,24 +1,24 @@
 """DNS Module for OSINT EYE"""
 
-from .dns_scanner import DNSResolver, SubdomainEnumerator, ZoneTransfer, DNSScanner
-from .subdomain_permutator import (
-    SubdomainPermutator,
-    SubdomainTakeoverDetector,
-    SubdomainMonitor,
-)
 from .advanced_dns import (
     DNSSECWalker,
-    ReverseDNSEnumerator,
-    VirtualHostBruteforcer,
     JavaScriptEndpointDiscovery,
-    TLSAnalyzer,
-    SecurityHeadersAuditor,
     ParameterDiscovery,
+    ReverseDNSEnumerator,
     ScreenshotCapture,
+    SecurityHeadersAuditor,
+    TLSAnalyzer,
+    VirtualHostBruteforcer,
+)
+from .dns_scanner import DNSResolver, DNSScanner, SubdomainEnumerator, ZoneTransfer
+from .email_security import EmailSecurityAuditor
+from .passive_sources import PassiveSubdomainEnumerator
+from .subdomain_permutator import (
+    SubdomainMonitor,
+    SubdomainPermutator,
+    SubdomainTakeoverDetector,
 )
 from .wildcard import WildcardDetector
-from .passive_sources import PassiveSubdomainEnumerator
-from .email_security import EmailSecurityAuditor
 
 __all__ = [
     "DNSResolver",

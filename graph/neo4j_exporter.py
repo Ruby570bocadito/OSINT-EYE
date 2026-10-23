@@ -1,7 +1,6 @@
 """OSINT EYE - Neo4j Cypher Graph Exporter"""
 
 import re
-from typing import Dict, List
 
 
 def _cypher_str(value) -> str:
@@ -35,9 +34,9 @@ def _neo4j_rel_type(value, default: str = "RELATED_TO") -> str:
 class Neo4jExporter:
     """Exports OSINT EYE Graph to Neo4j Cypher queries (Neo4j 5+ syntax)."""
 
-    def __init__(self, graph_data: Dict):
-        self.nodes: List[Dict] = graph_data.get("nodes") or []
-        self.edges: List[Dict] = graph_data.get("edges") or []
+    def __init__(self, graph_data: dict):
+        self.nodes: list[dict] = graph_data.get("nodes") or []
+        self.edges: list[dict] = graph_data.get("edges") or []
 
     def generate_cypher(self) -> str:
         """Generates the full .cypher import script"""
