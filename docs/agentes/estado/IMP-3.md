@@ -1,6 +1,6 @@
 # Estado IMP-3 — Núcleo, análisis y salidas
 
-Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
+Actualizado: 2026-10-23 (sesión v2.2, ronda 1 — cierre: 5/5 tareas)
 
 ## Hecho (últimas 24 h)
 
@@ -9,18 +9,17 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
 - [x] (IMP-3) logging-real — `core/logging_config.py` (árbol `osint_eye.*`, idempotente); monitor,
   builder y los 5 exportadores de reporting sin print(); flags `--log-level`/`--log-file`.
 - [x] (IMP-3) scope-file — `core/scope.py` (dominios, wildcards, IPs, CIDR v4/v6; excludes siempre
-  ganan; targets hostiles nunca en scope; descartes auditados) + `--scope`/`--exclude` con gateo en
-  CLI targets, candidatos de permutación y sondas de takeover; resumen vivo en `results["scope"]`.
-  Conflicto del CHANGELOG con la consolidación de PUL-1 resuelto conservando ambas estructuras.
-  356 tests en verde al subir.
-
-- [x] (IMP-3) sarif-export — `reporting/sarif.py` (SarifExporter, 5 reglas OE001-OE005, niveles por
-  severidad, partialFingerprints estables, tolerante a shapes corruptos); `export_all` emite
-  `<base>.sarif`. Tests: `tests/test_reporting_sarif.py`. 395 tests en verde al subir.
+  ganan; hostiles nunca en scope; descartes auditados) + `--scope`/`--exclude` con gateo en targets
+  CLI, permutación y takeover; resumen en `results["scope"]`.
+- [x] (IMP-3) sarif-export — `reporting/sarif.py` (5 reglas OE001-OE005, niveles por severidad,
+  partialFingerprints estables, tolerante a shapes corruptos); `export_all` emite `<base>.sarif`.
+- [x] (IMP-3) exit-codes-ci — `--fail-on low|medium|high` con exit codes 0/1/2/3 documentados en
+  --help; `max_severity()` tolera shapes corruptos; e2e real por subprocess (scope vacío → exit 3).
+- Suite al cierre: 451 tests offline en verde; pyflakes limpio en todo lo tocado.
 
 ## En curso
 
-- (IMP-3) exit-codes-ci — `--fail-on high|medium|low` con códigos de salida documentados.
+- (IMP-3) config-file queda en el ROADMAP como siguiente tarea IMP-3 de la fase v2.2 (no iniciada).
 
 ## Bloqueado
 
@@ -28,11 +27,10 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
 
 ## Peticiones a otras zonas
 
-- IMP-1: cuando migréis colectores al cliente HTTP compartido, aplicad `Scope.allows()`/`filter_targets()`
-  a las URLs derivadas dentro de cada módulo (dns brute-force de wordlist, endpoints, cloud) — la infraestructura
-  está en `core/scope.py` con `tests/test_core_scope.py` como referencia.
-- PUL-2: `reporting/markdown_reporter.py` f-string sin placeholders preexistente (`f"\n### Attack Graph"`);
-  cae dentro de vuestra tarea ruff-config.
+- IMP-1: al migrar colectores al cliente HTTP compartido, aplicar `Scope.allows()`/`filter_targets()`
+  a las URLs derivadas dentro de cada módulo (dns brute-force de wordlist, endpoints, cloud) — la
+  infraestructura está en `core/scope.py` con `tests/test_core_scope.py` de referencia.
+- PUL-2: f-string sin placeholders preexistente en `reporting/markdown_reporter.py` (`f"\n### Attack Graph"`); cae en vuestra tarea ruff-config.
 
 ## Propuestas para el roadmap
 
