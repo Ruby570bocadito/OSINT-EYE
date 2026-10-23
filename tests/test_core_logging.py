@@ -171,14 +171,15 @@ class TestCLIWiring:
     def _run_cli(self, *cli_args, cwd=None):
         import subprocess
 
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         env = dict(os.environ)
-        env["PYTHONPATH"] = os.path.join(os.path.dirname(__file__), "..")
+        env["PYTHONPATH"] = root
         return subprocess.run(
-            [sys.executable, "osint_eye.py", *cli_args],
+            [sys.executable, os.path.join(root, "osint_eye.py"), *cli_args],
             capture_output=True,
             text=True,
             env=env,
-            cwd=cwd or os.path.join(os.path.dirname(__file__), ".."),
+            cwd=cwd or root,
             timeout=60,
         )
 
@@ -195,7 +196,9 @@ class TestCLIWiring:
         assert result.returncode == 0, result.stderr
 
     def test_log_file_created_by_cli_run(self, tmp_path):
+        # cwd=tmp_path: the H-003 output-path guard requires --log-file to
+        # resolve inside the CWD of the CLI invocation.
         log_file = tmp_path / "cli-run.log"
-        result = self._run_cli("--log-file", str(log_file), "--modules")
+        result = self._run_cli("--log-file", str(log_file), "--modules", cwd=tmp_path)
         assert result.returncode == 0, result.stderr
         assert log_file.exists()

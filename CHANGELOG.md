@@ -10,6 +10,11 @@ Reglas del equipo (PROTOCOLO §3):
 ## [Unreleased]
 
 ### Seguridad
+- **fix-h003 (path traversal)**: toda ruta de salida suministrada por el usuario (`--output/-o`,
+  `--export-cypher`, `--log-file`) debe resolver dentro del directorio de trabajo; las que escapan
+  se rechazan con usage error (exit 2) antes de escanear, escribir logs o crear ficheros. `export_all()`
+  aplica la misma barrera a cualquier llamador no-CLI. Reproducido por TEST: `-o ../../x` escribía
+  dos niveles por encima del repo.
 - **webhook-guard**: `--webhook` valida la URL antes de arrancar el monitor (exige https y host
   público; loopback, IPs privadas y metadatos cloud bloqueados reutilizando ssrf_guard); el
   handler del monitor rechaza también en runtime — un typo nunca filtra datos del escaneo hacia

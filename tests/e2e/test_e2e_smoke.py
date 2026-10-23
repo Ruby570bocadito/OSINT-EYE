@@ -23,10 +23,10 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CLI = os.path.join(REPO_ROOT, "osint_eye.py")
 
 
-def run_cli(args, timeout=120):
+def run_cli(args, timeout=120, cwd=REPO_ROOT):
     return subprocess.run(
         [sys.executable, CLI, *args],
-        cwd=REPO_ROOT,
+        cwd=cwd,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -112,7 +112,7 @@ def test_quick_scan_local_fixture_produces_web_results(tmp_path):
             f"http://127.0.0.1:{server.server_address[1]}",
             "--modules", "web", "--depth", "quick",
             "--no-ai", "--no-cache", "-o", str(out_base),
-        ])
+        ], cwd=tmp_path)
         assert result.returncode == 0, result.stdout[-500:] + result.stderr[-500:]
         assert "Traceback" not in (result.stdout + result.stderr)
 
@@ -135,7 +135,7 @@ def test_quick_scan_local_fixture_blocks_metadata_redirect(tmp_path):
             f"http://127.0.0.1:{server.server_address[1]}",
             "--modules", "web", "--depth", "quick",
             "--no-ai", "--no-cache", "-o", str(out_base),
-        ])
+        ], cwd=tmp_path)
         assert result.returncode == 0
         assert "Traceback" not in (result.stdout + result.stderr)
 
@@ -161,7 +161,7 @@ def test_dashboard_api_serves_local_scan_json(tmp_path):
             f"http://127.0.0.1:{server.server_address[1]}",
             "--modules", "web", "--depth", "quick",
             "--no-ai", "--no-cache", "-o", str(out_base),
-        ])
+        ], cwd=tmp_path)
         assert result.returncode == 0
     finally:
         _stop(server, thread)

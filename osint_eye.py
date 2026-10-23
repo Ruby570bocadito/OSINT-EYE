@@ -55,6 +55,30 @@ def _sanitize_filename(value: str) -> str:
     return safe.strip("._") or "unknown"
 
 
+class OutputPathError(ValueError):
+    """A user-supplied output path resolves outside the current directory."""
+
+
+def _validate_output_path(value: str, flag: str = "--output") -> str:
+    """Ensure a user-supplied output path stays inside the current directory.
+
+    H-003 (TEST): ``-o ../../foo`` used to silently write two levels above
+    the repo. The base is resolved against the CWD and anything landing
+    outside it is refused with an actionable message instead of writing to
+    a stray location. Paths that resolve inside the CWD (relative or
+    absolute) pass through unchanged.
+    """
+    resolved = Path(str(value)).expanduser().resolve()
+    cwd = Path.cwd().resolve()
+    if resolved != cwd and cwd not in resolved.parents:
+        raise OutputPathError(
+            f"{flag} resolves outside the current working directory: "
+            f"{value!r} -> {resolved} (cwd: {cwd}). Use a path inside it, "
+            f"e.g. {flag} output/report"
+        )
+    return str(value)
+
+
 def _pdf_output_name(target: str) -> str:
     """Default PDF filename for a target (sanitized, CWD-relative)."""
     return (
@@ -579,6 +603,13 @@ class OSINTEye:
                 f"osint_eye_{_sanitize_filename(self.target)}_"
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
+        else:
+            # H-003 (TEST): every caller-supplied base must stay inside the
+            # CWD; the CLI validates earlier, this guard covers the rest.
+            try:
+                output_base = _validate_output_path(output_base, flag="--output")
+            except OutputPathError as exc:
+                raise OutputPathError(f"export_all: {exc}") from None
 
         if formats is None:
             formats = list(_EXPORT_FORMATS)
@@ -1083,7 +1114,12 @@ Exit codes (CI):
     parser.add_argument("--stealth", action="store_true", help="Stealth mode")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI")
     parser.add_argument("--no-cache", action="store_true", help="Disable caching")
-    parser.add_argument("--output", "-o", help="Output base filename")
+    parser.add_argument(
+        "--output",
+        "-o",
+        help="Output base filename (must resolve inside the current "
+        "working directory; escaping paths are refused before scanning)",
+    )
     parser.add_argument(
         "--depth", choices=["quick", "normal", "deep", "full"], default="normal"
     )
@@ -1123,7 +1159,9 @@ Exit codes (CI):
         help="Run the AI Agent to generate actionable Red Team Playbook",
     )
     parser.add_argument(
-        "--export-cypher", help="Export Graph to a Neo4j compatible .cypher data dump"
+        "--export-cypher",
+        help="Export Graph to a Neo4j compatible .cypher data dump "
+        "(must resolve inside the current working directory)",
     )
     parser.add_argument(
         "--log-level",
@@ -1134,7 +1172,8 @@ Exit codes (CI):
     parser.add_argument(
         "--log-file",
         default=None,
-        help="Append library logs to this file (console keeps receiving them)",
+        help="Append library logs to this file (console keeps receiving "
+        "them; must resolve inside the current working directory)",
     )
     parser.add_argument(
         "--scope",
@@ -1204,6 +1243,21 @@ Exit codes (CI):
     else:
         args = parser.parse_args()
         interactive_mode = False
+
+    # H-003 (TEST): user-supplied output paths must never escape the CWD.
+    # Checked before any side effect (log file creation, scans, exports) so
+    # a bad path is a clean usage error (argparse exits with code 2).
+    for flag, attr in (
+        ("--output", "output"),
+        ("--export-cypher", "export_cypher"),
+        ("--log-file", "log_file"),
+    ):
+        value = getattr(args, attr, None)
+        if value:
+            try:
+                _validate_output_path(value, flag=flag)
+            except OutputPathError as exc:
+                parser.error(str(exc))
 
     # Configure the library logger before any scan/monitor work runs, so
     # every core/graph/reporting message honours --log-level/--log-file.
