@@ -21,7 +21,8 @@ from urllib.parse import urljoin, urlparse
 
 import dns.resolver
 import dns.reversename
-import requests
+
+from modules._http import HTTPClient
 
 try:  # aiohttp is only needed by the async helper classes below.
     import aiohttp
@@ -550,6 +551,7 @@ class SecurityHeadersAuditor:
 
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
+        self.http = HTTPClient(timeout=timeout)
 
         self.required_headers = {
             "Strict-Transport-Security": {
@@ -610,7 +612,7 @@ class SecurityHeadersAuditor:
             import requests
 
             try:
-                resp = requests.get(url, timeout=self.timeout, verify=True)
+                resp = self.http.get(url, verify=True)
             except requests.exceptions.SSLError as e:
                 # Never bypass TLS verification: an invalid certificate is
                 # itself a security finding, not a reason to downgrade.
@@ -916,6 +918,7 @@ class ScreenshotCapture:
 
     def __init__(self, timeout: int = 30):
         self.timeout = timeout
+        self.http = HTTPClient(timeout=timeout)
 
     def capture(self, url: str, output_path: str) -> bool:
         """Capture screenshot using Playwright or fallback"""
@@ -938,9 +941,7 @@ class ScreenshotCapture:
     def _capture_fallback(self, url: str, output_path: str) -> bool:
         """Fallback: save HTML instead"""
         try:
-            import requests
-
-            resp = requests.get(url, timeout=self.timeout)
+            resp = self.http.get(url)
             with open(output_path.replace(".png", ".html"), "w") as f:
                 f.write(resp.text)
             return True

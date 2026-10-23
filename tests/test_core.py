@@ -406,7 +406,7 @@ class TestSecurityHeadersAuditor:
             "Strict-Transport-Security": "max-age=3600",
         }
         auditor = SecurityHeadersAuditor()
-        with patch("requests.get", return_value=response) as mock_get:
+        with patch("requests.Session.request", return_value=response) as mock_get:
             result = auditor.audit("https://example.com")
 
         mock_get.assert_called_once()
@@ -425,7 +425,7 @@ class TestSecurityHeadersAuditor:
         from modules.dns import SecurityHeadersAuditor
 
         auditor = SecurityHeadersAuditor()
-        with patch("requests.get", side_effect=ConnectionError("boom")):
+        with patch("requests.Session.request", side_effect=ConnectionError("boom")):
             result = auditor.audit("https://unreachable.invalid")
         assert "error" in result
 

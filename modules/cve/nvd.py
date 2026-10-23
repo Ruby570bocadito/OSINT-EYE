@@ -22,6 +22,8 @@ from typing import List, Dict, Optional
 
 import requests
 
+from modules._http import HTTPClient
+
 
 class CVELookup:
     """CVE lookup via the NVD API (free; optional API key).
@@ -51,10 +53,9 @@ class CVELookup:
                 self.WITH_KEY_DELAY if self.api_key else self.NO_KEY_DELAY
             )
         self._last_request_ts: float = 0.0
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"})
+        self.session = HTTPClient(timeout=30)
         if self.api_key:
-            self.session.headers.update({"apiKey": self.api_key})
+            self.session.set_header("apiKey", self.api_key)
 
     def _respect_rate_limit(self) -> None:
         """Sleep just enough to keep the configured minimum interval."""

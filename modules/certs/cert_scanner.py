@@ -18,6 +18,8 @@ from typing import List, Dict, Set, Optional
 
 import requests
 
+from modules._http import HTTPClient
+
 
 class CertTransparency:
     """Certificate Transparency logs enumeration via crt.sh
@@ -31,8 +33,7 @@ class CertTransparency:
         self.base_url = "https://crt.sh"
         self.rate_limit = max(0.0, rate_limit)
         self._last_request_ts: float = 0.0
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"})
+        self.session = HTTPClient(timeout=30)
 
     def _respect_rate_limit(self) -> None:
         """Sleep just enough to keep the configured minimum interval."""

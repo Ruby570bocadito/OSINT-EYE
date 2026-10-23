@@ -10,10 +10,11 @@ For reliable operation, a GitHub token via the official REST API is
 recommended (not implemented here to keep the tool key-free).
 """
 
-import requests
 import time
 import re
 from typing import List, Dict
+
+from modules._http import HTTPClient
 
 
 class GitHubDorker:
@@ -22,10 +23,7 @@ class GitHubDorker:
     def __init__(self, rate_limit_delay: float = 2.0):
         self.rate_limit_delay = rate_limit_delay
         self.base_url = "https://github.com/search"
-        self.session = requests.Session()
-        self.session.headers.update(
-            {"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool; +https://github.com)"}
-        )
+        self.session = HTTPClient(timeout=30)
 
         self.dorks = {
             "api_keys": [

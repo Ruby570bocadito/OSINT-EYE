@@ -8,10 +8,11 @@ backoff/retry; ``full_scan()`` always returns the complete result shape
 so reports never break.
 """
 
-import requests
 import time
 import re
 from typing import List, Dict
+
+from modules._http import HTTPClient
 
 
 class GoogleDorker:
@@ -20,12 +21,7 @@ class GoogleDorker:
     def __init__(self, rate_limit_delay: float = 3.0):
         self.rate_limit_delay = rate_limit_delay
         self.base_url = "https://www.google.com/search"
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-        )
+        self.session = HTTPClient(timeout=30)
         self.session.cookies.set("CONSENT", "YES+")
 
         self.dorks = {

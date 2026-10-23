@@ -4,7 +4,7 @@ import re
 from typing import List, Dict
 from urllib.parse import urlparse
 
-import requests
+from modules._http import HTTPClient
 
 
 class WaybackMachine:
@@ -14,8 +14,7 @@ class WaybackMachine:
         self.rate_limit = rate_limit
         self.base_url = "https://web.archive.org"
         self.cdx_api = "https://web.archive.org/cdx/search/cdx"
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"})
+        self.session = HTTPClient(timeout=30)
 
     def get_wayback_urls(self, domain: str) -> List[Dict]:
         """Get all archived URLs for a domain"""

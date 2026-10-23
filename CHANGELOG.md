@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Añadido
+- **CI de lint y cobertura**: job `lint` (ruff, gate de sintaxis E9) y job `coverage` (pytest-cov sobre `core/modules/graph/reporting/ui/ai`, `coverage.xml` como artifact y subida a Codecov); badge de cobertura en el README.
 - **`.dockerignore` versionado**: contexto de build limpio (sin `.git`, venvs, `output/`, `docs/`, `tests/`) — deja de estar ignorado en `.gitignore`; la imagen de Docker es más pequeña y el build más rápido.
 - **`.agent-tmp/` ignorado en git** (borradores y volcados de agentes, PROTOCOLO §3).
 - **Empaquetado estándar**: `pyproject.toml` con metadatos completos, dependencias en paridad con `requirements.txt`, extras (`[ui]`, `[pdf]`, `[dev]`), entry point `osint-eye` y `pip install -e .` verificado desde cero.
@@ -29,6 +30,12 @@
   escaneos cargados y API `GET /api/scan/<target>/diff?against=<otro>` (reutiliza `core/scan_diff.ScanDiff`);
   muestra subdominios/puertos/servicios/tecnologías/emails/CVEs/buckets añadidos o eliminados, servicios
   con versión cambiada y evolución del score de superficie, con entrada sanitizada (nunca 500).
+- **Cliente HTTP compartido (`modules/_http.py`)**: todos los colectores salen ahora por un único
+  `HTTPClient` con timeout por defecto (nunca peticiones colgadas), reintentos con backoff exponencial
+  en errores de conexión y respuestas transitorias (429/5xx, respetando `Retry-After`), User-Agent
+  identificable `OSINT-EYE/…` configurable (`OSINT_EYE_USER_AGENT`), rate-limit por host
+  (`OSINT_EYE_RATE_LIMIT`) y proxy opcional (`OSINT_EYE_PROXY`); migrados los `requests` sueltos de
+  `modules/` (web, wayback, certs, nvd, github, google, cloud, dns avanzado, takeover).
 
 ### Documentación
 - README fiel: badges de versión (2.1.1) y tests (118 passing) reales, árbol sincronizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.
