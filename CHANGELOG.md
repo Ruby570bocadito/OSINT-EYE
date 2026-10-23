@@ -44,6 +44,10 @@
   identificable `OSINT-EYE/…` configurable (`OSINT_EYE_USER_AGENT`), rate-limit por host
   (`OSINT_EYE_RATE_LIMIT`) y proxy opcional (`OSINT_EYE_PROXY`); migrados los `requests` sueltos de
   `modules/` (web, wayback, certs, nvd, github, google, cloud, dns avanzado, takeover).
+- **CLI — progreso en vivo por módulo**: tabla `Module Progress` (Rich Live) con estado
+  (pending/running/done/error), duración, nº de hallazgos y errores de cada módulo durante el escaneo
+  (`run_all` y `--modules`); la salida impresa de los módulos se re-renderiza sobre la tabla sin
+  corromperse y en tuberías/CI el tracker degrada a impresión normal.
 
 ### Documentación
 - README fiel: badges de versión (2.1.1) y tests (118 passing) reales, árbol sincronizado y sección Roadmap que resume la fase v2.2 enlazando `docs/agentes/ROADMAP.md`.

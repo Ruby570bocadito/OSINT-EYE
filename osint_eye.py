@@ -33,7 +33,7 @@ from reporting.mitre_mapper import MitreMapper
 from reporting.export import CSVExporter, HTMLReporter
 from reporting.pdf_reporter import PDFReporter
 from reporting.export_tools import BurpExporter, MetasploitExporter
-from ui.rich_cli import RichCLI
+from ui.rich_cli import RichCLI, instrument_engine
 from ai import AIEngine
 
 
@@ -463,6 +463,10 @@ class OSINTEye:
         console = Console()
         deep_enough = self.depth in ("deep", "full")
 
+        # Live per-module progress (ui/rich_cli.py owns all the logic).
+        tracker = instrument_engine(self)
+        tracker.start_live()
+
         def phase(title: str):
             console.print()
             console.rule(f"[bold cyan]{title}[/bold cyan]", style="dim cyan")
@@ -524,6 +528,8 @@ class OSINTEye:
 
         if self.scan_cache:
             self.scan_cache.save_scan(self.target, "full", self.results, self.depth)
+
+        tracker.stop_live()
 
         return self.results
 
@@ -677,11 +683,14 @@ def scan_targets(targets: list, args):
                 "mitre": engine.run_mitre,
                 "chains": engine.run_attack_chains,
             }
+            tracker = instrument_engine(engine)
+            tracker.start_live()
             for module in args.modules:
                 if module in module_map:
                     module_map[module]()
             if not args.no_ai:
                 engine.run_ai()
+            tracker.stop_live()
         else:
             engine.run_all()
 
