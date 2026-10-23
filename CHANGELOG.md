@@ -37,6 +37,11 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **ASN y netblocks de la organización (`asn-ip-ranges`)**: resuelve el target a IP y enumera el ASN
+  de origen, el titular y todos los prefijos anunciados vía RIPEstat (API pública sin clave), más el
+  objeto de red RDAP (nombre, país, rango start/end, tipo) vía rdap.org; cada fuente degrada de forma
+  independiente y los prefijos se reportan como inteligencia (nunca se sondean). Respeta el scope y
+  degrada sin red (`modules/network/asn.py`).
 - **Hash de favicon para pivotar (`favicon-hash`)**: descarga el icono del objetivo (primero el
   `<link rel="icon">` declarado, con fallback a `/favicon.ico`) y calcula el hash favicon estándar
   de los motores de búsqueda de activos — MurmurHash3 x86_32 firmado sobre el base64, implementado
