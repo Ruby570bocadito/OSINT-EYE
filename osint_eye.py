@@ -4,8 +4,10 @@ import argparse
 import sys
 import json
 import asyncio
+import ipaddress
 import re
 from typing import Optional
+from urllib.parse import urlsplit
 from datetime import datetime
 from pathlib import Path
 
@@ -95,6 +97,93 @@ def _validate_output_path(value: str, flag: str = "--output") -> str:
             f"e.g. {flag} output/report"
         )
     return str(value)
+
+
+def _normalize_cli_target(token: str):
+    """Normalize one CLI target, or explain why it is unusable (H-002).
+
+    Returns ``(target, None)`` on success or ``(None, reason)``. Dirty
+    inputs used to reach the engines untouched — ``HTTPS://Example.COM``
+    or ``example.com/path?x=1`` made the DNS module query garbage and the
+    JSON store the raw token, so the operator believed something was
+    scanned when nothing resolved.
+
+    Normalization: surrounding whitespace and trailing dots/slashes go
+    away; ``scheme://host[:port]/path`` keeps scheme and host:port (the
+    web module needs the scheme, loopback fixtures need the port) and
+    loses path/query; scheme-less tokens with a path keep their host.
+    The final host is validated with the wizard's rules (bare domains,
+    IPv4/IPv6, CIDR; wildcards belong in scope/exclusions).
+    """
+    from ui.wizard import InteractiveWizard as _Wizard
+
+    raw = str(token).strip()
+    if not raw:
+        return None, "empty target"
+
+    if "://" in raw:
+        try:
+            parts = urlsplit(raw)
+        except ValueError:
+            return None, f"{raw!r} is not a valid URL"
+        host = parts.hostname
+        if not host:
+            return None, f"{raw!r} has no host in the URL"
+        ok, reason = _Wizard._validate_target(host)
+        if not ok:
+            return None, reason
+        # IPv6 netloc keeps its brackets ([::1]:8080), like the input form
+        if ":" in host:
+            netloc = f"[{host}]" if parts.port is None else f"[{host}]:{parts.port}"
+        else:
+            netloc = host if parts.port is None else f"{host}:{parts.port}"
+        return f"{parts.scheme.lower()}://{netloc}", None
+
+    t = raw.rstrip(".").rstrip("/")
+    if not t:
+        return None, f"{raw!r} has no host"
+
+    # CIDR first: a slash is only legitimate between an IP and its prefix
+    if "/" in t:
+        head = t.split("/", 1)[0]
+        try:
+            ipaddress.ip_address(head)
+        except ValueError:
+            head = None  # pathful domain token, not CIDR-shaped
+        if head is not None:
+            try:
+                ipaddress.ip_network(t, strict=False)
+                return t, None
+            except ValueError:
+                return None, (
+                    f"{raw!r} is not a valid CIDR (e.g. 192.0.2.0/24); pass a "
+                    f"bare domain, IP or CIDR"
+                )
+
+    try:
+        ipaddress.ip_address(t)
+        return t, None  # bare IPv4/IPv6
+    except ValueError:
+        pass
+
+    # scheme-less token with a path/query: keep the host part
+    head = t.split("/", 1)[0].split("?", 1)[0]
+    if "@" in head:
+        head = head.rsplit("@", 1)[-1]
+    if head.startswith("[") and "]" in head:
+        host = head[1 : head.index("]")]
+        rest = head[head.index("]") + 1 :]
+    else:
+        host, _, rest = head.partition(":")
+    if not host:
+        return None, f"{raw!r} has no host"
+    if rest and (not rest.isdigit() or not 1 <= int(rest) <= 65535):
+        return None, f"{raw!r} has an invalid port {rest!r}"
+    host = host.lower()  # visible normalization: hosts are case-insensitive
+    ok, reason = _Wizard._validate_target(host)
+    if not ok:
+        return None, reason
+    return (f"{host}:{rest}" if rest else host), None
 
 
 def _split_modules_token(value: str) -> list:
@@ -1402,6 +1491,29 @@ Exit codes (CI):
                 f"{', '.join(MODULE_CATALOG)} (separate them with commas or "
                 f"spaces: --modules dns,web)"
             )
+
+    # H-002 (TEST): dirty targets used to reach the engines untouched and
+    # produce silent empty results. Normalize what is explainable (URL
+    # netloc, paths, whitespace, case) and reject the rest with an
+    # actionable usage error before any scanning happens.
+    if getattr(args, "targets", None):
+        normalized, invalid = [], []
+        for token in args.targets:
+            clean, reason = _normalize_cli_target(token)
+            if reason:
+                invalid.append((token, reason))
+            else:
+                normalized.append(clean)
+        if invalid:
+            detail = "; ".join(f"{t!r}: {reason}" for t, reason in invalid[:5])
+            if len(invalid) > 5:
+                detail += f"; ... and {len(invalid) - 5} more"
+            parser.error(
+                f"invalid target(s) — {detail}. Pass bare domains, IPs or "
+                f"CIDRs (e.g. example.com, 192.0.2.1, 192.0.2.0/24); a URL "
+                f"is accepted but only its host is scanned"
+            )
+        args.targets = normalized
 
     # Configure the library logger before any scan/monitor work runs, so
     # every core/graph/reporting message honours --log-level/--log-file.

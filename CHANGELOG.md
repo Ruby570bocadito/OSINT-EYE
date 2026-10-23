@@ -24,6 +24,12 @@ Reglas del equipo (PROTOCOLO §3):
   registro DKIM publica `p=` vacío (clave revocada, RFC 6376 §3.6.1.1): esos selectores quedan en
   `dkim.revoked` con su motivo (`revoked`/`malformed`), no cuentan como evidencia, el score aplica
   la deducción por ausencia de DKIM (-15) y se sugiere republicar una clave válida.
+- **fix-h002 (validación de targets CLI)**: la CLI normaliza targets sucios en vez de dejarlos llegar
+  a los motores: `HTTPS://Example.COM` → `https://example.com`, `https://example.com/ruta` y
+  `example.com/path?x=1` → `example.com` (se conservan scheme y host:port para el módulo web y los
+  fixtures loopback), espacios/puntos finales fuera, host en minúsculas. Lo no explicable
+  (`not_a_domain!!`, `*.example.com`, puerto inválido) se rechaza con usage error accionable (exit 2)
+  usando las reglas del wizard (dominio/IP/CIDR, wildcards a scope).
 - **fix-h010 (módulos con comas)**: `--modules dns,web` ya funciona (la forma natural de listar): el
   flag acepta comas y espacios a la vez, recorta espacios, descarta fragmentos vacíos y deduplica.
   Un nombre desconocido produce un error corto y accionable (lista de módulos válidos + hint
