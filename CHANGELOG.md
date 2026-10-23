@@ -15,6 +15,10 @@ Reglas del equipo (PROTOCOLO §3):
   dict vacío: "0 Technologies" / "No technologies fingerprinted" pese a datos presentes).
 
 ### Seguridad
+- **fix-h008 (PDF duplicado)**: `-o base --pdf` ya no genera dos PDFs. Si 'pdf' está entre los
+  formatos de exportación, la rama `--pdf` no renderiza (export_all produce `base.pdf`); si no está,
+  la rama deriva la ruta de la base `-o` (sufijo saneado por target en multi-target). Sin `-o` se
+  mantiene el nombre por defecto en CWD.
 - **fix-h001 (persistencia)**: el quickstart del README ya deja fichero reutilizable: sin `--output`,
   cada escaneo auto-guarda `osint_eye_<target>_<ts>.json` en el directorio actual (misma convención
   que el PDF por defecto) e imprime dónde quedó y que la caché vive en `~/.osint_eye/cache`. La rama

@@ -908,15 +908,35 @@ def scan_targets(targets: list, args):
                 cli.print_full_results(engine.results)
 
             if getattr(args, "pdf", False):
-                try:
-                    # Sanitized: a URL-like target used to produce a filename
-                    # containing "/" and crash PDF generation (FileNotFoundError).
-                    pdf_path = _pdf_output_name(target)
-                    engine._print(f"[*] Generating Executive PDF Report -> {pdf_path}...")
-                    engine.pdf_reporter.generate(engine.results, pdf_path)
-                    print(f"[+] PDF Report saved: {pdf_path}")
-                except Exception as e:
-                    print(f"[!] PDF generation failed: {e}")
+                # H-008 (TEST): with -o, the default-named PDF in the CWD was
+                # an unexpected duplicate. When 'pdf' is among the export
+                # formats, export_all() renders <base>.pdf and this branch
+                # stays out of the way; otherwise the path derives from the
+                # -o base (suffixed per target on multi-target runs).
+                formats = getattr(args, "export_formats", None)
+                pdf_in_exports = bool(args.output) and (
+                    formats is None or "pdf" in (formats or [])
+                )
+                if not pdf_in_exports:
+                    try:
+                        # Sanitized: a URL-like target used to produce a filename
+                        # containing "/" and crash PDF generation (FileNotFoundError).
+                        if args.output:
+                            base = (
+                                args.output
+                                if len(targets) == 1
+                                else f"{args.output}_{_sanitize_filename(target)}"
+                            )
+                            pdf_path = base if base.endswith(".pdf") else base + ".pdf"
+                        else:
+                            pdf_path = _pdf_output_name(target)
+                        engine._print(
+                            f"[*] Generating Executive PDF Report -> {pdf_path}..."
+                        )
+                        engine.pdf_reporter.generate(engine.results, pdf_path)
+                        print(f"[+] PDF Report saved: {pdf_path}")
+                    except Exception as e:
+                        print(f"[!] PDF generation failed: {e}")
 
             auto_saved_json = None
             if args.output:
