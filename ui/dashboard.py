@@ -7,12 +7,18 @@ self-contained (no CDN) and renders all scan data through textContent —
 never innerHTML — so scan results can never inject markup.
 """
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, Response
+import csv
+import io
 import json
+import os
+import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 from core.scan_diff import ScanDiff
+from reporting.markdown_reporter import MarkdownReporter
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
@@ -390,6 +396,89 @@ def get_summary(target):
             "mitre_findings": _as_int(_as_dict(results.get("mitre")).get("total_findings")),
             "attack_chains": len(_as_list(results.get("attack_chains"))),
         }
+    )
+
+
+def _safe_download_name(target: str, ext: str) -> str:
+    """Build a safe filename for Content-Disposition (no traversal, no CRLF)."""
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(target or "scan"))[:80]
+    safe = safe.strip("._-") or "scan"
+    return f"osint_eye_{safe}.{ext}"
+
+
+_CSV_FORMULA_PREFIXES = ("=", "+", "@", "\t", "\r")
+
+
+def _csv_cell(value) -> str:
+    """Neutralize CSV cell content: no line breaks, no formula injection."""
+    text = " ".join(str(value if value is not None else "").split())
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        text = "'" + text
+    return text
+
+
+@app.route("/api/scan/<target>/export", methods=["GET"])
+def export_scan(target):
+    """Download the loaded scan as JSON / CSV (asset rows) / Markdown report."""
+    if target not in SCAN_RESULTS:
+        return jsonify({"error": "Scan not found"}), 404
+
+    fmt = request.args.get("format", "json").strip().lower()
+    results = SCAN_RESULTS[target]
+
+    if fmt == "json":
+        body = json.dumps(results, indent=2, ensure_ascii=False)
+        mimetype = "application/json"
+        ext = "json"
+    elif fmt == "csv":
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, lineterminator="\n")
+        writer.writerow(["severity", "type", "asset", "module", "detail"])
+        for asset in _collect_assets(results):
+            writer.writerow([
+                _csv_cell(asset["severity"]),
+                _csv_cell(asset["type"]),
+                _csv_cell(asset["name"]),
+                _csv_cell(asset["module"]),
+                _csv_cell(asset["detail"]),
+            ])
+        body = buffer.getvalue()
+        mimetype = "text/csv"
+        ext = "csv"
+    elif fmt == "md":
+        body = None
+        try:
+            reporter = MarkdownReporter()
+            reporter.load_results(results)
+            # MarkdownReporter.generate() writes a file and returns the path
+            # (public API) — render through a temp file and clean it up.
+            handle = tempfile.NamedTemporaryFile(
+                prefix="oe_export_", suffix=".md", delete=False
+            )
+            handle.close()
+            try:
+                reporter.generate(handle.name)
+                with open(handle.name, encoding="utf-8") as f:
+                    body = f.read()
+            finally:
+                try:
+                    os.unlink(handle.name)
+                except OSError:
+                    pass
+        except Exception:
+            body = None
+        if not body:
+            body = f"# OSINT EYE report — {target}\n\nReport generation failed."
+        mimetype = "text/markdown"
+        ext = "md"
+    else:
+        return jsonify({"error": "format must be one of: json, csv, md"}), 400
+
+    filename = _safe_download_name(target, ext)
+    return Response(
+        body,
+        mimetype=mimetype,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

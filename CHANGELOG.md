@@ -58,6 +58,10 @@ Reglas del equipo (PROTOCOLO §3):
 - **Wizard — scope, exclusiones y confirmación de autorización**: el asistente pregunta límites de
   alcance (dominios/wildcards/CIDR) y exclusiones, descarta de verdad los targets que no aplican y
   exige una confirmación explícita de autorización antes de continuar; rechazarla cancela el escaneo.
+- **Dashboard — exportación del escaneo abierto**: botones JSON/CSV/MD en la barra superior que
+  descargan el escaneo activo (`GET /api/scan/<target>/export?format=…`); el CSV usa las filas del
+  explorador de hallazgos con neutralización de fórmulas, el MD reutiliza `MarkdownReporter` y los
+  nombres de descarga están saneados (sin path traversal ni inyección de cabeceras).
 
 ### Seguridad
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
