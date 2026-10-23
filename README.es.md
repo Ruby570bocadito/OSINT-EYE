@@ -295,7 +295,7 @@ osint_eye.py            # Orquestador: fases, CLI, exportación
 
 Fase actual: **v2.2 — «Fiable y extensible»** — contrato de datos estable (`results`), logging real, scope seguro, salidas para CI y README fiel.
 
-El plan completo (prioridades ALTA, fase v2.3 «Inteligencia», banco de ideas y tareas por agente) vive en [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md). El histórico de releases, en el [CHANGELOG](CHANGELOG.md).
+El plan completo (prioridades ALTA, fase v2.3 «Inteligencia», banco de ideas y tareas por agente) vive en [`docs/agentes/ROADMAP.md`](docs/agentes/ROADMAP.md). El histórico de releases, en el [CHANGELOG](CHANGELOG.md). Documentación completa: [`docs/index.md`](docs/index.md) — arquitectura, módulos (una página por módulo), plugins y FAQ.
 
 ---
 

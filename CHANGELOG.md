@@ -80,6 +80,13 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **Sitio de documentación (docs-sitio)**: `docs/` reorganizado y ampliado en inglés (coherente con el
+  README) — `docs/index.md` (hub con mapa de la documentación y tabla de los 12 módulos),
+  `docs/architecture.md` (capas, flujo de datos por fases, contrato de resultados, guards de seguridad),
+  `docs/modules/` (12 páginas, una por colector: qué recolecta, claves del resultado, degradación),
+  `docs/plugins.md` (contrato BaseModule/PluginManager con ejemplo offline-testable) y `docs/FAQ.md`.
+  El README enlaza el hub; todo el contenido derivado del código actual (docstrings, `--help` real,
+  `core/schema.py`).
 - **Quickstart en el dashboard vacío/demo (dashboard-vacio-guiado)**: cuando el dashboard no tiene
   escaneos o solo muestra datos demo, un panel «No scan data yet» ofrece los 3 comandos exactos del
   CLI con botón de copiado (`--dashboard`, `--dashboard --monitor`, `--rich`); se oculta en cuanto
