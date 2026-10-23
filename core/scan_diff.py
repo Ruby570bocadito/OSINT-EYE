@@ -27,8 +27,26 @@ def _severity_score(cve: dict) -> float:
 class ScanDiff:
     """Compare two scan results and identify changes"""
 
+    DIFF_KEYS = (
+        "new_subdomains",
+        "removed_subdomains",
+        "new_ports",
+        "closed_ports",
+        "changed_services",
+        "new_technologies",
+        "removed_technologies",
+        "new_emails",
+        "new_cves",
+        "new_cloud_buckets",
+        "score_change",
+    )
+
     def __init__(self):
-        self.diff = {
+        self.diff = self._fresh_diff()
+
+    @classmethod
+    def _fresh_diff(cls) -> dict:
+        return {
             "new_subdomains": [],
             "removed_subdomains": [],
             "new_ports": [],
@@ -43,7 +61,17 @@ class ScanDiff:
         }
 
     def compare(self, old_results: dict, new_results: dict) -> dict:
-        """Compare two scan results"""
+        """Compare two scan results.
+
+        Safe to reuse: every call starts from a fresh skeleton, so a
+        second compare() on the same instance never keeps entries from
+        the previous one (port/CVE/bucket results used to accumulate).
+        """
+        # Reset instead of mutating in place: list-typed keys (ports,
+        # CVEs, buckets) used to accumulate across repeated compare()
+        # calls on a shared instance.
+        self.diff = self._fresh_diff()
+
         old_modules = old_results.get("modules", {})
         new_modules = new_results.get("modules", {})
 
