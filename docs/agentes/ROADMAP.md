@@ -38,7 +38,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 ### PUL-1 — Repo y documentación
 
 - [ ] (PUL-1) pyproject — pyproject.toml con metadatos, extras ([ui], [pdf], [dev]) y entry point osint-eye; pip install -e . funciona — pyproject.toml, requirements*.txt
-- [ ] (PUL-1) dockerignore-real — .dockerignore correcto (hoy está en .gitignore y no se versiona), imagen más pequeña — .dockerignore, .gitignore, Dockerfile
 - [ ] (PUL-1) ci-lint-cov — job de ruff y cobertura (pytest --cov) en CI; badge de cobertura — .github/workflows/ci.yml
 - [ ] (PUL-1) changelog-unreleased — sección ## [Unreleased] y convención documentada — CHANGELOG.md
 
@@ -51,7 +50,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### SEG / TEST
 
-- [ ] (SEG) ssrf-redirects — revisar que los colectores web no siguen redirecciones a IP privadas/metadatos cloud (169.254.169.254) — modules/web/, modules/osint/
 - [ ] (SEG) dashboard-api-hardening — el dashboard ya escucha en 127.0.0.1: revisar path traversal en la carga de JSON por <target>, cabeceras de seguridad (CSP sin inline) y límites de tamaño — ui/dashboard.py
 - [ ] (SEG) audit-deps — pip-audit sobre requirements y fijar mínimos seguros — requirements.txt (vía Peticiones a PUL-1)
 - [ ] (TEST) e2e-smoke — e2e offline: --help, --modules, escaneo --depth quick contra servidor DNS/HTTP local de fixtures — tests/e2e/
@@ -150,3 +148,5 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - v2.2 ronda 2 — results-schema: core/schema.py con SCHEMA_VERSION 2.0, TypedDicts y validate_results(); verificado por DIR (suite 179 en verde).
 - v2.2 ronda 2 — dashboard-multiscan: selector de escaneos + vista diff reutilizando core/scan_diff.py; verificado por DIR (test_ui_dashboard_diff.py).
 - v2.2 ronda 2 — readme-fiel: badges v2.1.1, árbol y enlaces al ROADMAP; verificado por DIR (nota: badge de tests quedó en 118, suite actual 179 — refrescar en próxima pasada PUL-1).
+- v2.2 ronda 2b — ssrf-redirects: modules/web/ssrf_guard.py dedicado + test_seg_ssrf_guard.py (no seguir redirecciones a IP privadas/metadatos); verificado por DIR (suite 225 en verde).
+- v2.2 ronda 2b — dockerignore-real: .dockerignore versionado fuera de .gitignore y contexto de build limpio; verificado por DIR.
