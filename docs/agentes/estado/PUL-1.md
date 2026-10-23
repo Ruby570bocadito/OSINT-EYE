@@ -1,19 +1,19 @@
 # Estado PUL-1 — Repo y documentación
 
-Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
+Actualizado: 2026-10-23 (sesión v2.2, ronda 2 — revisión general)
 
 ## Hecho (últimas 24 h)
 
-- [x] readme-fiel — badges reales (v2.1.1 / tests al recuento vivo), árbol, tabla de módulos verificada contra `--help` real, sección Roadmap resumiendo fase v2.2 con enlace a ROADMAP.md. Instalación probada desde cero en venv limpio.
-- [x] pyproject — metadatos, deps en paridad con requirements.txt (ui/__init__ y reporting/__init__ importan flask/textual/reportlab en arranque), extras [ui]/[pdf]/[dev], entry point `osint-eye`; `pip install -e .` verificado en venv limpio (ayuda y smoke OK).
-- [x] dockerignore-real — .dockerignore versionado (fuera de .gitignore), contexto de build sin .git/venvs/output/docs/tests; label Dockerfile 2.1.1; ENV PYTHONDONTWRITEBYTECODE/PYTHONUNBUFFERED.
-- [x] ci-lint-cov — job `lint` (ruff --select E9, pasa a 0 hoy) + job `coverage` (pytest-cov core/modules/graph/reporting/ui/ai, coverage.xml artifact, Codecov fail-open) + badge de cobertura.
-- [x] changelog-unreleased — convención Keep a Changelog/SemVer documentada en la cabecera; [Unreleased] consolidado (Añadido 10 · Seguridad 2 · Documentación 1) tras 2 colisiones con IMP-2/IMP-3/SEG.
-- Extras de sesión: `.agent-tmp/` en .gitignore (petición IMP-1); badge de tests refrescado (petición DIR); claim huérfano `pyproject.md` (resucitado por rebase ajeno) eliminado.
+- [x] readme-fiel-r2 — Codecov sin pin de rama, flags --scope/--exclude/--fail-on/--log-* con exit codes, SARIF en Exportación, dashboard multiescaneo+export, dns ampliado (email security, pasivas, wildcard), árbol al día. Badge refrescado a cierre (petición DIR).
+- [x] usage-sync (Banco, ejecutada como revisión ④) — USAGE.md rehecha: scope/autorización, modo CI, logging, TOML (--config/--profile, esquema verificado contra core/config.py), dashboard, variables OSINT_EYE_* con semántica exacta.
+- [x] limpieza (revisión ①) — barrido completo: sin backups/temp/pycache/salidas/residuo IA versionados. Nada que borrar. tui_app.py dormido (solo exportado, sin --tui) → nota a IMP-2, no se toca.
+- [x] deps-sync (revisión ③) — fuera nvdlib/waybackpy/beautifulsoup4/lxml (cero imports; HTML con regex stdlib); urllib3 declarado (import directo en _http.py). Venv limpio + pip install -e . + suite verde al validar. Paridad requirements↔pyproject 13/13; URL changelog a main.
+- [x] changelog-consolidacion — [Unreleased] canónico (Añadido 23 · Cambiado 1 · Documentación 2 · Corregido 1 · Seguridad 3): 12 features reclasificadas de "Seguridad" a "Añadido". Sección TOML añadida a USAGE al aterrizar config-file.
+- [x] docs/agentes/ (revisión ⑤) — solo los 4 ficheros + claims/estado/hallazgos; sin residuos.
 
 ## En curso
 
-- Nada. Sesión cerrada con las 5 tareas del ROADMAP dirigidas a PUL-1.
+- Nada. Cierre de ronda.
 
 ## Bloqueado
 
@@ -21,17 +21,18 @@ Actualizado: 2026-10-23 (sesión v2.2, ronda 1)
 
 ## Peticiones a otras zonas
 
-- DIR: decidir unificación `main`↔`master` (petición de IMP-1). Historias divergentes: el FF no basta, hay que force-push con aviso previo a toda la flota. No actúo sin decisión de DIR (PROTOCOLO: `main` es la rama del protocolo; el código vivo está en `master`).
-- IMP-1/IMP-3: 9 avisos pyflakes (F) bloquean subir el gate de CI de E9 a F: advanced_dns.py:24,967 · github.py:80,196 · google.py:83,229 · wayback.py:230,234 · markdown_reporter.py:374.
-- IMP-2/IMP-3: hacer lazy los imports de flask/textual/reportlab (ui/__init__.py, reporting/__init__.py, osint_eye.py) para rebajar `dependencies` del pyproject y que [ui]/[pdf] sean extras reales.
-- PUL-2: al aterrizar ruff-config, subir el job `lint` de CI de `--select E9` al ruleset completo (hoy dejaría 9 F en rojo).
+- IMP-3: el test rojo de scan_diff (test a 1 arg vs fix compare(old,new)) quedó resuelto por vosotros a mitad de ronda; suite 684 en verde al consolidar. Nada pendiente.
+- IMP-2: tui_app.py/launch_tui sin caller (sin --tui); queda dormido a la espera de tui-completa (v2.3). Si se descarta, avisa y lo retiro yo.
+- DIR: rama-canonical cumplida (todo PUL-1 contra main); master siguió recibiendo commits de la flota durante la sesión.
+- TEST: leídos H-001..H-008; ninguno para PUL-1. El volcado suelto en CWD de H-008 ya queda cubierto por los patrones /osint_eye_* de .gitignore.
 
 ## Propuestas para el roadmap
 
-- [ ] (PUL-1) badge-auto — regenerar el badge de tests con el nº real de pytest en cada push a master (paso de CI + commit automático) para eliminar la deriva manual — .github/workflows/ci.yml, README.md
-- [ ] (PUL-1) build-sdist-check — job en CI que valide `python -m build` + `twine check` del paquete (pyproject ya lo permite) — .github/workflows/ci.yml, pyproject.toml
-- [ ] (PUL-1) dependabot — .github/dependabot.yml para pip y GitHub Actions semanales — .github/
+- [ ] (PUL-1) badge-auto — la suite pasó de 519 a 687 en ESTA sesión: el refresco manual es insostenible; job de CI que regenere el badge con el nº real en cada push a main — .github/workflows/ci.yml, README.md
+- [ ] (PUL-1) dependabot — .github/dependabot.yml para pip y GitHub Actions semanales (reiterada) — .github/
+- [ ] (PUL-1) examples-dir — examples/scope.txt y examples/osint_eye.toml copiables, enlazados desde USAGE/README — examples/, docs/USAGE.md
 
 ## Notas de transparencia
 
-- Commit 284f21b (consolidación CHANGELOG) arrastró el borrado del claim changelog-unreleased que quedó staged durante un rebase interrumpido; estado final en remoto correcto (claim fuera). Lección: nunca stages del rm antes de `rebase --continue`.
+- Reutilizado scripts/resolve_changelog.py (ronda 1) ampliado con migraciones de sección; idempotente.
+- Badge final: 687 (recuento del push de cierre).
