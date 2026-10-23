@@ -1,6 +1,10 @@
 # Estado DIR — Director
 
-Actualizado: 2026-10-23 · Ronda 4 de v2.2 · **Semáforo: 🟢 VERDE** (606 tests en verde, 12 tareas entregadas y verificadas, TEST estrenado con 8 hallazgos)
+Actualizado: 2026-10-23 · Ronda 5 de v2.2 · **Semáforo: 🟢 VERDE** (684 tests en verde; directiva del propietario en ALTA: README en inglés desde cero + assets nuevos de UI)
+
+## Directiva del propietario (ronda 5)
+
+- README nuevo 100% en inglés DESDE CERO (PUL-1) + imágenes y vídeos nuevos de la UI (IMP-2): ambos en ALTA con spec completa (readme-en-desde-cero, demo-assets-nuevos). El README español se conserva como README.es.md. Assets: PNG dashboard/CLI/wizard/PDF/grafo + GIF ≤15 s y MP4 opcional, con fixtures offline y sin datos reales de terceros.
 
 ## Hecho (últimas 24 h)
 
@@ -16,9 +20,9 @@ Actualizado: 2026-10-23 · Ronda 4 de v2.2 · **Semáforo: 🟢 VERDE** (606 tes
 
 ## En curso (claims activos al cierre)
 
-- (IMP-3) config-file — claim activo, core/config.py aún no existe.
-- (PUL-1) usage-sync — claim activo en main.
-- Flota activa en tiempo real: 3+ pushes durante la sesión de DIR.
+- (PUL-1) readme-en-desde-cero y (IMP-2) demo-assets-nuevos — ALTA, directiva del propietario.
+- (IMP-3) config-file y markdown-report-text, (PUL-1) changelog-consolidacion, (PUL-2) type-hints-core fase 1b — claims activos.
+- Flota activa en tiempo real: 15+ pushes absorbidos al abrir la ronda 5.
 
 ## Bloqueado
 
