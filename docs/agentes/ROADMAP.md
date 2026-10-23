@@ -12,32 +12,31 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-3 — Núcleo, análisis y salidas
 
-- [ ] (IMP-3) findings-extract — extractor único de hallazgos (takeover, buckets públicos, secretos, CVE, ficheros sensibles) a lista canónica con severidad y evidencia, reutilizable por SARIF/exit-codes/risk-scoring — core/findings.py (propuesta IMP-3, ronda 2)
-- [ ] (IMP-3) scope-file — --scope scope.txt / --exclude (dominios, wildcards, CIDR): ningún módulo activo toca algo fuera de scope; los descartes se registran — core/scope.py, osint_eye.py
-- [ ] (IMP-3) sarif-export — exportación SARIF 2.1 de hallazgos (takeover, buckets públicos, secretos, CVE) para GitHub Code Scanning — reporting/sarif.py
-- [ ] (IMP-3) exit-codes-ci — --fail-on high|medium|low con códigos de salida documentados para usar OSINT EYE en pipelines — osint_eye.py
+- [ ] (IMP-3) findings-extract — extractor único de hallazgos (takeover, buckets públicos, secretos, CVE, ficheros sensibles) a lista canónica con severidad y evidencia, reutilizable por SARIF/exit-codes/risk-scoring — core/findings.py (propuesta IMP-3, ronda 2; claim activo ronda 4, en curso)
 - [ ] (IMP-3) config-file — osint_eye.toml (tomllib, stdlib) con perfiles, timeouts, módulos y exportadores; los flags CLI lo sobreescriben — core/config.py, osint_eye.py
+- [ ] (IMP-3) risk-scoring-v2 — puntuación explicable: cada punto de riesgo enlaza a la evidencia que lo genera; pesos configurables — core/correlator.py (promocionada del Siguiente, ronda 4; encadena con findings-extract)
 
 ### IMP-1 — Colectores
 
-- [ ] (IMP-1) passive-subdomains — nuevas fuentes pasivas sin API key: HackerTarget, AlienVault OTX, Anubis/jldc, RapidDNS, CertSpotter; dedupe con crt.sh — modules/dns/passive_sources.py
-- [ ] (IMP-1) dns-wildcard — detección de DNS wildcard antes de la fuerza bruta y permutaciones (evita miles de falsos positivos) — modules/dns/
+- [ ] (IMP-1) scope-collectores — aplicar `Scope.allows()`/`filter_targets()` (core/scope.py) a las URLs derivadas dentro de cada módulo: dns brute-force de wordlist, endpoints, cloud (petición de IMP-3, ronda 4) — modules/
 - [ ] (IMP-1) security-headers — auditoría de cabeceras (CSP, HSTS, XFO, CORS permisivo, cookies sin Secure/HttpOnly) con severidad — modules/web/headers_audit.py
 - [ ] (IMP-1) tls-audit — versión TLS, cifrados débiles, caducidad y cadena del certificado con ssl de la stdlib — modules/certs/tls_audit.py
-- [ ] (IMP-1) email-security — DKIM (selectores comunes), MTA-STS, TLS-RPT, BIMI y puntuación de spoofing junto a SPF/DMARC — modules/dns/
+- [ ] (IMP-1) js-secrets — extracción de secretos/endpoints/claves en ficheros JS (regex + entropía) con verificación de falsos positivos — modules/web/ (promocionada del Siguiente, ronda 4)
+- [ ] (IMP-1) favicon-hash — hash mmh3 del favicon para pivotar tecnologías y hosts relacionados — modules/web/ (promocionada del Siguiente, ronda 4)
 
 ### IMP-2 — Interfaz
 
-- [ ] (IMP-2) wizard-scope — el asistente pregunta scope/exclusiones y confirma autorización antes de módulos activos — ui/wizard.py
 - [ ] (IMP-2) wizard-validacion-target — el wizard valida formato de target (dominio/IP/CIDR) con reintentos y avisa si parece una URL antes de continuar — ui/wizard.py (propuesta IMP-2, ronda 2)
-- [ ] (IMP-2) dashboard-export — botón de descarga JSON/CSV/MD del escaneo abierto en el dashboard — ui/
 - [ ] (IMP-2) dashboard-autorefresco — auto-refresco del dashboard en modo monitor (polling de la API cada N s, respeta --monitor-interval) — ui/dashboard.py, ui/dashboard_template.html (promocionada del Banco, ronda 3)
+- [ ] (IMP-2) timeline-historico — vista de evolución de la superficie entre escaneos (nuevos/desaparecidos por fecha) — ui/ (promocionada del Siguiente, ronda 4; encadena con dashboard-multiscan/diff)
+- [ ] (IMP-2) grafo-avanzado — filtros por tipo de nodo, búsqueda, resaltar caminos de ataque, exportar PNG/SVG — ui/dashboard_template.html (promocionada del Siguiente, ronda 4)
 
 ### PUL-1 — Repo y documentación
 
 - [ ] (PUL-1) pyproject — pyproject.toml con metadatos, extras ([ui], [pdf], [dev]) y entry point osint-eye; pip install -e . funciona — pyproject.toml, requirements*.txt
 - [ ] (PUL-1) version-unica — única fuente de __version__ en core/ leída por banner CLI y CHANGELOG; banner dice v2.1 y el repo va por 2.1.1 — core/__init__.py, osint_eye.py (promocionada del Banco, ronda 3; osint_eye.py liberado por logging-real)
-- [ ] (PUL-1) changelog-unreleased — sección ## [Unreleased] y convención documentada — CHANGELOG.md
+- [ ] (PUL-1) readme-refresh — refrescar badges y texto de README: badge Tests dice 293 y el texto "Probado" dice 118, la suite real va por 489; versión 2.1.1 vs CHANGELOG — README.md
+- [ ] (PUL-1) estado-seg — crear docs/agentes/estado/SEG.md (no existe); SEG tiene 2 tareas en cola y nunca ha dejado constancia de sesión — docs/agentes/estado/
 
 ### PUL-2 — Calidad de código
 
@@ -58,8 +57,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 - [ ] (IMP-1) shodan-censys — integración Shodan/Censys/FOFA opcional con clave del usuario por variable de entorno; se salta sin clave — modules/osint/
 - [ ] (IMP-1) asn-ip-ranges — ASN, rangos IP y netblocks de la organización (RDAP/ipwhois) para ampliar la superficie — modules/network/asn.py
-- [ ] (IMP-1) js-secrets — extracción de secretos/endpoints/claves en ficheros JS (regex + entropía) con verificación de falsos positivos — modules/web/
-- [ ] (IMP-1) favicon-hash — hash mmh3 del favicon para pivotar tecnologías y hosts relacionados — modules/web/
 - [ ] (IMP-1) screenshots — capturas de los hosts web vivos (Playwright opcional, extra [shots]) para el informe y el dashboard — modules/web/screenshots.py
 - [ ] (IMP-1) reverse-ip-vhosts — vecinos en la misma IP y descubrimiento de virtual hosts — modules/network/
 - [ ] (IMP-1) leak-check — comprobación de dominios en fuentes públicas de brechas sin API key (solo metadatos, nunca credenciales) — modules/osint/
@@ -68,8 +65,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-2
 
-- [ ] (IMP-2) timeline-historico — vista de evolución de la superficie entre escaneos (nuevos/desaparecidos por fecha) — ui/
-- [ ] (IMP-2) grafo-avanzado — filtros por tipo de nodo, búsqueda, resaltar caminos de ataque, exportar PNG/SVG — ui/dashboard_template.html
 - [ ] (IMP-2) tui-completa — TUI Textual navegable con los resultados (tablas, detalle por activo, atajos) — ui/tui_app.py
 - [ ] (IMP-2) i18n — textos de CLI/dashboard en ES/EN con --lang — ui/
 - [ ] (IMP-2) tema-claro — tema claro/oscuro en el dashboard respetando prefers-color-scheme — ui/dashboard_template.html
@@ -77,7 +72,6 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 
 ### IMP-3
 
-- [ ] (IMP-3) risk-scoring-v2 — puntuación explicable: cada punto de riesgo enlaza a la evidencia que lo genera; pesos configurables — core/correlator.py
 - [ ] (IMP-3) trend-analysis — tendencias entre escaneos históricos de la caché SQLite (crecimiento, rotación, regresiones) — core/
 - [ ] (IMP-3) alertas-nativas — notificadores Telegram/Discord/Slack/email/webhook genérico con plantillas, reintentos y deduplicación — core/notifiers/
 - [ ] (IMP-3) plugin-api-v2 — API de plugins versionada con metadatos, dependencias entre módulos y plantilla cookiecutter-like — core/plugins.py
@@ -127,6 +121,12 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - (IMP-1) cve-epss-priorizacion — enriquecer los CVE con EPSS (API pública sin clave) y CISA KEV para priorizar por probabilidad de explotación — modules/cve/
 - (IMP-3) cache-ttl-por-fuente — TTLs distintos por fuente en la caché SQLite (DNS corto, wayback largo) en lugar de TTL global — core/session_cache.py
 - (IMP-3) results-migracion — migrador de escaneos antiguos (sin schema_version) al esquema 2.0 al cargarlos en dashboard/diff — core/schema.py, ui/dashboard.py
+- (IMP-1) deteccion-tuneles-dns — heurísticas de DNS tunneling: labels largos/alta entropía, volumen anómalo de TXT, FQDNs sospechosos — modules/dns/
+- (IMP-2) dashboard-sse — progreso del escaneo en vivo vía Server-Sent Events (menos polling que el autorefresco, un solo canal) — ui/dashboard.py, ui/dashboard_template.html
+- (IMP-3) ndjson-stream — salida incremental NDJSON por módulo/hallazgo para consumo en vivo por otros procesos y pipelines — reporting/
+- (PUL-1) badges-dinamicos — workflow que actualiza el badge de tests y versión en cada push (fin de la deriva manual: README dice 293 y la suite va por 489) — .github/workflows/
+- (SEG) webhook-guard — validar la URL de --webhook: allowlist de scheme https y bloqueo de IPs privadas reutilizando ssrf_guard (SSRF en el webhook propio) — osint_eye.py, modules/web/ssrf_guard.py
+- (TEST) fixtures-local-dns — fixture pytest de servidor DNS/HTTP local reutilizable para el e2e offline y futuros tests de red — tests/conftest.py, tests/fixtures/
 
 ### Pulimiento
 
@@ -156,3 +156,12 @@ Fase actual: v2.2 — «Fiable y extensible» (base: v2.1.1, 118 tests offline e
 - v2.2 ronda 3 — progreso-por-modulo: tabla de progreso en vivo por módulo en Rich CLI + tests; verificado por DIR.
 - v2.2 ronda 3 — dashboard-api-hardening: CSP, nosniff, límite de 64 MB en carga de escaneos + tests de SEG; verificado por DIR.
 - v2.2 ronda 3 — ci-lint-cov: job de ruff en CI (E9 de momento; ruff-config completo llega con PUL-2); verificado por DIR.
+- v2.2 ronda 4 — scope-file: core/scope.py (dominios/wildcards/IPs/CIDR, descartes auditables en results["scope"]); verificado por DIR (489 tests en verde).
+- v2.2 ronda 4 — wizard-scope: el asistente pide scope/exclusiones y exige confirmación explícita de autorización antes de escanear; verificado por DIR.
+- v2.2 ronda 4 — dashboard-export: ruta /api/scan/<target>/export con JSON y CSV, nombres de fichero sanitizados; verificado por DIR.
+- v2.2 ronda 4 — dns-wildcard: modules/dns/wildcard.py, detección previa a enumeración; candidatos wildcard-only se descartan (wildcard_skipped); verificado por DIR.
+- v2.2 ronda 4 — passive-subdomains: modules/dns/passive_sources.py (HackerTarget, OTX, Anubis, RapidDNS, CertSpotter) con degradación grácil y validación hostil de respuestas; integrado en modo full de dns_scanner; verificado por DIR (claim caducado purgado).
+- v2.2 ronda 4 — email-security: modules/dns/email_security.py (DKIM, MTA-STS, TLS-RPT, BIMI, MX, score de spoofing explicable) + 255 líneas de tests; verificado por DIR.
+- v2.2 ronda 4 — exit-codes-ci: --fail-on low|medium|high con decide_exit_code() y códigos 0/1/2/3 documentados en --help y CHANGELOG; verificado por DIR.
+- v2.2 ronda 4 — sarif-export: reporting/sarif.py (SARIF 2.1 con partialFingerprints estables, niveles error/warning/note) + test_reporting_sarif.py; verificado por DIR.
+- v2.2 ronda 4 — changelog-unreleased: reglas de equipo bajo el formato Keep a Changelog + sección [Unreleased] viva (la flota la usa en cada entrega); verificado por DIR.
