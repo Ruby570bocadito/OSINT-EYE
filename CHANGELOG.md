@@ -104,6 +104,13 @@ Reglas del equipo (PROTOCOLO §3):
   la red interna.
 
 ### Añadido
+- **USAGE sincronizado (usage-sync)**: docs/USAGE.md al día con la CLI actual — catálogo completo de las
+  24 claves `--modules` (incl. shodan_censys/reverse_ip/social_footprint/leak_check de IMP-1 y los pasos
+  correlation/graph/mitre/chains), `--modules dns,web` con comas + error accionable (H-010), exit code 130
+  con resumen parcial (H-007), auto-persistencia sin `-o` (H-001) y confinamiento de rutas (H-003),
+  cuarentena de caché corrupta (H-006), guard de `--webhook`, `--export-cypher`, `--tui` y el contrato
+  `BaseModule` (enlaza docs/plugins.md). Ejemplos verificados offline (exit 2 real en los 3 errores de uso
+  documentados); docs/index.md corregido (los 12 colectores no agotan el catálogo).
 - **Matriz CI con Windows/macOS (ci-matrix-os)**: el job de tests corre ahora en ubuntu (3.10/3.11/3.12),
   macOS 3.12 (blocking) y Windows 3.12 (experimental, `continue-on-error` hasta una ronda en verde);
   en Windows se excluyen los dos e2e `pty` (únicos usos de `pty` en tests/) y el paso `apt` queda

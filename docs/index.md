@@ -23,8 +23,12 @@ then use this hub to go deeper.
 
 ## The built-in modules at a glance
 
-All twelve collectors are registered by name — that is the value you pass to
-`--modules` (e.g. `--modules dns,web,cve`):
+The twelve built-in collectors below are registered by name and selectable
+with `--modules` (e.g. `--modules dns,web,cve`). The catalog is bigger: engine
+and analysis steps (`permutation`, `takeover`, `endpoints`, `tls_audit`,
+`correlation`, `graph`, `mitre`, `chains`) and intelligence add-ons
+(`shodan_censys`, `reverse_ip`, `social_footprint`, `leak_check`) are
+selectable too — see the complete table in [USAGE](USAGE.md):
 
 | Key | Collects | Page |
 |---|---|---|
