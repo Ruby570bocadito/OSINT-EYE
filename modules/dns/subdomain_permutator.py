@@ -19,6 +19,8 @@ from typing import List, Dict, Optional, Set
 
 import requests
 
+from modules.web.ssrf_guard import safe_get
+
 
 class SubdomainPermutator:
     """Advanced subdomain permutation algorithm"""
@@ -594,12 +596,13 @@ class SubdomainTakeoverDetector:
         # serve the provider error page over one of the two schemes).
         for scheme in ("https", "http"):
             try:
-                response = requests.get(
-                    f"{scheme}://{subdomain}",
-                    timeout=10,
-                    allow_redirects=True,
-                    headers={"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"},
-                )
+                with requests.Session() as session:
+                    response = safe_get(
+                        session,
+                        f"{scheme}://{subdomain}",
+                        timeout=10,
+                        headers={"User-Agent": "OSINT-EYE/1.0 (OSINT-Tool)"},
+                    )
             except requests.RequestException:
                 continue
             except Exception:

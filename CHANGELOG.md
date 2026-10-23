@@ -9,6 +9,10 @@
 - **Verificación TLS nunca desactivada**: `SecurityHeadersAuditor` y el fallback HTML de `ScreenshotCapture`
   ya no usan `verify=False`; un certificado inválido se reporta como hallazgo (score 0, grado F) en vez de
   degradar la sonda ante objetivos hostiles (riesgo MITM).
+- **Guard SSRF en redirecciones**: nuevo `modules/web/ssrf_guard.py`; `TechDetector`, `SensitiveDataDetector`,
+  `CDNDetector` y `SubdomainTakeoverDetector` ya no siguen redirecciones a IP privadas/loopback/link-local
+  (metadatos cloud 169.254.169.254 incluidos): cada hop se valida por esquema y direcciones resueltas, y el
+  hop rechazado se reporta como error sin interrumpir el escaneo.
 
 ### Añadido
 - **Contrato de resultados versionado (`core/schema.py`)**: `SCHEMA_VERSION` ("2.0") embebido en cada
